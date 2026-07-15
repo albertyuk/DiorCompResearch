@@ -2,7 +2,7 @@
 # hkg: mainland-China reachability without an ICP filing; flip primary_region
 # to "sjc"/"iad" later if the team turns out to be US-based.
 app = "maison-monitor"
-primary_region = "hkg"
+primary_region = "sin"
 kill_signal = "SIGINT"
 # Generous stop window so deploy restarts give running phases time to finish
 # their current page/post checkpoint (phases are idempotent and resume).
