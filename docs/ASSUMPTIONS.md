@@ -107,6 +107,52 @@ below were mine; each is easy to revisit.
     only reopens when enrichment actually produced drafts, and confirmed/
     rendered projects are never overwritten (dropped drafts are replaced).
 
+## Change Order 01 — hosted (Fly.io) judgment calls
+
+31. **Auth is keyed off `CONSOLE_PASSPHRASE`, not `MM_ENV`**: login is enforced
+    whenever a passphrase is set (hosted mode fails fast if it isn't), so the
+    hosted auth behavior is fully testable on a laptop, while a bare local
+    checkout keeps the old no-login Console ("local dev unchanged").
+32. **`Secure` cookies only in hosted mode** — a Secure cookie over plain
+    `http://127.0.0.1` would break local logins when a passphrase is set.
+33. **brands.yaml stays the single source of truth everywhere**: hosted Phase R
+    confirmations persist as a small per-account overlay
+    (`$MM_DATA_DIR/account_overrides.yaml`, merged at load) so they survive
+    deploys while repo edits (new brands, filters, labels) always take effect
+    on the next deploy — a full-file volume copy would shadow them forever.
+34. **`config/default.env` and `.env` are dockerignored** (§6 "never baked into
+    the image") — hosted secrets come exclusively from `fly secrets set`.
+35. **Screenshot push tagging**: a pushed shot is stored as
+    `live_<post_id>.png` (the filename prefix is the source tag, mirroring the
+    existing live/card naming) plus a `screenshot_push` audit row; the card
+    stays on disk as fallback. No extra DB column — renders always prefer an
+    existing `live_*.png` regardless of visuals mode.
+36. **Bearer-passphrase API auth** for `mm screenshots --push` (the order says
+    "authenticate with the passphrase"); it is accepted on any route, audited
+    as actor `api-client`.
+37. **Volume ownership**: Fly mounts `/data` as root, so the container starts
+    as root only to `chown` the mount, then drops to the non-root `mm` user
+    via gosu (the Dockerfile's non-root requirement, reconciled with volumes).
+38. **LibreOffice in the image is `libreoffice-impress`** (+ poppler-utils) —
+    the QA loop only converts pptx→pdf; the full `libreoffice` meta-package
+    would add Writer/Calc/etc. for nothing ("trim where free, never by
+    dropping the QA loop").
+39. **`mm deploy` generates missing `CONSOLE_PASSPHRASE`/`MM_SECRET_KEY` into
+    `.env`** on first run (echoing names, never values) so the first deploy
+    can't ship without them; app-name collisions get a random suffix written
+    back into fly.toml.
+40. **Backup**: the Console button streams a `sqlite3 .backup`-consistent
+    snapshot (WAL-safe), not a raw copy of a live DB file.
+41. **Post-review hardening (14 confirmed findings fixed)**: sessions are
+    bound to the passphrase (rotation = instant sign-out everywhere);
+    `mm deploy` is idempotent — validates keys before touching Fly, ensures
+    the volume, and re-syncs secrets via stdin on every run (region read from
+    fly.toml); the screenshots manifest only lists effective-keep posts and
+    the push endpoint streams with a hard 20MB cap; human decisions upsert
+    (a post whose LLM verdict failed can still be decided) and audit rows are
+    only written for changes that actually landed; hosted phase threads are
+    non-daemon so fly.toml's kill_timeout actually buys checkpoint time.
+
 ## Testing
 
 25. The ~15 caption fixtures test the deterministic layers (@-tag extraction,

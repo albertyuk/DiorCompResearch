@@ -23,19 +23,25 @@ def _echo(obj) -> None:
 
 
 @app.command()
-def console(host: str = "127.0.0.1", port: int = 8377,
+def console(host: str = typer.Option(None, help="default: 127.0.0.1 local, "
+                                     "0.0.0.0 hosted"),
+            port: int = typer.Option(None, help="default: 8377 local, 8080 hosted"),
             open_browser: bool = typer.Option(True, "--open/--no-open")):
-    """Launch the local web Console."""
+    """Launch the web Console (binding is MM_ENV-driven)."""
     import uvicorn
+    from .config import IS_HOSTED
     from .console import create_app
     ensure_dirs()
+    host = host or ("0.0.0.0" if IS_HOSTED else "127.0.0.1")
+    port = port or (8080 if IS_HOSTED else 8377)
     url = f"http://{host}:{port}"
     typer.echo(f"Maison Monitor Console → {url}")
-    if open_browser:
+    if open_browser and not IS_HOSTED:
         import threading
         import webbrowser
         threading.Timer(0.8, lambda: webbrowser.open(url)).start()
-    uvicorn.run(create_app(), host=host, port=port, log_level="warning")
+    uvicorn.run(create_app(), host=host, port=port,
+                log_level="info" if IS_HOSTED else "warning")
 
 
 @app.command()
@@ -107,7 +113,8 @@ def enrich(month: str = typer.Option(None), brand: str = typer.Option(None)):
 
 @app.command()
 def render(month: str = typer.Option(None),
-           visuals: str = typer.Option("live", help="live | card"),
+           visuals: str = typer.Option(None, help="live | card "
+                                       "(default: live local, card hosted)"),
            fixtures: bool = typer.Option(False, help="render fixtures/projects.json"),
            drafts: bool = typer.Option(False, help="include draft projects")):
     """Render the deck (+ companion xlsx) and run the QA loop."""
@@ -205,6 +212,182 @@ def smoke(brand: str = "lv", days: int = 7,
     typer.echo(f"filter: {stats}")
     client.close()
     costs(month)
+
+
+@app.command()
+def screenshots(month: str = typer.Option(..., help="YYYY-MM"),
+                push: str = typer.Option(..., help="hosted Console URL, e.g. "
+                                         "https://maison-monitor.fly.dev"),
+                passphrase: str = typer.Option(None, help="team passphrase "
+                                               "(default: CONSOLE_PASSPHRASE)")):
+    """Capture live Weibo screenshots on THIS machine and push them to a hosted
+    Console (datacenter IPs get friction from m.weibo.cn; laptops don't).
+    Pushed shots replace the card images for matching posts at render time."""
+    import os
+    from urllib.parse import quote
+
+    import httpx
+
+    from .config import load_env
+    from .render.visuals import VisualFactory
+
+    load_env()
+    passphrase = passphrase or os.environ.get("CONSOLE_PASSPHRASE", "")
+    if not passphrase:
+        raise typer.BadParameter("no passphrase — pass --passphrase or set "
+                                 "CONSOLE_PASSPHRASE in .env")
+    base = push.rstrip("/")
+    headers = {"Authorization": f"Bearer {passphrase}"}
+    r = httpx.get(f"{base}/api/screenshots/{month}/manifest",
+                  headers=headers, timeout=60)
+    if r.status_code == 401:
+        typer.echo("✗ rejected — wrong passphrase")
+        raise typer.Exit(1)
+    r.raise_for_status()
+    posts = r.json().get("posts", [])
+    typer.echo(f"{len(posts)} weibo posts for {month} on {base}")
+    ok = failed = 0
+    with VisualFactory(month, mode="live") as vf:
+        for p in posts:
+            shot = vf.live_screenshot(p["brand"], {"post_id": p["post_id"],
+                                                   "url": p["url"]})
+            if shot is None:
+                failed += 1
+                typer.echo(f"  ✗ capture {p['post_id']} (its card stays)")
+                continue
+            resp = httpx.post(
+                f"{base}/api/screenshots/{month}/{quote(p['post_id'], safe='')}",
+                headers={**headers, "Content-Type": "image/png"},
+                content=shot.read_bytes(), timeout=120)
+            if resp.status_code == 200:
+                ok += 1
+                typer.echo(f"  ✓ {p['post_id']}")
+            else:
+                failed += 1
+                typer.echo(f"  ✗ upload {p['post_id']}: {resp.status_code} "
+                           f"{resp.text[:120]}")
+    typer.echo(f"pushed {ok} live screenshots, {failed} kept their cards")
+
+
+@app.command()
+def deploy():
+    """Deploy the hosted Console to Fly.io. Idempotent on every run: ensures
+    the app exists, the 10GB volume exists, and SYNCS all secrets from .env
+    (names echoed, never values — so rotating CONSOLE_PASSPHRASE in .env and
+    re-running `mm deploy` really rotates it), then `fly deploy`."""
+    import json as _json
+    import os
+    import re
+    import secrets as pysecrets
+    import shutil
+    import subprocess
+
+    from .config import ROOT, load_env
+
+    fly = shutil.which("fly") or shutil.which("flyctl")
+    if not fly:
+        typer.echo("flyctl is not installed → https://fly.io/docs/flyctl/install/")
+        raise typer.Exit(1)
+    load_env()
+    env = dict(os.environ)
+
+    # authenticated? (fly auth login session or FLY_API_TOKEN from .env)
+    who = subprocess.run([fly, "auth", "whoami"], env=env, capture_output=True)
+    if who.returncode != 0 and not env.get("FLY_API_TOKEN"):
+        typer.echo("Not logged in to Fly. Run:\n  fly auth login\nthen\n  mm deploy")
+        raise typer.Exit(1)
+
+    # fail fast on required API keys — BEFORE creating anything on Fly
+    missing = [k for k in ("TIKHUB_API_KEY", "ANTHROPIC_API_KEY")
+               if not env.get(k)]
+    if missing:
+        typer.echo(f"missing in .env: {', '.join(missing)} — add them, then "
+                   f"re-run `mm deploy`")
+        raise typer.Exit(1)
+
+    # ensure console secrets exist locally (generated once, echoed by NAME only)
+    env_path = ROOT / ".env"
+    generated = []
+
+    def ensure(key: str, gen):
+        if not env.get(key):
+            value = gen()
+            with env_path.open("a", encoding="utf-8") as f:
+                f.write(f"\n{key}={value}\n")
+            env[key] = value
+            generated.append(key)
+
+    ensure("MM_SECRET_KEY", lambda: pysecrets.token_hex(32))
+    ensure("CONSOLE_PASSPHRASE",
+           lambda: "-".join(pysecrets.token_hex(3) for _ in range(3)))
+    if generated:
+        typer.echo(f"generated into .env: {', '.join(generated)} (values withheld "
+                   f"— the passphrase is in your .env; share it out-of-band)")
+
+    toml_path = ROOT / "fly.toml"
+    toml = toml_path.read_text(encoding="utf-8")
+    app_name = re.search(r'^app\s*=\s*"([^"]+)"', toml, re.M).group(1)
+    region_m = re.search(r'^primary_region\s*=\s*"([^"]+)"', toml, re.M)
+    region = region_m.group(1) if region_m else "hkg"
+
+    # existence via the account's app list — never confuse an API hiccup or a
+    # name owned by someone else with "doesn't exist yet"
+    lst = subprocess.run([fly, "apps", "list", "--json"], env=env,
+                         capture_output=True, text=True)
+    if lst.returncode != 0:
+        typer.echo(f"couldn't reach the Fly API (fly apps list failed):\n"
+                   f"{(lst.stderr or '').strip()[:300]}\nNothing was changed — "
+                   f"re-run `mm deploy` when it's back.")
+        raise typer.Exit(1)
+    try:
+        my_apps = {a.get("Name") or a.get("name") for a in _json.loads(lst.stdout)}
+    except ValueError:
+        my_apps = set()
+
+    if app_name not in my_apps:
+        name = None
+        for candidate in (app_name, f"{app_name}-{pysecrets.token_hex(2)}"):
+            r = subprocess.run([fly, "apps", "create", candidate], env=env,
+                               capture_output=True, text=True)
+            if r.returncode == 0:
+                name = candidate
+                break
+            typer.echo(f"  app name {candidate!r} unavailable "
+                       f"({(r.stderr or '').strip()[:120]})")
+        if name is None:
+            raise typer.Exit(1)
+        if name != app_name:
+            toml_path.write_text(toml.replace(f'app = "{app_name}"',
+                                              f'app = "{name}"'),
+                                 encoding="utf-8")
+            app_name = name
+        typer.echo(f"created app {app_name}")
+
+    # volume: ensured on EVERY run, so an interrupted first bootstrap heals
+    vols = subprocess.run([fly, "volumes", "list", "-a", app_name, "--json"],
+                          env=env, capture_output=True, text=True)
+    have_volume = vols.returncode == 0 and '"mm_data"' in (vols.stdout or "")
+    if not have_volume:
+        typer.echo(f"creating 10GB volume mm_data in {region}…")
+        subprocess.run([fly, "volumes", "create", "mm_data",
+                        "--region", region, "--size", "10",
+                        "-a", app_name, "--yes"], check=True, env=env)
+
+    # secrets: synced on EVERY run, via stdin (never argv → never in the
+    # process list or a traceback)
+    secret_names = ["TIKHUB_API_KEY", "ANTHROPIC_API_KEY",
+                    "CONSOLE_PASSPHRASE", "MM_SECRET_KEY"]
+    typer.echo(f"syncing fly secrets: {', '.join(secret_names)}, MM_ENV")
+    payload = "".join(f"{n}={env[n]}\n" for n in secret_names) + "MM_ENV=hosted\n"
+    imp = subprocess.run([fly, "secrets", "import", "--stage", "-a", app_name],
+                         env=env, input=payload, text=True, capture_output=True)
+    if imp.returncode != 0:
+        typer.echo(f"fly secrets import failed:\n{(imp.stderr or '').strip()[:300]}")
+        raise typer.Exit(1)
+
+    typer.echo("deploying…")
+    subprocess.run([fly, "deploy", "-a", app_name], check=True, env=env)
+    typer.echo(f"\nlive → https://{app_name}.fly.dev")
 
 
 if __name__ == "__main__":

@@ -56,6 +56,7 @@ verdicts = Table(
     Column("needs_review", Boolean, default=False),
     Column("human_decision", String),                   # keep|drop|None
     Column("decided_at", String),
+    Column("decided_by", String),                       # actor display name
 )
 
 projects = Table(
@@ -109,6 +110,16 @@ celeb_registry = Table(
     Column("relations_json", Text, default="{}"),       # {brand_key: {relation, raw_cn_title, verified, source_url, date}}
 )
 
+audit_log = Table(
+    "audit_log", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("actor_name", String, nullable=False),
+    Column("action", String, nullable=False),   # login|post_decision|confirm_posts|project_edit|…
+    Column("entity_type", String),              # post|project|orphan|month|db|…
+    Column("entity_id", String),
+    Column("at", String, nullable=False),
+)
+
 api_calls = Table(
     "api_calls", metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
@@ -146,7 +157,17 @@ def get_engine() -> Engine:
             cur.close()
 
         metadata.create_all(_engine)
+        _migrate(_engine)
     return _engine
+
+
+def _migrate(engine: Engine) -> None:
+    """Tiny additive migrations for pre-existing databases (create_all only
+    creates missing tables, it never alters existing ones)."""
+    with engine.begin() as c:
+        cols = [r[1] for r in c.exec_driver_sql("PRAGMA table_info(verdicts)")]
+        if cols and "decided_by" not in cols:
+            c.exec_driver_sql("ALTER TABLE verdicts ADD COLUMN decided_by VARCHAR")
 
 
 def now_iso() -> str:
@@ -205,6 +226,32 @@ def log_api_call(conn, kind: str, endpoint: str, *, brand: str | None = None,
             c.execute(stmt)
     else:
         conn.execute(stmt)
+
+
+def audit(conn, actor: str, action: str, entity_type: str | None = None,
+          entity_id=None) -> None:
+    """Attribution trail. `conn` may be a Connection or an Engine (opens its
+    own short transaction), mirroring log_api_call."""
+    stmt = audit_log.insert().values(
+        actor_name=actor or "unknown", action=action, entity_type=entity_type,
+        entity_id=str(entity_id) if entity_id is not None else None,
+        at=now_iso())
+    if isinstance(conn, Engine):
+        with conn.begin() as c:
+            c.execute(stmt)
+    else:
+        conn.execute(stmt)
+
+
+def last_audit(conn, action: str, entity_type: str | None = None,
+               entity_id=None) -> dict | None:
+    q = select(audit_log).where(audit_log.c.action == action)
+    if entity_type:
+        q = q.where(audit_log.c.entity_type == entity_type)
+    if entity_id is not None:
+        q = q.where(audit_log.c.entity_id == str(entity_id))
+    row = conn.execute(q.order_by(audit_log.c.id.desc()).limit(1)).mappings().first()
+    return dict(row) if row else None
 
 
 def cost_summary(conn, month: str | None = None) -> dict:

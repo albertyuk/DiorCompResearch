@@ -1,0 +1,19 @@
+# secrets never enter the image — hosted config comes from `fly secrets set`
+.env
+.env.example
+config/default.env
+
+# runtime state lives on the volume, not in the image
+data/
+output/
+
+# build/dev noise
+.git/
+.venv/
+.pytest_cache/
+.ruff_cache/
+__pycache__/
+*.py[cod]
+docs/
+tests/
+start.command

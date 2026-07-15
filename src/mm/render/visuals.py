@@ -196,7 +196,13 @@ class VisualFactory:
         return None
 
     def visual_for_post(self, brand: str, post: dict) -> Path | None:
-        """live → card fallback for weibo; card for everything else."""
+        """Preference order: an existing live screenshot (captured earlier, or
+        pushed from a laptop via `mm screenshots --push`) always wins, in any
+        mode; then live capture (weibo, live mode only); then the card."""
+        pid = post["post_id"].replace(":", "_")
+        pushed = self.store.visuals_dir(brand) / f"live_{pid}.png"
+        if pushed.exists():
+            return pushed
         if post.get("platform") == "weibo" and self.mode == "live":
             shot = self.live_screenshot(brand, post)
             if shot:

@@ -60,6 +60,14 @@ form.inline { display:inline; }
 <body>
 <header>
   <div class="wordmark">MAISON&nbsp;MONITOR</div>
+  {% if request.state.actor and request.state.actor != 'local' %}
+  <span class="micro" style="margin-left:auto; order:9">
+    {{ request.state.actor }}
+    <form method="post" action="/logout" style="display:inline">
+      <button class="ghost" style="padding:2px 8px; margin-left:8px">Sign out</button>
+    </form>
+  </span>
+  {% endif %}
   <nav>
     <a href="/" {% if active == 'runs' %}class="active"{% endif %}>Runs</a>
     {% if month is defined and month %}

@@ -15,3 +15,7 @@ __pycache__/
 
 # OS
 .DS_Store
+
+# sandbox-only build artifacts
+Dockerfile.sandbox
+sandbox-ca.crt

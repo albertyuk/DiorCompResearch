@@ -45,7 +45,7 @@
     </td>
     <td>
       {% if p.human_decision %}
-        <div class="micro">human: {{ p.human_decision }}</div>
+        <div class="micro">human: {{ p.human_decision }}{% if p.decided_by and p.decided_by != 'local' %} · by {{ p.decided_by }}{% endif %}</div>
         <form class="inline" method="post"
               action="/review/{{ month }}/posts/{{ p.post_id }}/decision">
           <input type="hidden" name="decision" value="restore">

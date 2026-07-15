@@ -11,16 +11,19 @@ from pathlib import Path
 
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import (FileResponse, HTMLResponse, JSONResponse,
-                               RedirectResponse)
+                               RedirectResponse, Response)
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, select
+from starlette.background import BackgroundTask
 
 from .. import db, pipeline
-from ..config import DATA_DIR, OUTPUT_DIR, BrandsConfig, Settings
+from ..config import (DATA_DIR, DB_PATH, DEFAULT_VISUALS, IS_HOSTED, OUTPUT_DIR,
+                      BrandsConfig, Settings, console_auth_config)
 from ..dates import previous_month
 from ..resolve import (confirm_account, lookup_candidates, unresolved_accounts,
                        weibo_blockers)
 from ..tikhub import TikHubClient
+from .auth import PUBLIC_PATHS, SessionAuth
 
 TEMPLATES = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
@@ -46,7 +49,10 @@ def _spawn(month: str, name: str, fn, *args, **kwargs):
             traceback.print_exc()
             TASKS[key] = {"state": "error", "detail": str(e)[:500]}
 
-    threading.Thread(target=worker, daemon=True).start()
+    # hosted: non-daemon so a deploy's SIGINT lets the phase reach its next
+    # checkpoint within fly.toml's kill_timeout; local Ctrl-C stays instant
+    from ..config import IS_HOSTED as _hosted
+    threading.Thread(target=worker, daemon=not _hosted).start()
     return True
 
 
@@ -64,6 +70,70 @@ def _crosscheck_and_enrich(month):
 
 def create_app() -> FastAPI:
     app = FastAPI(title="Maison Monitor Console")
+    auth_cfg = console_auth_config()
+    auth = (SessionAuth(auth_cfg["passphrase"], auth_cfg["secret"],
+                        secure_cookie=IS_HOSTED)
+            if auth_cfg["enabled"] else None)
+
+    def _actor(request: Request) -> str:
+        return getattr(request.state, "actor", None) or "local"
+
+    @app.middleware("http")
+    async def auth_and_headers(request: Request, call_next):
+        path = request.url.path
+        if auth is not None and path not in PUBLIC_PATHS:
+            actor = auth.actor_from_request(request)
+            if actor is None:
+                wants_json = (request.method != "GET"
+                              or path.startswith(("/api/", "/media", "/download",
+                                                  "/backup")))
+                if wants_json:
+                    resp = JSONResponse({"error": "authentication required"},
+                                        status_code=401)
+                else:
+                    resp = RedirectResponse("/login", status_code=303)
+                resp.headers["X-Robots-Tag"] = "noindex"
+                return resp
+            request.state.actor = actor
+        else:
+            request.state.actor = None if (auth is not None) else "local"
+        response = await call_next(request)
+        response.headers["X-Robots-Tag"] = "noindex"
+        return response
+
+    # ---------- auth ----------
+
+    @app.get("/healthz")
+    def healthz():
+        return Response(status_code=200)     # no data, for platform checks
+
+    @app.get("/login", response_class=HTMLResponse)
+    def login_page(request: Request):
+        if auth is None:
+            return RedirectResponse("/", status_code=303)
+        return TEMPLATES.TemplateResponse(request, "login.html", {"error": None})
+
+    @app.post("/login", response_class=HTMLResponse)
+    def login_submit(request: Request, name: str = Form(""),
+                     passphrase: str = Form("")):
+        if auth is None:
+            return RedirectResponse("/", status_code=303)
+        name = name.strip()[:80]
+        if not name or not auth.check_passphrase(passphrase):
+            return TEMPLATES.TemplateResponse(request, "login.html", {
+                "error": "Wrong passphrase (or missing name) — ask the deck "
+                         "owner for the current team passphrase."},
+                status_code=401)
+        resp = RedirectResponse("/", status_code=303)
+        auth.set_cookie(resp, name)
+        db.audit(db.get_engine(), name, "login")
+        return resp
+
+    @app.post("/logout")
+    def logout():
+        resp = RedirectResponse("/login", status_code=303)
+        resp.delete_cookie("mm_session", path="/")
+        return resp
 
     # ---------- pages ----------
 
@@ -145,9 +215,13 @@ def create_app() -> FastAPI:
                 orphans.append(d)
             run = db.get_run(conn, month)
             registry = [dict(r) for r in conn.execute(select(db.celeb_registry)).mappings()]
+            confirmed_by = db.last_audit(conn, "confirm_posts", "month", month)
+            rendered_by = db.last_audit(conn, "render", "month", month)
         return TEMPLATES.TemplateResponse(request, "projects.html", {
             "month": month, "groups": groups, "orphans": orphans,
-            "phases": run["phases"], "registry": registry, "tasks": TASKS})
+            "phases": run["phases"], "registry": registry, "tasks": TASKS,
+            "confirmed_by": confirmed_by, "rendered_by": rendered_by,
+            "default_visuals": DEFAULT_VISUALS})
 
     @app.get("/decks", response_class=HTMLResponse)
     def decks_view(request: Request):
@@ -178,18 +252,30 @@ def create_app() -> FastAPI:
         return st
 
     @app.post("/review/{month}/posts/{post_id}/decision")
-    def post_decision(month: str, post_id: str, decision: str = Form(...)):
+    def post_decision(request: Request, month: str, post_id: str,
+                      decision: str = Form(...)):
         engine = db.get_engine()
         with engine.begin() as conn:
+            exists = conn.execute(select(db.posts.c.post_id)
+                                  .where(db.posts.c.post_id == post_id)).first()
+            if exists is None:
+                return JSONResponse({"error": f"unknown post {post_id}"},
+                                    status_code=404)
             value = None if decision == "restore" else decision
-            conn.execute(db.verdicts.update()
-                         .where(db.verdicts.c.post_id == post_id)
-                         .values(human_decision=value, decided_at=db.now_iso()))
+            # upsert: a post whose LLM verdict failed (no verdicts row yet)
+            # must still take a human decision — and the audit row must only
+            # ever describe a change that actually landed
+            db.upsert(conn, db.verdicts, {
+                "post_id": post_id, "human_decision": value,
+                "decided_at": db.now_iso(), "decided_by": _actor(request),
+            }, ["post_id"])
+            db.audit(conn, _actor(request), f"post_{decision}", "post", post_id)
         return RedirectResponse(f"/review/{month}/posts", status_code=303)
 
     @app.post("/review/{month}/posts/confirm")
-    def posts_confirm(month: str):
+    def posts_confirm(request: Request, month: str):
         pipeline.confirm_posts_review(month)
+        db.audit(db.get_engine(), _actor(request), "confirm_posts", "month", month)
         _spawn(month, "crosscheck_enrich", _crosscheck_and_enrich, month)
         return RedirectResponse(f"/review/{month}/projects", status_code=303)
 
@@ -224,19 +310,24 @@ def create_app() -> FastAPI:
                     db.upsert(conn, db.platform_matches,
                               {"project_id": project_id, "platform": plat,
                                "present": key in form}, ["project_id", "platform"])
+            db.audit(conn, _actor(request), "project_edit", "project", project_id)
         return RedirectResponse(f"/review/{month}/projects", status_code=303)
 
     @app.post("/review/{month}/projects/{project_id}/status")
-    def project_status(month: str, project_id: int, value: str = Form(...)):
+    def project_status(request: Request, month: str, project_id: int,
+                       value: str = Form(...)):
         engine = db.get_engine()
         with engine.begin() as conn:
             conn.execute(db.projects.update()
                          .where(db.projects.c.id == project_id)
                          .values(status=value))
+            db.audit(conn, _actor(request), f"project_{value}", "project",
+                     project_id)
         return RedirectResponse(f"/review/{month}/projects", status_code=303)
 
     @app.post("/review/{month}/orphans/{post_id:path}/resolve")
-    def orphan_resolve(month: str, post_id: str, action: str = Form(...)):
+    def orphan_resolve(request: Request, month: str, post_id: str,
+                       action: str = Form(...)):
         engine = db.get_engine()
         with engine.begin() as conn:
             if action == "promote":
@@ -265,12 +356,20 @@ def create_app() -> FastAPI:
                          .where(db.orphans.c.post_id == post_id)
                          .values(resolution="promoted" if action == "promote"
                                  else "ignored"))
+            db.audit(conn, _actor(request), f"orphan_{action}", "orphan", post_id)
         return RedirectResponse(f"/review/{month}/projects", status_code=303)
 
     @app.post("/review/{month}/render")
-    def render_deck(month: str, visuals: str = Form("live")):
+    def render_deck(request: Request, month: str,
+                    visuals: str = Form(DEFAULT_VISUALS)):
+        # never audit/confirm a render that did not start (e.g. double-click
+        # while one is already running)
+        if TASKS.get(f"{month}:render", {}).get("state") == "running":
+            return RedirectResponse(f"/review/{month}/projects", status_code=303)
         pipeline.confirm_projects_review(month)
-        _spawn(month, "render", pipeline.run_render, month, visuals_mode=visuals)
+        if _spawn(month, "render", pipeline.run_render, month,
+                  visuals_mode=visuals):
+            db.audit(db.get_engine(), _actor(request), "render", "month", month)
         return RedirectResponse(f"/review/{month}/projects", status_code=303)
 
     # ---------- Phase R ----------
@@ -304,6 +403,94 @@ def create_app() -> FastAPI:
         cfg = BrandsConfig.load()
         confirm_account(cfg, brand_key, platform, uid.strip(), name.strip() or None)
         return RedirectResponse("/", status_code=303)
+
+    # ---------- backup ----------
+
+    @app.get("/backup/db")
+    def backup_db(request: Request):
+        """Stream a consistent snapshot of the SQLite DB (the crown jewels —
+        media is re-fetchable and decks re-renderable)."""
+        import os
+        import sqlite3
+        import tempfile
+        from datetime import datetime
+        from ..dates import CST
+        ts = datetime.now(CST).strftime("%Y%m%d-%H%M%S")
+        fd, tmp = tempfile.mkstemp(suffix=".db")
+        os.close(fd)
+        src = sqlite3.connect(str(DB_PATH))
+        dst = sqlite3.connect(tmp)
+        try:
+            with dst:
+                src.backup(dst)          # WAL-safe consistent copy
+        finally:
+            src.close()
+            dst.close()
+        db.audit(db.get_engine(), _actor(request), "backup_download", "db", ts)
+        return FileResponse(tmp, filename=f"maison-monitor-{ts}.db",
+                            media_type="application/octet-stream",
+                            background=BackgroundTask(os.unlink, tmp))
+
+    # ---------- screenshot push (hosted: live Weibo shots come from a laptop) --
+
+    @app.get("/api/screenshots/{month}/manifest")
+    def screenshots_manifest(month: str):
+        """Only effective-keep posts — no point capturing screenshots of posts
+        that were LLM-dropped or human-rejected and can never reach the deck."""
+        engine = db.get_engine()
+        with engine.connect() as conn:
+            rows = conn.execute(
+                select(db.posts.c.post_id, db.posts.c.url, db.posts.c.brand,
+                       db.verdicts.c.keep, db.verdicts.c.human_decision)
+                .join(db.verdicts, db.verdicts.c.post_id == db.posts.c.post_id,
+                      isouter=True)
+                .where(db.posts.c.month == month,
+                       db.posts.c.platform == "weibo")).mappings()
+            posts = []
+            for r in rows:
+                keep = (r["keep"] if r["human_decision"] is None
+                        else r["human_decision"] == "keep")
+                if keep:
+                    posts.append({"post_id": r["post_id"], "url": r["url"],
+                                  "brand": r["brand"]})
+            return {"month": month, "posts": posts}
+
+    _PUSH_CAP = 20_000_000
+
+    @app.post("/api/screenshots/{month}/{post_id:path}")
+    async def screenshots_push(request: Request, month: str, post_id: str):
+        # stream with a hard cap — never buffer an unbounded body
+        try:
+            declared = int(request.headers.get("content-length") or 0)
+        except ValueError:
+            declared = 0
+        if declared > _PUSH_CAP:
+            return JSONResponse({"error": "body too large (≤20MB)"},
+                                status_code=413)
+        chunks, total = [], 0
+        async for chunk in request.stream():
+            total += len(chunk)
+            if total > _PUSH_CAP:
+                return JSONResponse({"error": "body too large (≤20MB)"},
+                                    status_code=413)
+            chunks.append(chunk)
+        body = b"".join(chunks)
+        if not body.startswith(b"\x89PNG"):
+            return JSONResponse({"error": "expected a PNG body"},
+                                status_code=400)
+        engine = db.get_engine()
+        with engine.connect() as conn:
+            row = conn.execute(select(db.posts.c.brand)
+                               .where(db.posts.c.post_id == post_id)).first()
+        if row is None:
+            return JSONResponse({"error": f"unknown post {post_id}"},
+                                status_code=404)
+        from ..media import MediaStore
+        out = (MediaStore(month).visuals_dir(row[0])
+               / f"live_{post_id.replace(':', '_')}.png")
+        out.write_bytes(body)
+        db.audit(engine, _actor(request), "screenshot_push", "post", post_id)
+        return {"ok": True, "stored": out.name, "source": "live-pushed"}
 
     # ---------- assets ----------
 

@@ -1,0 +1,42 @@
+# Maison Monitor — hosted Console.
+# hkg: mainland-China reachability without an ICP filing; flip primary_region
+# to "sjc"/"iad" later if the team turns out to be US-based.
+app = "maison-monitor"
+primary_region = "hkg"
+kill_signal = "SIGINT"
+# Generous stop window so deploy restarts give running phases time to finish
+# their current page/post checkpoint (phases are idempotent and resume).
+kill_timeout = 300
+
+[build]
+
+[env]
+  MM_ENV = "hosted"
+  MM_DATA_DIR = "/data"
+
+[mounts]
+  source = "mm_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # Always-on, deliberately: Fly's proxy stops machines by active-connection
+  # count, and pipeline phases run as background tasks holding no connection —
+  # auto-stop would kill ingests mid-run. Do not enable scale-to-zero.
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "30s"
+    method = "GET"
+    path = "/healthz"
+
+[[vm]]
+  # 2GB: Playwright + LibreOffice headroom during render
+  memory = "2gb"
+  cpu_kind = "shared"
+  cpus = 1

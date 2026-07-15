@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>MAISON MONITOR — Sign in</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<style>
+* { box-sizing:border-box; margin:0; padding:0; }
+body { font-family:-apple-system,"Helvetica Neue",Helvetica,Arial,sans-serif;
+       color:#111; background:#fff; display:flex; min-height:100vh;
+       align-items:center; justify-content:center; }
+.card { width:360px; }
+.wordmark { font-size:19px; letter-spacing:4px; font-weight:600;
+            border-bottom:1px solid #111; padding-bottom:14px; margin-bottom:26px; }
+label { display:block; font-size:10px; letter-spacing:2px; text-transform:uppercase;
+        color:#8a8a8a; margin:16px 0 5px; }
+input { width:100%; border:1px solid #e3e3e3; padding:9px 10px; font:inherit; }
+input:focus { outline:1px solid #111; }
+button { margin-top:22px; width:100%; background:#111; color:#fff; border:1px solid #111;
+         font-size:11px; letter-spacing:2px; text-transform:uppercase; padding:11px;
+         cursor:pointer; }
+button:hover { background:#fff; color:#111; }
+.err { border:1px solid #b3261e; color:#b3261e; font-size:12px; padding:10px 12px;
+       margin-bottom:14px; }
+.note { font-size:11px; color:#8a8a8a; margin-top:18px; line-height:1.5; }
+</style>
+</head>
+<body>
+<form class="card" method="post" action="/login">
+  <div class="wordmark">MAISON&nbsp;MONITOR</div>
+  {% if error %}<div class="err">{{ error }}</div>{% endif %}
+  <label for="name">Your name</label>
+  <input id="name" name="name" autocomplete="name" autofocus maxlength="80" required>
+  <label for="passphrase">Team passphrase</label>
+  <input id="passphrase" name="passphrase" type="password"
+         autocomplete="current-password" required>
+  <button type="submit">Enter</button>
+  <p class="note">Review decisions are attributed to the name you enter.
+  The passphrase is shared out-of-band — ask the deck owner.</p>
+</form>
+</body>
+</html>

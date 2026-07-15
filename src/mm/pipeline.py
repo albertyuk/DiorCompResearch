@@ -188,8 +188,10 @@ def _project_visuals(conn, factory, brand_key: str, project: dict,
     return visuals
 
 
-def run_render(month: str, *, visuals_mode: str = "live",
+def run_render(month: str, *, visuals_mode: str | None = None,
                include_drafts: bool = False, qa_pngs: bool = True) -> dict:
+    from .config import DEFAULT_VISUALS
+    visuals_mode = visuals_mode or DEFAULT_VISUALS   # local→live, hosted→card
     from .render.deck import BrandSpec, DeckBuilder, ProjectSpec, Visual
     from .render.qa import run_qa
     from .render.visuals import VisualFactory

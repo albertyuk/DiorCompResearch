@@ -57,6 +57,61 @@ output/                decks + xlsx + QA rasters (gitignored)
 docs/                  template_map.md (measured geometry) · ASSUMPTIONS.md
 ```
 
+## Hosted Console (Fly.io)
+
+The Console can run at one stable URL for the whole team.
+
+**Deploy (owner, one time):**
+
+```bash
+fly auth login          # once
+uv run mm deploy        # creates app + 10GB volume + secrets, then deploys
+```
+
+`mm deploy` reads `TIKHUB_API_KEY` / `ANTHROPIC_API_KEY` from your `.env`,
+generates `CONSOLE_PASSPHRASE` and `MM_SECRET_KEY` if missing (into `.env`),
+and sets them all with `fly secrets set`. Re-run `mm deploy` any time to ship
+updates. Runs in `hkg` (mainland-reachable without an ICP filing); flip
+`primary_region` in `fly.toml` to `sjc`/`iad` if the team is US-based.
+
+**Coworker onboarding:** open the URL → enter the team passphrase and your
+name → review as usual. Your name is attached to every decision (audit trail).
+The passphrase is shared out-of-band — never alongside the URL.
+
+**Rotating access (someone leaves the team):** change `CONSOLE_PASSPHRASE` in
+your `.env` and re-run `mm deploy` — secrets are re-synced on every deploy,
+and all existing sessions are bound to the passphrase, so every logged-in
+browser is signed out the moment the new passphrase is live.
+
+**Weibo screenshots on hosted:** datacenter IPs get friction from m.weibo.cn,
+so hosted renders default to post-cards. For live screenshots, run on any
+laptop:
+
+```bash
+uv run mm screenshots --month 2026-07 --push https://maison-monitor.fly.dev
+```
+
+then render (or re-render) from the Console — pushed shots automatically
+replace the cards for matching posts.
+
+**If a mainland-China coworker can't reach the `*.fly.dev` URL:** shared
+platform domains are common Great Firewall collateral. First fix to try —
+put the app on a custom subdomain:
+
+```bash
+fly certs add monitor.<yourdomain>     # then add the CNAME it prints
+```
+
+**Backups:** Fly snapshots the volume daily. On top of that, the Decks page
+has **Download database backup** — the SQLite DB (decisions, projects, celeb
+registry, audit trail) is the unrecoverable part; media is re-fetchable and
+decks re-renderable.
+
+**Expected hosting cost:** ~$12/month (≈$10.70 always-on 1×shared-cpu/2GB
+machine + ≈$1.50 for the 10GB volume). Always-on is deliberate — background
+pipeline phases hold no HTTP connection, so scale-to-zero would kill ingests
+mid-run.
+
 ## Notes
 
 - **First-run account confirmation**: ingest refuses any account still marked
