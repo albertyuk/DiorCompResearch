@@ -167,6 +167,19 @@ below were mine; each is easy to revisit.
     A post's media files download concurrently (deduped per post, 10s connect
     timeout) since downloads dominate ingest wall-clock.
 
+43. **Stop is cooperative, not preemptive**: the Runs page Stop button sets a
+    flag that ingest checks between pages, filter between posts, and
+    cross-check/enrich between brands — the current item always completes, so
+    no paid API call is wasted and nothing is left half-written. A stopped
+    phase reads `stopped — … resumes` and resuming = pressing Start month (or
+    re-confirming the checkpoint that launched it). Render is not
+    interruptible (it's minutes at most and has no safe midpoint). Each
+    Start-month press is audited (`start_month`) so the Runs page shows who
+    started the last run and when; a rolling per-month activity feed (in
+    memory, 200 lines) narrates every page/post step, and review pages show
+    an "in progress" banner — the lists they display are the last completed
+    state — and auto-refresh when the run pauses.
+
 ## Testing
 
 25. The ~15 caption fixtures test the deterministic layers (@-tag extraction,

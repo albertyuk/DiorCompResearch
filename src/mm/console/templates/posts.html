@@ -2,6 +2,14 @@
 {% set active = 'posts' %}
 {% block title %}Review · Posts · {{ month }}{% endblock %}
 {% block content %}
+{% if busy %}
+<div class="banner info" id="busy-banner">⏳ A run is working on {{ month }}
+  right now{% if started_by %} (started {{ started_by.at[:16] }} by
+  {{ started_by.actor_name }}){% endif %} — <span id="busy-detail"></span><br>
+  This page shows the <strong>last completed</strong> state; freshly ingested
+  posts appear here after the filter step. It refreshes itself when the run
+  pauses.</div>
+{% endif %}
 <div class="row-flex" style="justify-content:space-between">
   <div>
     <h2 style="margin-top:0">Review checkpoint #1 — posts · {{ month }}</h2>
@@ -64,4 +72,25 @@
   {% endfor %}
 </table>
 {% endfor %}
+{% endblock %}
+
+{% block scripts %}
+{% if busy %}
+<script>
+// while a run is working on this month, narrate it and reload when it pauses
+async function watchRun() {
+  try {
+    const r = await fetch(`/api/runs/{{ month }}/status`);
+    const j = await r.json();
+    const live = Object.entries(j.tasks || {}).filter(([, v]) => v.state === 'running');
+    if (!live.length) { location.reload(); return; }
+    const d = live.map(([, v]) => v.detail).filter(Boolean).join(' · ');
+    document.getElementById('busy-detail').textContent =
+      d || 'working…';
+  } catch (e) {}
+  setTimeout(watchRun, 4000);
+}
+watchRun();
+</script>
+{% endif %}
 {% endblock %}

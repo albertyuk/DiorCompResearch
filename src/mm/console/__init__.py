@@ -29,7 +29,20 @@ TEMPLATES = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 # background task registry: {(month, phase): {"state": .., "detail": ..}}
 TASKS: dict = {}
+# cooperative-stop flags per task key; kept out of TASKS so the status
+# endpoint's JSON never has to serialize an Event
+STOP_EVENTS: dict[str, threading.Event] = {}
+# per-month rolling activity feed shown on the Runs page
+ACTIVITY: dict[str, object] = {}
 _LOCK = threading.Lock()
+
+
+def _log_activity(month: str, msg: str) -> None:
+    from collections import deque
+    from datetime import datetime
+    with _LOCK:
+        log = ACTIVITY.setdefault(month, deque(maxlen=200))
+    log.append(f"{datetime.now().strftime('%H:%M:%S')}  {msg}")
 
 
 def _spawn(month: str, name: str, fn, *args, **kwargs):
@@ -38,16 +51,21 @@ def _spawn(month: str, name: str, fn, *args, **kwargs):
         if TASKS.get(key, {}).get("state") == "running":
             return False
         TASKS[key] = {"state": "running", "detail": ""}
+        STOP_EVENTS[key] = threading.Event()
+    _log_activity(month, f"{name} started")
 
     def worker():
         try:
             result = fn(*args, **kwargs)
-            TASKS[key] = {"state": "done",
+            state = "stopped" if STOP_EVENTS[key].is_set() else "done"
+            TASKS[key] = {"state": state,
                           "detail": json.dumps(result, ensure_ascii=False,
                                                default=str)[:2000]}
+            _log_activity(month, f"{name} {state}")
         except Exception as e:
             traceback.print_exc()
             TASKS[key] = {"state": "error", "detail": str(e)[:500]}
+            _log_activity(month, f"{name} error: {str(e)[:200]}")
 
     # hosted: non-daemon so a deploy's SIGINT lets the phase reach its next
     # checkpoint within fly.toml's kill_timeout; local Ctrl-C stays instant
@@ -57,28 +75,40 @@ def _spawn(month: str, name: str, fn, *args, **kwargs):
 
 
 def _task_note(month: str, name: str):
-    """Progress callback: streams a phase's live position into TASKS so the
-    Runs page poller can show it (single writer thread; readers tolerate lag)."""
+    """Progress callback: streams a phase's live position into TASKS (for the
+    Runs page poller) and the month's activity feed."""
     key = f"{month}:{name}"
 
     def note(msg: str):
         t = TASKS.get(key)
         if t is not None:
             t["detail"] = msg
+        _log_activity(month, msg)
     return note
+
+
+def _stop_flag(month: str, name: str):
+    ev = STOP_EVENTS.get(f"{month}:{name}")
+    return ev.is_set if ev is not None else (lambda: False)
 
 
 def _ingest_and_filter(month):
     note = _task_note(month, "ingest_filter")
-    r1 = pipeline.run_ingest(month, progress=note)
-    r2 = pipeline.run_filter(month, progress=note)
+    stop = _stop_flag(month, "ingest_filter")
+    r1 = pipeline.run_ingest(month, progress=note, should_stop=stop)
+    if stop():
+        return {"ingest": r1, "stopped": True}
+    r2 = pipeline.run_filter(month, progress=note, should_stop=stop)
     return {"ingest": r1, "filter": r2}
 
 
 def _crosscheck_and_enrich(month):
     note = _task_note(month, "crosscheck_enrich")
-    r1 = pipeline.run_crosscheck(month, progress=note)
-    r2 = pipeline.run_enrich(month, progress=note)
+    stop = _stop_flag(month, "crosscheck_enrich")
+    r1 = pipeline.run_crosscheck(month, progress=note, should_stop=stop)
+    if stop():
+        return {"crosscheck": r1, "stopped": True}
+    r2 = pipeline.run_enrich(month, progress=note, should_stop=stop)
     return {"crosscheck": r1, "enrich": r2}
 
 
@@ -159,7 +189,9 @@ def create_app() -> FastAPI:
         with engine.connect() as conn:
             for row in conn.execute(select(db.runs).order_by(db.runs.c.month.desc())).mappings():
                 months.append({**dict(row), "phases": json.loads(row["phase_status"] or "{}"),
-                               "cost": db.cost_summary(conn, row["month"])})
+                               "cost": db.cost_summary(conn, row["month"]),
+                               "started_by": db.last_audit(conn, "start_month",
+                                                           "month", row["month"])})
         return TEMPLATES.TemplateResponse(request, "runs.html", {
             "months": months, "default_month": previous_month(),
             "unresolved": unresolved_accounts(cfg), "msg": msg, "tasks": TASKS})
@@ -195,8 +227,12 @@ def create_app() -> FastAPI:
                     posts.append(d)
                 groups.append({"brand": brand, "posts": posts})
             run = db.get_run(conn, month)
+            started_by = db.last_audit(conn, "start_month", "month", month)
+        busy = any(k.startswith(f"{month}:") and v.get("state") == "running"
+                   for k, v in TASKS.items())
         return TEMPLATES.TemplateResponse(request, "posts.html", {
-            "month": month, "groups": groups, "phases": run["phases"]})
+            "month": month, "groups": groups, "phases": run["phases"],
+            "busy": busy, "started_by": started_by})
 
     @app.get("/review/{month}/projects", response_class=HTMLResponse)
     def projects_view(request: Request, month: str):
@@ -231,11 +267,13 @@ def create_app() -> FastAPI:
             registry = [dict(r) for r in conn.execute(select(db.celeb_registry)).mappings()]
             confirmed_by = db.last_audit(conn, "confirm_posts", "month", month)
             rendered_by = db.last_audit(conn, "render", "month", month)
+        busy = any(k.startswith(f"{month}:") and v.get("state") == "running"
+                   for k, v in TASKS.items())
         return TEMPLATES.TemplateResponse(request, "projects.html", {
             "month": month, "groups": groups, "orphans": orphans,
             "phases": run["phases"], "registry": registry, "tasks": TASKS,
             "confirmed_by": confirmed_by, "rendered_by": rendered_by,
-            "default_visuals": DEFAULT_VISUALS})
+            "default_visuals": DEFAULT_VISUALS, "busy": busy})
 
     @app.get("/decks", response_class=HTMLResponse)
     def decks_view(request: Request):
@@ -247,7 +285,7 @@ def create_app() -> FastAPI:
     # ---------- actions ----------
 
     @app.post("/runs/{month}/start")
-    def start_run(month: str):
+    def start_run(request: Request, month: str):
         from urllib.parse import quote
         cfg = BrandsConfig.load()
         blockers = weibo_blockers(cfg)
@@ -256,13 +294,36 @@ def create_app() -> FastAPI:
             msg = quote(f"Can't start {month} yet — confirm the Weibo account "
                         f"for {names} in the list below, then Start again.")
             return RedirectResponse(f"/?msg={msg}", status_code=303)
-        _spawn(month, "ingest_filter", _ingest_and_filter, month)
+        if _spawn(month, "ingest_filter", _ingest_and_filter, month):
+            db.audit(db.get_engine(), _actor(request), "start_month",
+                     "month", month)
         return RedirectResponse("/", status_code=303)
+
+    @app.post("/runs/{month}/stop")
+    def stop_run(request: Request, month: str):
+        from urllib.parse import quote
+        hit = []
+        for key, ev in list(STOP_EVENTS.items()):
+            if (key.startswith(f"{month}:")
+                    and TASKS.get(key, {}).get("state") == "running"):
+                ev.set()
+                hit.append(key.split(":", 1)[1])
+        if hit:
+            db.audit(db.get_engine(), _actor(request), "stop_requested",
+                     "month", month)
+            _log_activity(month, f"stop requested by {_actor(request)}")
+            msg = ("Stop requested — the run finishes its current item and "
+                   "pauses. Start month (or re-confirming a checkpoint) "
+                   "resumes it; nothing already fetched or decided is lost.")
+        else:
+            msg = f"Nothing is running for {month}."
+        return RedirectResponse(f"/?msg={quote(msg)}", status_code=303)
 
     @app.get("/api/runs/{month}/status")
     def run_status(month: str):
         st = pipeline.status(month)
         st["tasks"] = {k: v for k, v in TASKS.items() if k.startswith(month)}
+        st["activity"] = list(ACTIVITY.get(month, []))[-40:]
         # a phase stuck at "running" with no live task means the process was
         # restarted mid-run (TASKS is in-memory) — tell the user how to resume
         task_for = {"ingest": "ingest_filter", "filter": "ingest_filter",

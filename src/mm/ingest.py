@@ -97,7 +97,7 @@ def resolve_weibo_uid(client: TikHubClient, brand: Brand, engine=None,
 
 def ingest_weibo(engine, client: TikHubClient, cfg: BrandsConfig, month: str,
                  brand_key: str, *, max_pages: int = 40,
-                 progress=None) -> dict:
+                 progress=None, should_stop=None) -> dict:
     """Page the official timeline for [month_start, month_end) CST."""
     brand = cfg.brand(brand_key)
     acct = brand.account("weibo")
@@ -118,6 +118,8 @@ def ingest_weibo(engine, client: TikHubClient, cfg: BrandsConfig, month: str,
     seen: set[str] = set()   # post_ids this run — later pages may overlap
     stale_pages = 0
     while page <= max_pages:
+        if should_stop and should_stop():
+            break                     # pause between pages; nothing is lost
         # live-verified param shape: first page takes uid only; pagination is
         # since_id from the previous response (an explicit page=1 returns 400)
         data = client.call("weibo_user_posts", conn=engine, brand=brand_key,

@@ -45,6 +45,11 @@ input:focus, select:focus, textarea:focus { outline:1px solid var(--ink); }
 .pill.warn { border-color:#c99700; color:#a37b00; }
 .pill.err { border-color:#b3261e; color:#b3261e; }
 .pill.ok { border-color:#2e7d32; color:#2e7d32; }
+.pill.live-ind { min-width:92px; text-align:center; }
+.pill.live-ind.running { border-color:#2e7d32; color:#fff; background:#2e7d32;
+  animation:mm-pulse 1.6s ease-in-out infinite; }
+@keyframes mm-pulse { 50% { opacity:.55; } }
+.banner.info { border-color:#c99700; color:#7a5c00; background:#fffbef; }
 .thumb { width:84px; height:84px; object-fit:cover; background:#f2f2f2;
   border:1px solid var(--line); }
 .caption-cn { white-space:pre-wrap; max-width:520px; }

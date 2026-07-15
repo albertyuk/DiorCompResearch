@@ -13,10 +13,12 @@ CONFIDENCE_REVIEW_THRESHOLD = 0.65   # bias to recall
 
 
 def filter_month(engine, llm: LLM, cfg: BrandsConfig, month: str,
-                 brand_key: str | None = None, progress=None) -> dict:
+                 brand_key: str | None = None, progress=None,
+                 should_stop=None) -> dict:
     """One LLM call per unfiltered post; each verdict commits in its own short
     transaction, so a mid-run crash loses nothing already paid for and the
-    console stays writable while this runs."""
+    console stays writable while this runs. `should_stop()` is checked between
+    posts — a stop pauses cleanly and the next run picks up the rest."""
     q = (select(db.posts)
          .where(db.posts.c.month == month, db.posts.c.platform == "weibo"))
     if brand_key:
@@ -26,9 +28,12 @@ def filter_month(engine, llm: LLM, cfg: BrandsConfig, month: str,
         done = {r["post_id"]
                 for r in conn.execute(select(db.verdicts.c.post_id)).mappings()}
     stats = {"total": len(rows), "filtered": 0, "kept": 0, "needs_review": 0,
-             "errors": 0,
+             "errors": 0, "stopped": False,
              "pending": sum(1 for r in rows if r["post_id"] not in done)}
     for row in rows:
+        if should_stop and should_stop():
+            stats["stopped"] = True
+            break
         if row["post_id"] in done:
             continue
         brand = cfg.brand(row["brand"])

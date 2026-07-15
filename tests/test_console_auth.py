@@ -282,6 +282,93 @@ def test_filter_progress_fires_on_llm_errors(tmp_db):
     assert seen and seen[-1]["errors"] == 1
 
 
+def test_stop_button_sets_flag_and_audits(authed_app, tmp_db):
+    import threading
+    from mm import console as mconsole
+    c = _login(TestClient(authed_app()), "Albert")
+    # nothing running → friendly no-op
+    r = c.post("/runs/2026-05/stop", follow_redirects=False)
+    assert r.status_code == 303 and "Nothing" in r.headers["location"]
+    # fake a running task
+    key = "2026-05:ingest_filter"
+    mconsole.TASKS[key] = {"state": "running", "detail": ""}
+    mconsole.STOP_EVENTS[key] = threading.Event()
+    try:
+        r = c.post("/runs/2026-05/stop", follow_redirects=False)
+        assert r.status_code == 303 and "Stop%20requested" in r.headers["location"]
+        assert mconsole.STOP_EVENTS[key].is_set()
+        with tmp_db.get_engine().connect() as conn:
+            row = conn.execute(select(tmp_db.audit_log).where(
+                tmp_db.audit_log.c.action == "stop_requested")).mappings().first()
+        assert row and row["actor_name"] == "Albert"
+        # the activity feed narrates it via the status endpoint
+        j = c.get("/api/runs/2026-05/status").json()
+        assert any("stop requested by Albert" in line for line in j["activity"])
+    finally:
+        del mconsole.TASKS[key], mconsole.STOP_EVENTS[key]
+
+
+def test_filter_month_cooperative_stop(tmp_db):
+    from mm import filtering
+    from mm.config import BrandsConfig
+    for pid in ("weibo:S1", "weibo:S2"):
+        with tmp_db.get_engine().begin() as conn:
+            tmp_db.upsert(conn, tmp_db.posts, {
+                "post_id": pid, "month": "2026-06", "brand": "lv",
+                "platform": "weibo", "url": f"https://weibo.com/1/{pid}",
+                "created_at": "2026-06-05T12:00:00+08:00", "caption": "x",
+                "at_tags": "[]", "hashtags": "[]", "media": "[]",
+                "is_repost": False, "repost_ambiguous": False}, ["post_id"])
+
+    calls = []
+
+    class OneCallLLM:
+        def call_json(self, *a, **k):
+            calls.append(1)
+            return {"keep": True, "confidence": 0.9, "reasons": [],
+                    "celebs_tagged": [], "category": "event",
+                    "media_focus": "photo"}
+
+    stats = filtering.filter_month(tmp_db.get_engine(), OneCallLLM(),
+                                   BrandsConfig.load(), "2026-06",
+                                   should_stop=lambda: len(calls) >= 1)
+    assert stats["stopped"] is True
+    assert stats["filtered"] == 1 and len(calls) == 1   # paused, not lost
+
+
+def test_ingest_weibo_stop_before_first_call(tmp_db, tmp_path, monkeypatch):
+    import mm.media as mmedia
+    from mm import ingest
+    from mm.config import BrandsConfig
+    monkeypatch.setattr(mmedia, "RUNS_DIR", tmp_path / "runs")
+
+    class NoCallClient:
+        def call(self, *a, **k):
+            raise AssertionError("stopped ingest must not hit the API")
+
+    res = ingest.ingest_weibo(tmp_db.get_engine(), NoCallClient(),
+                              BrandsConfig.load(), "2026-06", "chanel",
+                              should_stop=lambda: True)
+    assert res["posts"] == 0
+
+
+def test_start_month_audits_actor(authed_app, tmp_db, monkeypatch):
+    import time
+    from mm import console as mconsole
+    monkeypatch.setattr(mconsole, "_ingest_and_filter", lambda month: {"ok": 1})
+    c = _login(TestClient(authed_app()), "Albert")
+    r = c.post("/runs/2026-04/start", follow_redirects=False)
+    assert r.status_code == 303
+    for _ in range(50):                       # wait out the worker thread
+        if mconsole.TASKS.get("2026-04:ingest_filter", {}).get("state") != "running":
+            break
+        time.sleep(0.05)
+    with tmp_db.get_engine().connect() as conn:
+        row = conn.execute(select(tmp_db.audit_log).where(
+            tmp_db.audit_log.c.action == "start_month")).mappings().first()
+    assert row and row["actor_name"] == "Albert" and row["entity_id"] == "2026-04"
+
+
 def test_hosted_account_overrides_overlay(tmp_path, monkeypatch):
     import mm.config as mconfig
     monkeypatch.setattr(mconfig, "IS_HOSTED", True)

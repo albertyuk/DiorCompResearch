@@ -36,12 +36,13 @@ def _set_phase(engine, month: str, phase: str, status: str) -> None:
 
 
 def run_ingest(month: str, brand_keys: list[str] | None = None,
-               progress=None) -> dict:
+               progress=None, should_stop=None) -> dict:
     cfg = BrandsConfig.load()
     settings = Settings.load()
     client = TikHubClient(settings)
     engine = db.get_engine()
     results = {}
+    stopped = False
     _set_phase(engine, month, "ingest", "running")
 
     def page_note(bk, page, n):
@@ -52,17 +53,23 @@ def run_ingest(month: str, brand_keys: list[str] | None = None,
         for brand in cfg.brands:
             if brand_keys and brand.key not in brand_keys:
                 continue
+            if should_stop and should_stop():
+                stopped = True
+                break
             if progress:
                 progress(f"ingest {brand.key} · fetching…")
             try:
                 results[brand.key] = ingest.ingest_weibo(
-                    engine, client, cfg, month, brand.key, progress=page_note)
+                    engine, client, cfg, month, brand.key, progress=page_note,
+                    should_stop=should_stop)
             except Exception as e:
                 results[brand.key] = {"error": str(e)}
     finally:
         client.close()
     errs = {k: r["error"] for k, r in results.items() if "error" in r}
-    if errs:
+    if stopped or (should_stop and should_stop()):
+        _set_phase(engine, month, "ingest", "stopped — Start month resumes")
+    elif errs:
         # the failure reason must be visible in the UI, not buried in a dict
         msg = "error: " + "; ".join(f"{k}: {v[:90]}" for k, v in errs.items())
         _set_phase(engine, month, "ingest", msg[:300])
@@ -72,7 +79,7 @@ def run_ingest(month: str, brand_keys: list[str] | None = None,
 
 
 def run_filter(month: str, brand_keys: list[str] | None = None,
-               progress=None) -> dict:
+               progress=None, should_stop=None) -> dict:
     cfg = BrandsConfig.load()
     llm = LLM()
     engine = db.get_engine()
@@ -90,10 +97,13 @@ def run_filter(month: str, brand_keys: list[str] | None = None,
         stats = filtering.filter_month(engine, llm, cfg, month,
                                        brand_keys[0] if brand_keys and
                                        len(brand_keys) == 1 else None,
-                                       progress=note)
+                                       progress=note, should_stop=should_stop)
     except Exception:
         _set_phase(engine, month, "filter", "error")
         raise
+    if stats.get("stopped"):
+        _set_phase(engine, month, "filter", "stopped — Start month resumes")
+        return stats
     ok = stats.get("errors", 0) == 0
     _set_phase(engine, month, "filter", "done" if ok
                else f"error: {stats['errors']} posts failed — re-run filter")
@@ -108,18 +118,22 @@ def confirm_posts_review(month: str) -> None:
 
 
 def run_crosscheck(month: str, brand_keys: list[str] | None = None,
-                   progress=None) -> dict:
+                   progress=None, should_stop=None) -> dict:
     cfg = BrandsConfig.load()
     settings = Settings.load()
     client = TikHubClient(settings)
     llm = LLM(settings)
     engine = db.get_engine()
     results = {}
+    stopped = False
     _set_phase(engine, month, "crosscheck", "running")
     try:
         for brand in cfg.brands:
             if brand_keys and brand.key not in brand_keys:
                 continue
+            if should_stop and should_stop():
+                stopped = True
+                break
             if progress:
                 progress(f"crosscheck {brand.key} · pulling platforms…")
             try:
@@ -136,22 +150,29 @@ def run_crosscheck(month: str, brand_keys: list[str] | None = None,
         client.close()
     errs = {k: r["error"] for k, r in results.items()
             if isinstance(r, dict) and "error" in r}
-    _set_phase(engine, month, "crosscheck",
-               ("error: " + "; ".join(f"{k}: {v[:90]}" for k, v in errs.items()))[:300]
-               if errs else "done")
+    if stopped:
+        _set_phase(engine, month, "crosscheck", "stopped — Confirm posts resumes")
+    else:
+        _set_phase(engine, month, "crosscheck",
+                   ("error: " + "; ".join(f"{k}: {v[:90]}" for k, v in errs.items()))[:300]
+                   if errs else "done")
     return results
 
 
 def run_enrich(month: str, brand_keys: list[str] | None = None,
-               progress=None) -> dict:
+               progress=None, should_stop=None) -> dict:
     cfg = BrandsConfig.load()
     llm = LLM()
     engine = db.get_engine()
     results = {}
+    stopped = False
     _set_phase(engine, month, "enrich", "running")
     for brand in cfg.brands:
         if brand_keys and brand.key not in brand_keys:
             continue
+        if should_stop and should_stop():
+            stopped = True
+            break
         if progress:
             progress(f"enrich {brand.key} · consolidating…")
         matches = {}
@@ -164,9 +185,12 @@ def run_enrich(month: str, brand_keys: list[str] | None = None,
         except Exception as e:
             results[brand.key] = {"error": str(e)}
     errs = {k: r["error"] for k, r in results.items() if "error" in r}
-    _set_phase(engine, month, "enrich",
-               ("error: " + "; ".join(f"{k}: {v[:90]}" for k, v in errs.items()))[:300]
-               if errs else "done")
+    if stopped:
+        _set_phase(engine, month, "enrich", "stopped — Confirm posts resumes")
+    else:
+        _set_phase(engine, month, "enrich",
+                   ("error: " + "; ".join(f"{k}: {v[:90]}" for k, v in errs.items()))[:300]
+                   if errs else "done")
     # only (re)open checkpoint #2 when enrichment actually produced/refreshed
     # drafts — a wholesale "confirmed already, untouched" rerun must not
     # regress a confirmed review

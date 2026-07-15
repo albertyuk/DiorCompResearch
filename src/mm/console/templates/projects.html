@@ -2,6 +2,12 @@
 {% set active = 'projects' %}
 {% block title %}Review · Projects · {{ month }}{% endblock %}
 {% block content %}
+{% if busy %}
+<div class="banner info" id="busy-banner">⏳ A run is working on {{ month }}
+  right now — <span id="busy-detail"></span><br>
+  Projects below are the <strong>last completed</strong> state; the list
+  refreshes itself when cross-check / enrichment / render finishes.</div>
+{% endif %}
 <div class="row-flex" style="justify-content:space-between">
   <div>
     <h2 style="margin-top:0">Review checkpoint #2 — projects · {{ month }}</h2>
@@ -130,13 +136,22 @@
 
 {% block scripts %}
 <script>
+let wasBusy = {{ 'true' if busy else 'false' }};
 async function poll() {
   try {
     const r = await fetch(`/api/runs/{{ month }}/status`);
     const j = await r.json();
-    const t = Object.entries(j.tasks || {})
-      .map(([k, v]) => `${k.split(':')[1]}: ${v.state}`).join('  ·  ');
+    const entries = Object.entries(j.tasks || {});
+    const live = entries.filter(([, v]) => v.state === 'running');
+    if (wasBusy && !live.length) { location.reload(); return; }
+    const t = entries.map(([k, v]) =>
+      `${k.split(':')[1]}: ${v.state}` +
+      (v.state === 'running' && v.detail ? ` — ${v.detail}` : '')).join('  ·  ');
     document.getElementById('task-line').textContent = t ? `background — ${t}` : '';
+    const bd = document.getElementById('busy-detail');
+    if (bd && live.length) {
+      bd.textContent = live.map(([, v]) => v.detail).filter(Boolean).join(' · ') || 'working…';
+    }
   } catch (e) {}
 }
 setInterval(poll, 4000); poll();

@@ -43,15 +43,30 @@ is a one-time step — commit that file and teammates never see it.</p>
 <div style="margin-bottom:26px" data-month="{{ m.month }}">
   <div class="row-flex" style="align-items:baseline">
     <strong style="font-size:16px; letter-spacing:1px">{{ m.month }}</strong>
+    <span class="pill live-ind" id="live-{{ m.month }}">…</span>
     {% for phase in ['ingest','filter','review_posts','crosscheck','enrich','review_projects','render'] %}
       {% set st = m.phases.get(phase, '—') %}
-      <span class="pill {% if st=='done' or st=='confirmed' %}on{% elif st=='waiting' %}warn{% elif st and st.startswith('error') %}err{% endif %}">
+      <span class="pill {% if st=='done' or st=='confirmed' %}on{% elif st=='waiting' or st.startswith('stopped') %}warn{% elif st and st.startswith('error') %}err{% endif %}">
         {{ phase }} · {{ st }}</span>
     {% endfor %}
     <span class="micro">tikhub+llm cost ≈ ${{ '%.2f'|format(m.cost.total_usd) }}</span>
     <a class="btn" href="/review/{{ m.month }}/posts">Open review</a>
+    <form method="post" action="/runs/{{ m.month }}/stop" class="inline"
+          id="stop-{{ m.month }}" style="display:none"
+          onsubmit="return confirm('Pause the {{ m.month }} run at its next safe point?')">
+      <button type="submit">Stop</button>
+    </form>
   </div>
+  {% if m.started_by %}
+  <div class="micro">last started {{ m.started_by.at[:16] }} by {{ m.started_by.actor_name }}</div>
+  {% endif %}
   <div class="micro" id="task-{{ m.month }}"></div>
+  <details id="actwrap-{{ m.month }}" style="margin-top:6px">
+    <summary class="micro" style="cursor:pointer">activity log</summary>
+    <pre id="act-{{ m.month }}" style="font-size:11px; color:var(--mut);
+      max-height:220px; overflow-y:auto; background:#fafafa;
+      border:1px solid var(--line); padding:8px 12px; margin-top:4px"></pre>
+  </details>
 </div>
 {% endfor %}
 {% endblock %}
@@ -64,7 +79,9 @@ async function poll() {
     try {
       const r = await fetch(`/api/runs/${m}/status`);
       const j = await r.json();
-      const t = Object.entries(j.tasks || {})
+      const entries = Object.entries(j.tasks || {});
+      const running = entries.some(([, v]) => v.state === 'running');
+      const t = entries
         .map(([k, v]) => {
           const label = `${k.split(':')[1]}: ${v.state}`;
           if (v.state === 'running' && v.detail) return `${label} — ${v.detail}`;
@@ -78,6 +95,33 @@ async function poll() {
                `everything already fetched and every paid LLM verdict is kept. ` + line;
       }
       document.getElementById(`task-${m}`).textContent = line;
+
+      // unmissable live indicator + Stop button
+      const ind = document.getElementById(`live-${m}`);
+      if (running) {
+        ind.textContent = '● RUNNING';
+        ind.className = 'pill live-ind running';
+      } else if ((j.stalled || []).length) {
+        ind.textContent = '◌ INTERRUPTED';
+        ind.className = 'pill live-ind err';
+      } else {
+        ind.textContent = '○ idle';
+        ind.className = 'pill live-ind';
+      }
+      document.getElementById(`stop-${m}`).style.display = running ? '' : 'none';
+
+      // activity feed (auto-open while running)
+      const act = document.getElementById(`act-${m}`);
+      if (act && j.activity) {
+        const atBottom = act.scrollHeight - act.scrollTop - act.clientHeight < 30;
+        act.textContent = j.activity.join('\n') || '(no activity yet)';
+        if (atBottom) act.scrollTop = act.scrollHeight;
+        const wrap = document.getElementById(`actwrap-${m}`);
+        if (running && !wrap.dataset.autoOpened) {
+          wrap.open = true;                 // open once; user can re-close
+          wrap.dataset.autoOpened = '1';
+        }
+      }
     } catch (e) {}
   }
 }
