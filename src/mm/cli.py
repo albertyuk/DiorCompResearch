@@ -330,6 +330,33 @@ def deploy():
     region_m = re.search(r'^primary_region\s*=\s*"([^"]+)"', toml, re.M)
     region = region_m.group(1) if region_m else "hkg"
 
+    # validate the region against what THIS Fly account can actually use —
+    # some regions (e.g. hkg) are unavailable to new accounts. Preference
+    # order keeps the mainland-China-adjacency rationale: HK → SG → Tokyo.
+    regions_r = subprocess.run([fly, "platform", "regions", "--json"], env=env,
+                               capture_output=True, text=True)
+    available: set[str] = set()
+    if regions_r.returncode == 0:
+        try:
+            for item in _json.loads(regions_r.stdout or "null") or []:
+                if isinstance(item, dict):
+                    code = item.get("Code") or item.get("code")
+                    if code:
+                        available.add(code)
+        except ValueError:
+            pass
+    if available and region not in available:
+        fallback = next((r for r in ("hkg", "sin", "nrt", "sjc", "iad")
+                         if r in available), sorted(available)[0])
+        typer.echo(f"region {region!r} isn't available on this Fly account — "
+                   f"using {fallback!r} instead (regions you can use: "
+                   f"{', '.join(sorted(available))}; edit primary_region in "
+                   f"fly.toml to change)")
+        toml = re.sub(r'^primary_region\s*=\s*"[^"]+"',
+                      f'primary_region = "{fallback}"', toml, flags=re.M)
+        toml_path.write_text(toml, encoding="utf-8")
+        region = fallback
+
     # existence via the account's app list — never confuse an API hiccup or a
     # name owned by someone else with "doesn't exist yet"
     lst = subprocess.run([fly, "apps", "list", "--json"], env=env,
@@ -371,10 +398,39 @@ def deploy():
                           env=env, capture_output=True, text=True)
     have_volume = vols.returncode == 0 and '"mm_data"' in (vols.stdout or "")
     if not have_volume:
-        typer.echo(f"creating 10GB volume mm_data in {region}…")
-        subprocess.run([fly, "volumes", "create", "mm_data",
-                        "--region", region, "--size", "10",
-                        "-a", app_name, "--yes"], check=True, env=env)
+        # try the configured region first, then the preference chain —
+        # `fly platform regions` isn't a guarantee, and a "region not found"
+        # from the create call means this account can't use it regardless
+        chain = [region] + [r for r in ("hkg", "sin", "nrt", "sjc", "iad")
+                            if r != region]
+        created, err = False, ""
+        for cand in chain:
+            typer.echo(f"creating 10GB volume mm_data in {cand}…")
+            vol = subprocess.run([fly, "volumes", "create", "mm_data",
+                                  "--region", cand, "--size", "10",
+                                  "-a", app_name, "--yes"],
+                                 env=env, capture_output=True, text=True)
+            if vol.returncode == 0:
+                created = True
+                if cand != region:
+                    typer.echo(f"volume landed in {cand!r} ({region!r} was "
+                               f"rejected by Fly) — updating primary_region "
+                               f"in fly.toml to match, so the machine deploys "
+                               f"next to its volume")
+                    toml = toml_path.read_text(encoding="utf-8")
+                    toml = re.sub(r'^primary_region\s*=\s*"[^"]+"',
+                                  f'primary_region = "{cand}"', toml, flags=re.M)
+                    toml_path.write_text(toml, encoding="utf-8")
+                    region = cand
+                break
+            err = (vol.stderr or vol.stdout or "").strip()
+            if "not found" not in err.lower():
+                break  # not a region problem — don't shotgun other regions
+        if not created:
+            typer.echo(f"volume creation failed:\n{err[:300]}\n"
+                       f"Fix the cause and re-run `mm deploy`; every step is "
+                       f"safe to repeat.")
+            raise typer.Exit(1)
 
     # secrets: synced on EVERY run, via stdin (never argv → never in the
     # process list or a traceback)
