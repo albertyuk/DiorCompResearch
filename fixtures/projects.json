@@ -1,0 +1,201 @@
+{
+  "month": "2026-07",
+  "brands": [
+    {
+      "key": "chanel",
+      "display_name": "CHANEL",
+      "projects": [
+        {
+          "title": "COCO CRUSH FINE JEWELLERY AD WITH WANG YIBO AND LEAH DOU",
+          "phase_suffix": null,
+          "date_start": "2026-07-02",
+          "date_end": "2026-07-03",
+          "ongoing": false,
+          "assets": "VIDEO",
+          "platforms": ["weibo", "xhs", "wechat_mp"],
+          "description": "COCO CRUSH FINE JEWELLERY AD WITH WANG YIBO AND LEAH DOU",
+          "visuals": [
+            {"image": "fixtures/media/6466c863.png", "kind": "video_still",
+             "link": "https://weibo.com/1892475055/5051234567890001",
+             "label_top": "BRAND AMBASSADOR", "label_name": "WANG YIBO"},
+            {"image": "fixtures/media/0971c563.png", "kind": "video_still",
+             "link": "https://weibo.com/1892475055/5051234567890002",
+             "label_top": "BRAND AMBASSADOR", "label_name": "LEAH DOU"}
+          ]
+        },
+        {
+          "title": "CHANEL FALL-WINTER 2026/27 HAUTE COUTURE COLLECTION SHOW",
+          "phase_suffix": null,
+          "date_start": "2026-07-09",
+          "date_end": null,
+          "ongoing": false,
+          "assets": "PHOTO",
+          "platforms": ["weibo", "xhs"],
+          "description": "CHANEL FALL-WINTER 2026/27 HAUTE COUTURE COLLECTION SHOW",
+          "visuals": [
+            {"image": "fixtures/media/271917b3.jpg",
+             "label_top": "BRAND AMBASSADOR", "label_name": "ZHANG ZIFENG"},
+            {"image": "fixtures/media/87cb248f.jpg",
+             "label_top": "BRAND AMBASSADOR", "label_name": "WILLIAM CHAN"},
+            {"image": "fixtures/media/e1eec7cc.jpg",
+             "label_top": "BRAND FRIEND", "label_name": "SHAN YICHUN"},
+            {"image": "fixtures/media/62b6cb89.jpg",
+             "label_top": "BRAND FRIEND", "label_name": "MICHELLE YEOH"},
+            {"image": "fixtures/media/1ec35433.jpg",
+             "label_top": "BRAND FRIEND", "label_name": "FALA CHEN"}
+          ]
+        }
+      ]
+    },
+    {
+      "key": "lv",
+      "display_name": "LOUIS VUITTON",
+      "projects": [
+        {
+          "title": "REBONDS RELAUNCH FOR THE LOUIS VUITTON X UNICEF 10TH ANNIVERSARY",
+          "phase_suffix": null,
+          "date_start": "2026-07-01",
+          "date_end": null,
+          "ongoing": false,
+          "assets": "PHOTO",
+          "platforms": ["weibo", "xhs"],
+          "description": "REBONDS RELAUNCH FOR THE LOUIS VUITTON X UNICEF 10TH ANNIVERSARY",
+          "visuals": [
+            {"image": "fixtures/media/97682ed3.jpg",
+             "label_top": "ARTIST", "label_name": "XU BING"},
+            {"image": "fixtures/media/a6b014a3.jpg",
+             "label_top": "PIANIST", "label_name": "YUJA WANG"},
+            {"image": "fixtures/media/51b0416e.jpg",
+             "label_top": "DIRECTOR", "label_name": "JIA ZHANG-KE"},
+            {"image": "fixtures/media/591e78ec.jpg",
+             "label_top": "BRAND AMBASSADOR", "label_name": "WANG CHUQIN"},
+            {"image": "fixtures/media/ae3e278e.jpg",
+             "label_top": "ACTRESS ?", "label_name": "MAGGIE CHEUNG"}
+          ]
+        }
+      ]
+    },
+    {
+      "key": "tiffany",
+      "display_name": "TIFFANY & CO.",
+      "projects": [
+        {
+          "title": "LI YUNRUI VISITS OAK SPRING GARDEN, TRACING SCHLUMBERGER'S LEGACY",
+          "phase_suffix": null,
+          "date_start": "2026-07-01",
+          "date_end": null,
+          "ongoing": false,
+          "assets": "PHOTO",
+          "platforms": ["weibo", "xhs"],
+          "description": "LI YUNRUI VISITS OAK SPRING GARDEN, TRACING SCHLUMBERGER'S LEGACY",
+          "visuals": [
+            {"image": "fixtures/media/1e866ca5.jpg"},
+            {"image": "fixtures/media/4188d4d0.jpg",
+             "label_top": "BRAND AMBASSADOR", "label_name": "LI YUNRUI"},
+            {"image": "fixtures/media/87a5b49a.jpg"}
+          ]
+        },
+        {
+          "title": "TIFFANY NEW CAMPAIGN FACE WITH SAMMI CHENG, TITLE TBD",
+          "phase_suffix": null,
+          "date_start": "2026-07-13",
+          "date_end": null,
+          "ongoing": false,
+          "assets": "VIDEO",
+          "platforms": ["weibo", "xhs", "wechat_mp", "douyin"],
+          "description": "TIFFANY NEW CAMPAIGN FACE WITH SAMMI CHENG, TITLE TBD",
+          "visuals": [
+            {"image": "fixtures/media/913c6427.png", "kind": "video_still",
+             "link": "https://weibo.com/3921348017/5051234567890003",
+             "label_top": "BRAND FRIEND", "label_name": "SAMMI CHENG"}
+          ]
+        }
+      ]
+    },
+    {
+      "key": "gucci",
+      "display_name": "GUCCI",
+      "projects": [
+        {
+          "title": "GUCCI MONTE CARLO",
+          "phase_suffix": null,
+          "date_start": "2026-07-02",
+          "date_end": null,
+          "ongoing": false,
+          "assets": "PHOTO",
+          "platforms": ["weibo", "xhs"],
+          "description": "GUCCI MONTE CARLO WITH TIAN XIWEI",
+          "visuals": [
+            {"image": "fixtures/media/7dcde0a6.jpg",
+             "label_top": "BRAND FRIEND", "label_name": "TIAN XIWEI"}
+          ]
+        },
+        {
+          "title": "BAZAAR MEN CHINA'S JUNE 2026 ISSUE WITH SONG WEILONG",
+          "phase_suffix": null,
+          "date_start": "2026-07-09",
+          "date_end": null,
+          "ongoing": false,
+          "assets": "PHOTO",
+          "platforms": ["weibo", "xhs"],
+          "description": "BAZAAR MEN CHINA'S JUNE 2026 ISSUE WITH SONG WEILONG",
+          "visuals": [
+            {"image": "fixtures/media/7389f185.jpg"},
+            {"image": "fixtures/media/f697d86f.jpg",
+             "label_top": "BRAND AMBASSADOR", "label_name": "SONG WEILONG"},
+            {"image": "fixtures/media/5c115b51.jpg"}
+          ]
+        }
+      ]
+    },
+    {
+      "key": "fendi",
+      "display_name": "FENDI",
+      "projects": [
+        {
+          "title": "FENDI BAGUETTE",
+          "phase_suffix": null,
+          "date_start": "2026-07-01",
+          "date_end": null,
+          "ongoing": true,
+          "assets": "PHOTO",
+          "platforms": ["weibo", "xhs"],
+          "description": "FENDI BAGUETTE",
+          "visuals": [
+            {"image": "fixtures/media/0bd8fc9f.jpg", "label_top": "ACTRESS", "label_name": "FAIR XING"},
+            {"image": "fixtures/media/c103264b.jpg", "label_top": "ACTRESS", "label_name": "SNOW KONG"},
+            {"image": "fixtures/media/36330b79.jpg", "label_top": "ACTOR", "label_name": "ELVIS HAN"},
+            {"image": "fixtures/media/7c1fea07.jpg", "label_top": "ACTRESS", "label_name": "CECILIA CHEUNG"},
+            {"image": "fixtures/media/fcac1ab5.jpg", "label_top": "ACTRESS", "label_name": "ANDY YANG"},
+            {"image": "fixtures/media/ee7800be.jpg", "label_top": "ACTRESS", "label_name": "ZHANG YISHANG"},
+            {"image": "fixtures/media/143c9f2a.jpg", "label_top": "SINGER", "label_name": "QING LIAN"},
+            {"image": "fixtures/media/d2a51f41.jpg", "label_top": "ACTRESS", "label_name": "WANG YINGLU"},
+            {"image": "fixtures/media/a12706ac.jpg", "label_top": "ACTRESS", "label_name": "NARAN"},
+            {"image": "fixtures/media/e584e6a1.jpg", "label_top": "ACTRESS", "label_name": "ZHOU YIRAN"},
+            {"image": "fixtures/media/62ce00b3.jpg", "label_top": "ACTRESS", "label_name": "MAO XIAOHUI"},
+            {"image": "fixtures/media/9eed719f.jpg", "label_top": "SINGER", "label_name": "FU JING"},
+            {"image": "fixtures/media/72c59756.jpg", "label_top": "ACTRESS", "label_name": "KYULKYUNG"},
+            {"image": "fixtures/media/24aa7dd1.jpg", "label_top": "SINGER ?", "label_name": "CLARE DUAN"}
+          ]
+        },
+        {
+          "title": "FENDI'S FW26/27 COUTURE SHOW WITH TIFFANY TANG",
+          "phase_suffix": "ARRIVAL",
+          "date_start": "2026-07-06",
+          "date_end": "2026-07-09",
+          "ongoing": false,
+          "assets": "PHOTO",
+          "platforms": ["weibo", "xhs", "wechat_mp", "douyin"],
+          "description": "FENDI'S FW26/27 COUTURE SHOW WITH TIFFANY TANG — ARRIVAL",
+          "visuals": [
+            {"image": "fixtures/media/abcc75f8.jpg"},
+            {"image": "fixtures/media/0296a041.jpg",
+             "label_top": "BRAND AMBASSADOR", "label_name": "TIFFANY TANG"},
+            {"image": "fixtures/media/a78c6db5.jpg"},
+            {"image": "fixtures/media/da39034d.jpg"}
+          ]
+        }
+      ]
+    }
+  ]
+}
