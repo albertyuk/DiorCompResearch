@@ -115,6 +115,8 @@ def ingest_weibo(engine, client: TikHubClient, cfg: BrandsConfig, month: str,
     start, end = month_bounds(month)
     store = MediaStore(month)
     n_new, n_reposts, page, since_id = 0, 0, 1, None
+    seen: set[str] = set()   # post_ids this run — later pages may overlap
+    stale_pages = 0
     while page <= max_pages:
         # live-verified param shape: first page takes uid only; pagination is
         # since_id from the previous response (an explicit page=1 returns 400)
@@ -124,11 +126,15 @@ def ingest_weibo(engine, client: TikHubClient, cfg: BrandsConfig, month: str,
         mblogs = normalize.weibo_posts_from_response(data)
         if not mblogs:
             break
-        batch, older_seen, considered = [], 0, 0
+        batch, older_seen, considered, fresh = [], 0, 0, 0
         for mblog in mblogs:
             post = normalize.normalize_weibo(mblog, uid)
             if post is None or post["created_dt"] is None:
                 continue
+            if post["post_id"] in seen:
+                continue              # overlap with an earlier page
+            seen.add(post["post_id"])
+            fresh += 1
             dt = post["created_dt"]
             if post.get("is_top") and not (start <= dt < end):
                 continue              # pinned out-of-window post; keep paging
@@ -151,10 +157,20 @@ def ingest_weibo(engine, client: TikHubClient, cfg: BrandsConfig, month: str,
         # the timeline has no next page
         if considered and older_seen >= max(1, considered - 1):
             break
-        new_since = normalize.find_key(data, "since_id")
-        since_id = str(new_since) if new_since not in (None, "", 0) else None
-        if since_id is None:
+        # stall insurance: a timeline that re-serves itself (two pages with
+        # nothing new, or an unmoved cursor) must terminate, not spin to
+        # max_pages re-counting the same posts
+        if fresh == 0:
+            stale_pages += 1
+            if stale_pages >= 2:
+                break
+        else:
+            stale_pages = 0
+        new_since = normalize.next_cursor(data, "since_id")
+        new_since = str(new_since) if new_since is not None else None
+        if new_since is None or new_since == since_id:
             break
+        since_id = new_since
         page += 1
     return {"brand": brand_key, "posts": n_new, "skipped_reposts": n_reposts}
 
@@ -175,37 +191,39 @@ def pull_platform(engine, client: TikHubClient, cfg: BrandsConfig, month: str,
     store = MediaStore(month)
     n = 0
     cursor = None
+    seen: set[str] = set()
     for page in range(max_pages):
+        prev_cursor = cursor
         if platform == "douyin":
             data = client.call("douyin_user_posts", conn=engine, brand=brand_key,
                                month=month, sec_user_id=acct.uid,
                                max_cursor=cursor, count=20)
             items = normalize.douyin_posts_from_response(data)
             posts = [normalize.normalize_douyin(i) for i in items]
-            cursor = normalize.find_key(data, "max_cursor")
-            has_more = bool(normalize.find_key(data, "has_more"))
+            cursor = normalize.next_cursor(data, "max_cursor")
+            has_more = bool(normalize.next_cursor(data, "has_more"))
         elif platform == "xhs":
             data = client.call("xhs_user_notes", conn=engine, brand=brand_key,
                                month=month, user_id=acct.uid, cursor=cursor)
             items = normalize.xhs_notes_from_response(data)
             posts = [normalize.normalize_xhs(i) for i in items]
-            cursor = normalize.find_key(data, "cursor")
-            has_more = bool(normalize.find_key(data, "has_more"))
+            cursor = normalize.next_cursor(data, "cursor")
+            has_more = bool(normalize.next_cursor(data, "has_more"))
         elif platform == "wechat_mp":
             data = client.call("wechat_mp_articles", conn=engine, brand=brand_key,
                                month=month, username=acct.uid, offset=cursor,
                                raw=False)
             items = normalize.wechat_mp_articles_from_response(data)
             posts = [normalize.normalize_wechat_mp(i) for i in items]
-            cursor = normalize.find_key(data, "next_offset")
-            has_more = bool(normalize.find_key(data, "has_more")) or bool(cursor)
+            cursor = normalize.next_cursor(data, "next_offset")
+            has_more = bool(normalize.next_cursor(data, "has_more")) or bool(cursor)
         elif platform == "wechat_channels":
             data = client.call("wechat_ch_videos", conn=engine, brand=brand_key,
                                month=month, username=acct.uid,
                                last_buffer=cursor, raw=False)
             items = normalize.wechat_ch_videos_from_response(data)
             posts = [normalize.normalize_wechat_channels(i) for i in items]
-            cursor = normalize.find_key(data, "last_buffer")
+            cursor = normalize.next_cursor(data, "last_buffer")
             has_more = bool(cursor)
         else:
             raise ValueError(platform)
@@ -222,6 +240,9 @@ def pull_platform(engine, client: TikHubClient, cfg: BrandsConfig, month: str,
             dt = post["created_dt"]
             if dt is None:
                 continue
+            if post["post_id"] in seen:
+                continue              # overlap with an earlier page
+            seen.add(post["post_id"])
             considered += 1
             if dt >= end:
                 continue
@@ -234,4 +255,6 @@ def pull_platform(engine, client: TikHubClient, cfg: BrandsConfig, month: str,
         n += len(batch)
         if (considered and older_seen >= considered) or not has_more or not items:
             break
+        if cursor == prev_cursor:
+            break                     # cursor didn't move — page would repeat
     return n

@@ -77,6 +77,17 @@ def find_key(data, key: str, max_depth: int = 8):
     return None
 
 
+def next_cursor(data, key: str):
+    """Next-page cursor from a TikHub response. The envelope echoes the
+    REQUEST parameters at the top level (`params.<key>`) *before* the payload
+    in iteration order, so a whole-response find_key returns the cursor we
+    just sent and pagination silently freezes (live-verified on weibo
+    fetch_user_posts). Only the response body may be searched."""
+    body = data.get("data") if isinstance(data, dict) else None
+    v = find_key(body, key) if body is not None else None
+    return None if v in (None, "", 0) else v
+
+
 # -- weibo ---------------------------------------------------------------------
 
 def weibo_posts_from_response(data) -> list[dict]:

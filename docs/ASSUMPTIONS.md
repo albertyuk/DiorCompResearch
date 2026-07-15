@@ -46,7 +46,12 @@ below were mine; each is easy to revisit.
 
 12. **Weibo pagination**: live testing showed `fetch_user_posts` rejects an
     explicit `page` param; first call sends `uid` only, then `since_id`. (The
-    OpenAPI doc lists `page`, but the live endpoint 400s on it.)
+    OpenAPI doc lists `page`, but the live endpoint 400s on it.) The TikHub
+    envelope echoes the request at top-level `params` *before* the payload,
+    so cursors are read from the response body only (`normalize.next_cursor`)
+    — a whole-response search returns the cursor just sent and freezes
+    pagination on one page. Ingest also dedupes post_ids within a run and
+    stops on an unmoved cursor or two pages with nothing new.
 13. **Pure-repost rule**: a post with `retweeted_status` and ≤4 chars of own
     commentary (or the literal 转发微博) is skipped; a repost *with* commentary
     is ingested and flagged `repost_ambiguous` → always `needs_review` at
