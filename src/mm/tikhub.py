@@ -112,7 +112,12 @@ class TikHubClient:
                 last = e
                 time.sleep(min(30, 2 ** attempt + random.random()))
                 continue
-            if r.status_code in (429,) or r.status_code >= 500:
+            # TikHub signals transient upstream failures as 400 with an
+            # explicit "Please retry" / uncharged message — treat as retryable
+            transient_400 = (r.status_code == 400
+                             and ("Please retry" in r.text[:500]
+                                  or "请重试" in r.text[:500]))
+            if r.status_code == 429 or r.status_code >= 500 or transient_400:
                 last = TikHubError(f"{key}: HTTP {r.status_code} {r.text[:200]}")
                 delay = min(30, 2 ** attempt + random.random())
                 retry_after = r.headers.get("retry-after")

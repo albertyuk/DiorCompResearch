@@ -98,7 +98,11 @@ def run_qa(path: Path, png_dir: Path | None = None) -> dict:
     if png_dir is not None:
         try:
             report["pngs"] = [str(p) for p in render_pngs(path, png_dir)]
+        except FileNotFoundError:
+            report["png_note"] = ("QA slide images skipped — LibreOffice not "
+                                  "installed (optional; the deck itself is "
+                                  "unaffected)")
         except Exception as e:
-            report["png_error"] = str(e)
+            report["png_note"] = f"QA slide images skipped: {e}"
     report["ok"] = not report["placeholders"] and not report["geometry"]
     return report

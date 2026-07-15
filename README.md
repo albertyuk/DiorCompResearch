@@ -9,19 +9,31 @@ relevance filter → human review in a local web **Console** → cross-platform
 verification (Douyin / RED / WeChat) → celebrity & relationship enrichment →
 project consolidation → PPTX rendered to match the reference deck.
 
-## Launch
+## Launch (Mac, zero setup)
+
+1. Get the folder — either clone this repo, or on GitHub click
+   **Code → Download ZIP** and unzip it.
+2. **Double-click `start.command`.** The first time, macOS may block it:
+   right-click the file → **Open** → **Open**. First run installs everything
+   (a few minutes) and asks you to paste the team's `ANTHROPIC_API_KEY` once
+   (get it from Albert / the team password manager) — it's remembered after
+   that. After the first run it starts in seconds.
+3. Your browser opens the Console at `http://127.0.0.1:8377`. Leave the
+   Terminal window open while you work; close it (or Ctrl-C) to stop.
+
+The TikHub key is already included (`config/default.env`, usage-limited team
+key — rotate if repo access changes; GitHub push protection prevents
+committing the Anthropic key, hence the one-time paste). A `.env` in the repo
+root overrides any default.
+
+<details><summary>Manual launch (any OS)</summary>
 
 ```bash
-# 1. secrets (never committed)
-cp .env.example .env        # fill in TIKHUB_API_KEY + ANTHROPIC_API_KEY
-
-# 2. install
 uv sync
 uv run playwright install chromium   # for post screenshots / cards
-
-# 3. go
-uv run mm console            # opens http://127.0.0.1:8377
+uv run mm console                    # opens http://127.0.0.1:8377
 ```
+</details>
 
 A full month is drivable entirely from the browser: **Start month** → confirm
 accounts (first run only) → review posts → confirm → edit projects → render →

@@ -37,7 +37,9 @@ PLATFORM_TO_DISPLAY = {
 
 
 def load_env() -> None:
+    # precedence: real environment > local .env > committed team defaults
     load_dotenv(ROOT / ".env")
+    load_dotenv(CONFIG_DIR / "default.env")
 
 
 @dataclass
@@ -55,8 +57,8 @@ class Settings:
                    (("TIKHUB_API_KEY", tik), ("ANTHROPIC_API_KEY", ant)) if not v]
         if missing:
             raise RuntimeError(
-                f"Missing required secrets in .env: {', '.join(missing)} "
-                f"(expected at {ROOT / '.env'})")
+                f"Missing required secrets: {', '.join(missing)} — set them in "
+                f"{ROOT / '.env'} or {CONFIG_DIR / 'default.env'}")
         return cls(
             tikhub_api_key=tik,
             anthropic_api_key=ant,

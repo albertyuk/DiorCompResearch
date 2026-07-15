@@ -173,16 +173,17 @@ def registry_export_cmd(out: str = typer.Option(None, help="output JSON path")):
 
 @app.command()
 def smoke(brand: str = "lv", days: int = 7,
-          month: str = typer.Option(None, help="month whose last N days to test")):
+          month: str = typer.Option(None, help="month to test (default: current "
+                                    "month — its posts sit on the first pages)")):
     """One-brand/one-week end-to-end smoke: ingest a few pages, filter, print costs.
     Uses TikHub free credits; does not render."""
-    from datetime import timedelta
+    from datetime import datetime
     from . import filtering
-    from .dates import month_bounds
+    from .dates import CST
     from .ingest import ingest_weibo
     from .llm import LLM
     from .tikhub import TikHubClient
-    month = _month_opt(month)
+    month = month or datetime.now(CST).strftime("%Y-%m")
     cfg = BrandsConfig.load()
     settings = Settings.load()
     client = TikHubClient(settings)
