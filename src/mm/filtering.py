@@ -26,7 +26,8 @@ def filter_month(engine, llm: LLM, cfg: BrandsConfig, month: str,
         done = {r["post_id"]
                 for r in conn.execute(select(db.verdicts.c.post_id)).mappings()}
     stats = {"total": len(rows), "filtered": 0, "kept": 0, "needs_review": 0,
-             "errors": 0}
+             "errors": 0,
+             "pending": sum(1 for r in rows if r["post_id"] not in done)}
     for row in rows:
         if row["post_id"] in done:
             continue

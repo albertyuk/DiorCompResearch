@@ -10,6 +10,7 @@ page, so a crash never loses more than a page and the console stays writable.
 from __future__ import annotations
 
 import json
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 
 from . import db, normalize
@@ -27,18 +28,30 @@ def _archive_raw(store: MediaStore, brand_key: str, name: str, payload) -> str:
 
 def _download_post_media(store: MediaStore, brand_key: str, post: dict,
                          referer: str) -> None:
+    # downloads dominate ingest wall-clock — fetch a post's files concurrently,
+    # deduped by (url, kind) so no two threads ever share a target file
+    jobs: dict[tuple[str, str], object] = {}
     for m in post["media"]:
-        if not m.get("url"):
+        if m.get("url"):
+            jobs[(m["url"], "img")] = None
+        else:
             m["local_path"] = None
-            continue
-        local = store.download(brand_key, m["url"], kind="img", referer=referer)
-        m["local_path"] = str(local) if local else None
-    if post.get("author_avatar"):
-        local = store.download(brand_key, post["author_avatar"], kind="avatar",
-                               referer=referer)
-        post["author_avatar_path"] = str(local) if local else None
-    else:
-        post["author_avatar_path"] = None
+    avatar = post.get("author_avatar")
+    if avatar:
+        jobs[(avatar, "avatar")] = None
+    if jobs:
+        with ThreadPoolExecutor(max_workers=min(8, len(jobs))) as ex:
+            futs = {key: ex.submit(store.download, brand_key, key[0],
+                                   kind=key[1], referer=referer)
+                    for key in jobs}
+            for key, fut in futs.items():
+                jobs[key] = fut.result()
+    for m in post["media"]:
+        if m.get("url"):
+            local = jobs[(m["url"], "img")]
+            m["local_path"] = str(local) if local else None
+    got = jobs.get((avatar, "avatar")) if avatar else None
+    post["author_avatar_path"] = str(got) if got else None
 
 
 def _store_posts(engine, month: str, brand_key: str, posts: list[dict],

@@ -82,7 +82,10 @@ class MediaStore:
         if referer:
             headers["Referer"] = referer
         try:
-            with httpx.Client(follow_redirects=True, timeout=timeout) as client:
+            # tight connect timeout: CDNs that blackhole datacenter IPs must
+            # fail in seconds, not stall a whole ingest page for minutes
+            with httpx.Client(follow_redirects=True,
+                              timeout=httpx.Timeout(timeout, connect=10.0)) as client:
                 r = client.get(url, headers=headers)
                 r.raise_for_status()
                 ct = r.headers.get("content-type", "").split(";")[0].strip()

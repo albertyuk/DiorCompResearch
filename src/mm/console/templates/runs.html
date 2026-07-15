@@ -65,9 +65,19 @@ async function poll() {
       const r = await fetch(`/api/runs/${m}/status`);
       const j = await r.json();
       const t = Object.entries(j.tasks || {})
-        .map(([k, v]) => `${k.split(':')[1]}: ${v.state}`).join('  ·  ');
-      document.getElementById(`task-${m}`).textContent =
-        t ? `background — ${t} · posts ${j.posts} · projects ${j.projects}` : '';
+        .map(([k, v]) => {
+          const label = `${k.split(':')[1]}: ${v.state}`;
+          if (v.state === 'running' && v.detail) return `${label} — ${v.detail}`;
+          if (v.state === 'error') return `${label} — ${(v.detail || '').slice(0, 200)}`;
+          return label;
+        }).join('  ·  ');
+      let line = t ? `background — ${t} · posts ${j.posts} · projects ${j.projects}` : '';
+      if ((j.stalled || []).length) {
+        line = `⚠ ${j.stalled.join(' + ')} was interrupted (server restart) — ` +
+               `press Start month (or re-confirm the last checkpoint) to resume; ` +
+               `everything already fetched and every paid LLM verdict is kept. ` + line;
+      }
+      document.getElementById(`task-${m}`).textContent = line;
     } catch (e) {}
   }
 }

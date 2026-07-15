@@ -153,6 +153,15 @@ below were mine; each is easy to revisit.
     only written for changes that actually landed; hosted phase threads are
     non-daemon so fly.toml's kill_timeout actually buys checkpoint time.
 
+42. **Long phases must be observably alive**: ingest/filter/crosscheck/enrich
+    stream their live position (brand · page · counts) into the Runs page
+    poller line; per-brand phase failures are written into the phase status
+    itself (visible in the pills) instead of a buried result dict; and a phase
+    left at "running" by a mid-run process restart is flagged as interrupted
+    with a resume hint (re-running is always safe — every phase is idempotent).
+    A post's media files download concurrently (deduped per post, 10s connect
+    timeout) since downloads dominate ingest wall-clock.
+
 ## Testing
 
 25. The ~15 caption fixtures test the deterministic layers (@-tag extraction,

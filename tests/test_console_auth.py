@@ -239,6 +239,24 @@ def test_decision_upserts_when_verdict_missing(authed_app, tmp_db):
     assert ghost is None
 
 
+def test_status_reports_interrupted_phase(authed_app, tmp_db):
+    # phase says "running" but the process restarted (no live task in TASKS)
+    with tmp_db.get_engine().begin() as conn:
+        tmp_db.set_phase(conn, "2026-06", "ingest", "running")
+    c = _login(TestClient(authed_app()), "Albert")
+    j = c.get("/api/runs/2026-06/status").json()
+    assert j["stalled"] == ["ingest"]
+    # a genuinely running task is NOT flagged
+    from mm import console as mconsole
+    mconsole.TASKS["2026-06:ingest_filter"] = {"state": "running", "detail": ""}
+    try:
+        j = c.get("/api/runs/2026-06/status").json()
+        assert j["stalled"] == []
+        assert j["tasks"]["2026-06:ingest_filter"]["state"] == "running"
+    finally:
+        del mconsole.TASKS["2026-06:ingest_filter"]
+
+
 def test_hosted_account_overrides_overlay(tmp_path, monkeypatch):
     import mm.config as mconfig
     monkeypatch.setattr(mconfig, "IS_HOSTED", True)

@@ -56,15 +56,29 @@ def _spawn(month: str, name: str, fn, *args, **kwargs):
     return True
 
 
+def _task_note(month: str, name: str):
+    """Progress callback: streams a phase's live position into TASKS so the
+    Runs page poller can show it (single writer thread; readers tolerate lag)."""
+    key = f"{month}:{name}"
+
+    def note(msg: str):
+        t = TASKS.get(key)
+        if t is not None:
+            t["detail"] = msg
+    return note
+
+
 def _ingest_and_filter(month):
-    r1 = pipeline.run_ingest(month)
-    r2 = pipeline.run_filter(month)
+    note = _task_note(month, "ingest_filter")
+    r1 = pipeline.run_ingest(month, progress=note)
+    r2 = pipeline.run_filter(month, progress=note)
     return {"ingest": r1, "filter": r2}
 
 
 def _crosscheck_and_enrich(month):
-    r1 = pipeline.run_crosscheck(month)
-    r2 = pipeline.run_enrich(month)
+    note = _task_note(month, "crosscheck_enrich")
+    r1 = pipeline.run_crosscheck(month, progress=note)
+    r2 = pipeline.run_enrich(month, progress=note)
     return {"crosscheck": r1, "enrich": r2}
 
 
@@ -249,6 +263,15 @@ def create_app() -> FastAPI:
     def run_status(month: str):
         st = pipeline.status(month)
         st["tasks"] = {k: v for k, v in TASKS.items() if k.startswith(month)}
+        # a phase stuck at "running" with no live task means the process was
+        # restarted mid-run (TASKS is in-memory) — tell the user how to resume
+        task_for = {"ingest": "ingest_filter", "filter": "ingest_filter",
+                    "crosscheck": "crosscheck_enrich",
+                    "enrich": "crosscheck_enrich", "render": "render"}
+        live = {k.split(":", 1)[1] for k, v in TASKS.items()
+                if k.startswith(f"{month}:") and v.get("state") == "running"}
+        st["stalled"] = [ph for ph, s in st["phases"].items()
+                         if s == "running" and task_for.get(ph) not in live]
         return st
 
     @app.post("/review/{month}/posts/{post_id}/decision")
