@@ -1,0 +1,81 @@
+# Maison Monitor — brand account config (starter)
+# status: verified = confirmed via public sources 2026-07-15 (re-verify on first run)
+#         resolve  = resolve internal ID via TikHub lookup at first run (Phase R),
+#                    user confirms the match in the Console, then freeze the ID here.
+# Deliberately excluded: beauty sub-accounts (fragrance content stays IN per Decision Record).
+labels:
+  douyin_display: "DOUYIN"
+  social_order: ["WEIBO", "RED", "WECHAT", "DOUYIN"]
+  month_format: "FULL"
+  timezone: "Asia/Shanghai"
+filters:
+  exclude_makeup_skincare: true
+  exclude_fragrance: false
+brands:
+  - key: chanel
+    display_name: "CHANEL"
+    order: 1
+    weibo:
+      status: verified
+      screen_name: "香奈儿CHANEL"
+      uid: "1892475055"
+      vanity_url: "https://weibo.com/chanel"
+      note: >
+        SINGLE flagship account mixing fashion AND beauty (香奈儿美妆 posts on the same
+        account). Account-level beauty exclusion is impossible for Chanel — the Phase 2
+        LLM cosmetics filter carries the full load. Expect the highest drop rate here.
+    douyin:   { status: resolve, lookup_query: "CHANEL 香奈儿" }
+    xhs:      { status: resolve, lookup_query: "CHANEL" }
+    wechat_mp: { status: resolve, lookup_query: "CHANEL" }
+    wechat_channels: { status: resolve, lookup_query: "CHANEL", note: "confirm ID in WeChat app; not web-discoverable" }
+  - key: lv
+    display_name: "LOUIS VUITTON"
+    order: 2
+    weibo:
+      status: verified
+      screen_name: "路易威登"
+      uid: "1836003984"
+      vanity_url: "https://weibo.com/louisvuitton"
+      note: "Verified 'Louis Vuitton官方微博', ~11.0M followers. Fragrance posts (e.g. The Scent of Color) appear here and are IN scope."
+    douyin:   { status: resolve, lookup_query: "路易威登 Louis Vuitton" }
+    xhs:      { status: resolve, lookup_query: "Louis Vuitton 路易威登" }
+    wechat_mp: { status: resolve, lookup_query: "路易威登" }
+    wechat_channels: { status: resolve, lookup_query: "路易威登", note: "confirm in-app" }
+  - key: tiffany
+    display_name: "TIFFANY & CO."
+    order: 3
+    weibo:
+      status: verified            # vanity confirmed; UID resolves at first run
+      screen_name: "TiffanyAndCo蒂芙尼"
+      uid: null
+      vanity_url: "https://weibo.com/tiffanyandco"
+    douyin:   { status: resolve, lookup_query: "Tiffany 蒂芙尼" }
+    xhs:      { status: resolve, lookup_query: "Tiffany 蒂芙尼" }
+    wechat_mp: { status: resolve, lookup_query: "Tiffany蒂芙尼" }
+    wechat_channels: { status: resolve, lookup_query: "蒂芙尼", note: "confirm in-app" }
+  - key: gucci
+    display_name: "GUCCI"
+    order: 4
+    weibo:
+      status: verified            # vanity + screen name confirmed; UID resolves at first run
+      screen_name: "GUCCI"
+      uid: null
+      vanity_url: "https://weibo.com/gucci"
+      note: "Exclude GUCCI Beauty if it surfaces as a separate account during resolution."
+    douyin:   { status: resolve, lookup_query: "GUCCI 古驰" }
+    xhs:      { status: resolve, lookup_query: "GUCCI" }
+    wechat_mp: { status: resolve, lookup_query: "GUCCI" }
+    wechat_channels: { status: resolve, lookup_query: "GUCCI", note: "confirm in-app" }
+  - key: fendi
+    display_name: "FENDI"
+    order: 5
+    weibo:
+      status: resolve             # screen name almost certainly "FENDI"; verify at first run
+      screen_name: "FENDI"
+      uid: null
+      vanity_url: null
+      lookup_query: "FENDI 芬迪"
+    douyin:   { status: resolve, lookup_query: "FENDI 芬迪" }
+    xhs:      { status: resolve, lookup_query: "FENDI" }
+    wechat_mp: { status: resolve, lookup_query: "FENDI" }
+    wechat_channels: { status: resolve, lookup_query: "FENDI", note: "confirm in-app" }

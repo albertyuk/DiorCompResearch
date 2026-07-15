@@ -1,0 +1,17 @@
+# Secrets — never commit
+.env
+
+# Runtime data & outputs
+data/
+output/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# OS
+.DS_Store
