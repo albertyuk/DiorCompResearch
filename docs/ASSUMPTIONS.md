@@ -180,6 +180,24 @@ below were mine; each is easy to revisit.
     an "in progress" banner — the lists they display are the last completed
     state — and auto-refresh when the run pauses.
 
+44. **Archive & reset is the fresh-start mechanism.** Re-running a month
+    deliberately *adds to* its dataset (idempotent upserts; human decisions
+    persist) — that's what makes stop/resume safe. When a truly clean search
+    is wanted (bad early runs, changed accounts), the Runs page's
+    **Archive & reset** snapshots every row for the month (posts, verdicts,
+    projects, matches, orphans) into `archives`/`archive_rows` as JSON —
+    schema-proof, zero impact on live queries — deletes them from the live
+    tables in one transaction, and resets the month's phases. Archives are
+    listed under the month with counts/actor/time. Media files stay on disk
+    and are reused by URL hash, so a re-search costs no re-downloads.
+    Restore is deliberately manual (the rows sit in the DB as JSON).
+
+45. **Brand ingest runs in parallel** (one worker per brand): TikHub calls
+    and media downloads are I/O-bound, page batches commit in short WAL
+    transactions, per-brand failures stay isolated, and the progress line
+    shows a combined per-brand state. Pages within a brand remain sequential
+    (cursor pagination is inherently serial).
+
 ## Testing
 
 25. The ~15 caption fixtures test the deterministic layers (@-tag extraction,

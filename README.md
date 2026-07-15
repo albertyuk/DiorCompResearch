@@ -37,7 +37,11 @@ uv run mm console                    # opens http://127.0.0.1:8377
 
 A full month is drivable entirely from the browser: **Start month** → confirm
 accounts (first run only) → review posts → confirm → edit projects → render →
-download the deck from the **Decks** tab.
+download the deck from the **Decks** tab. The Runs page shows a live RUNNING/
+idle indicator, a per-step activity log, and a **Stop** button (pauses at the
+next safe point; Start month resumes). Re-running a month adds to it —
+decisions persist; **Archive & reset** moves the whole month into the archive
+and the next Start searches from scratch. Brands ingest in parallel.
 
 Equivalent CLI: `uv run mm run --month 2026-07` (pauses at the two review
 checkpoints with the Console URL). Also: `mm resolve`, `mm ingest`,

@@ -120,6 +120,27 @@ audit_log = Table(
     Column("at", String, nullable=False),
 )
 
+# A month's "search" can be archived: rows are snapshotted as JSON (schema-
+# proof, zero impact on live queries) and removed from the live tables so the
+# next Start month repopulates from scratch. Media files stay on disk — a
+# fresh ingest reuses them by URL hash for free.
+archives = Table(
+    "archives", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("month", String, nullable=False),
+    Column("archived_at", String, nullable=False),
+    Column("archived_by", String, nullable=False),
+    Column("summary", Text, nullable=False, default="{}"),   # JSON {tbl: count}
+)
+
+archive_rows = Table(
+    "archive_rows", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("archive_id", Integer, ForeignKey("archives.id"), nullable=False),
+    Column("tbl", String, nullable=False),
+    Column("row", Text, nullable=False),                     # full row as JSON
+)
+
 api_calls = Table(
     "api_calls", metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
@@ -252,6 +273,60 @@ def last_audit(conn, action: str, entity_type: str | None = None,
         q = q.where(audit_log.c.entity_id == str(entity_id))
     row = conn.execute(q.order_by(audit_log.c.id.desc()).limit(1)).mappings().first()
     return dict(row) if row else None
+
+
+def archive_month(engine: Engine, month: str, actor: str) -> dict:
+    """Snapshot a month's search into the archive store and clear the live
+    tables, so the next Start month repopulates from scratch. One transaction:
+    either the whole month moves or nothing does. Returns {tbl: count}."""
+    with engine.begin() as conn:
+        post_ids = [r[0] for r in conn.execute(
+            select(posts.c.post_id).where(posts.c.month == month))]
+        project_ids = [r[0] for r in conn.execute(
+            select(projects.c.id).where(projects.c.month == month))]
+        collected = {
+            "posts": select(posts).where(posts.c.month == month),
+            "verdicts": select(verdicts).where(verdicts.c.post_id.in_(post_ids)),
+            "projects": select(projects).where(projects.c.month == month),
+            "project_posts": select(project_posts)
+                .where(project_posts.c.project_id.in_(project_ids)),
+            "platform_matches": select(platform_matches)
+                .where(platform_matches.c.project_id.in_(project_ids)),
+            "orphans": select(orphans).where(orphans.c.month == month),
+        }
+        rows_by_tbl = {tbl: [dict(r) for r in conn.execute(q).mappings()]
+                       for tbl, q in collected.items()}
+        summary = {tbl: len(rows) for tbl, rows in rows_by_tbl.items()}
+        if not any(summary.values()):
+            return summary
+        archive_id = conn.execute(archives.insert().values(
+            month=month, archived_at=now_iso(), archived_by=actor or "unknown",
+            summary=json.dumps(summary))).inserted_primary_key[0]
+        conn.execute(archive_rows.insert(), [
+            {"archive_id": archive_id, "tbl": tbl,
+             "row": json.dumps(row, ensure_ascii=False, default=str)}
+            for tbl, rows in rows_by_tbl.items() for row in rows])
+        # delete children before parents (FKs)
+        conn.execute(platform_matches.delete()
+                     .where(platform_matches.c.project_id.in_(project_ids)))
+        conn.execute(project_posts.delete()
+                     .where(project_posts.c.project_id.in_(project_ids)))
+        conn.execute(orphans.delete().where(orphans.c.month == month))
+        conn.execute(verdicts.delete().where(verdicts.c.post_id.in_(post_ids)))
+        conn.execute(projects.delete().where(projects.c.month == month))
+        conn.execute(posts.delete().where(posts.c.month == month))
+        conn.execute(runs.update().where(runs.c.month == month)
+                     .values(phase_status="{}", updated_at=now_iso()))
+        audit(conn, actor, "archive_month", "month", month)
+    return summary
+
+
+def list_archives(conn, month: str | None = None) -> list[dict]:
+    q = select(archives)
+    if month:
+        q = q.where(archives.c.month == month)
+    return [{**dict(r), "counts": json.loads(r["summary"] or "{}")}
+            for r in conn.execute(q.order_by(archives.c.id.desc())).mappings()]
 
 
 def cost_summary(conn, month: str | None = None) -> dict:

@@ -37,37 +37,54 @@ def _set_phase(engine, month: str, phase: str, status: str) -> None:
 
 def run_ingest(month: str, brand_keys: list[str] | None = None,
                progress=None, should_stop=None) -> dict:
+    """All brands ingest in parallel (one worker each): TikHub calls and
+    media downloads are I/O-bound, page batches commit in short WAL
+    transactions, and one brand failing never touches the others."""
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
     cfg = BrandsConfig.load()
     settings = Settings.load()
     client = TikHubClient(settings)
     engine = db.get_engine()
     results = {}
-    stopped = False
     _set_phase(engine, month, "ingest", "running")
 
-    def page_note(bk, page, n):
-        if progress:
-            progress(f"ingest {bk} · page {page} · {n} posts in window")
+    brand_state: dict[str, str] = {}
+    note_lock = threading.Lock()
 
+    def page_note(bk, page, n):
+        if not progress:
+            return
+        with note_lock:
+            brand_state[bk] = f"p{page}·{n} in window"
+            line = "  ".join(f"{k} {v}" for k, v in brand_state.items())
+        progress(f"ingest · {line}")
+
+    def one(brand):
+        if should_stop and should_stop():
+            return brand.key, None
+        if progress:
+            with note_lock:
+                brand_state[brand.key] = "fetching…"
+        try:
+            return brand.key, ingest.ingest_weibo(
+                engine, client, cfg, month, brand.key, progress=page_note,
+                should_stop=should_stop)
+        except Exception as e:
+            return brand.key, {"error": str(e)}
+
+    wanted = [b for b in cfg.brands
+              if not brand_keys or b.key in brand_keys]
     try:
-        for brand in cfg.brands:
-            if brand_keys and brand.key not in brand_keys:
-                continue
-            if should_stop and should_stop():
-                stopped = True
-                break
-            if progress:
-                progress(f"ingest {brand.key} · fetching…")
-            try:
-                results[brand.key] = ingest.ingest_weibo(
-                    engine, client, cfg, month, brand.key, progress=page_note,
-                    should_stop=should_stop)
-            except Exception as e:
-                results[brand.key] = {"error": str(e)}
+        with ThreadPoolExecutor(max_workers=max(1, len(wanted))) as ex:
+            for key, res in ex.map(one, wanted):
+                if res is not None:
+                    results[key] = res
     finally:
         client.close()
     errs = {k: r["error"] for k, r in results.items() if "error" in r}
-    if stopped or (should_stop and should_stop()):
+    if should_stop and should_stop():
         _set_phase(engine, month, "ingest", "stopped — Start month resumes")
     elif errs:
         # the failure reason must be visible in the UI, not buried in a dict

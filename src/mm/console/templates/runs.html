@@ -56,10 +56,19 @@ is a one-time step — commit that file and teammates never see it.</p>
           onsubmit="return confirm('Pause the {{ m.month }} run at its next safe point?')">
       <button type="submit">Stop</button>
     </form>
+    <form method="post" action="/runs/{{ m.month }}/archive" class="inline"
+          id="archive-{{ m.month }}"
+          onsubmit="return confirm('Archive {{ m.month }}? All posts, decisions and projects move to the archive (kept in the database, listed below) and the next Start month searches completely from scratch.')">
+      <button type="submit" class="ghost">Archive &amp; reset</button>
+    </form>
   </div>
   {% if m.started_by %}
   <div class="micro">last started {{ m.started_by.at[:16] }} by {{ m.started_by.actor_name }}</div>
   {% endif %}
+  {% for a in m.archives %}
+  <div class="micro">⌸ archive #{{ a.id }} · {{ a.archived_at[:16] }} by {{ a.archived_by }}
+    · {{ a.counts.get('posts', 0) }} posts · {{ a.counts.get('projects', 0) }} projects</div>
+  {% endfor %}
   <div class="micro" id="task-{{ m.month }}"></div>
   <details id="actwrap-{{ m.month }}" style="margin-top:6px">
     <summary class="micro" style="cursor:pointer">activity log</summary>
@@ -109,6 +118,7 @@ async function poll() {
         ind.className = 'pill live-ind';
       }
       document.getElementById(`stop-${m}`).style.display = running ? '' : 'none';
+      document.getElementById(`archive-${m}`).style.display = running ? 'none' : '';
 
       // activity feed (auto-open while running)
       const act = document.getElementById(`act-${m}`);

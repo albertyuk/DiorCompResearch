@@ -369,6 +369,95 @@ def test_start_month_audits_actor(authed_app, tmp_db, monkeypatch):
     assert row and row["actor_name"] == "Albert" and row["entity_id"] == "2026-04"
 
 
+def test_archive_month_moves_everything_and_resets(tmp_db):
+    _seed_post(tmp_db, post_id="weibo:A1")
+    with tmp_db.get_engine().begin() as conn:
+        tmp_db.set_phase(conn, "2026-06", "ingest", "done")
+        pid = conn.execute(tmp_db.projects.insert().values(
+            month="2026-06", brand="lv", title="T", status="draft",
+            celebs="[]", hero_media="[]")).inserted_primary_key[0]
+        conn.execute(tmp_db.project_posts.insert().values(
+            project_id=pid, post_id="weibo:A1"))
+        conn.execute(tmp_db.platform_matches.insert().values(
+            project_id=pid, platform="xhs", present=True))
+        conn.execute(tmp_db.orphans.insert().values(
+            post_id="weibo:A1", month="2026-06"))
+    summary = tmp_db.archive_month(tmp_db.get_engine(), "2026-06", "Albert")
+    assert summary == {"posts": 1, "verdicts": 1, "projects": 1,
+                       "project_posts": 1, "platform_matches": 1, "orphans": 1}
+    with tmp_db.get_engine().connect() as conn:
+        for tbl in (tmp_db.posts, tmp_db.verdicts, tmp_db.projects,
+                    tmp_db.project_posts, tmp_db.platform_matches,
+                    tmp_db.orphans):
+            assert conn.execute(select(tbl)).first() is None, tbl.name
+        arch = tmp_db.list_archives(conn, "2026-06")
+        assert len(arch) == 1 and arch[0]["counts"]["posts"] == 1
+        rows = conn.execute(select(tmp_db.archive_rows)).mappings().all()
+        assert len(rows) == 6
+        assert tmp_db.get_run(conn, "2026-06")["phases"] == {}   # fresh start
+    # the same post can be re-ingested afterwards (no PK collision)…
+    _seed_post(tmp_db, post_id="weibo:A1")
+    tmp_db.archive_month(tmp_db.get_engine(), "2026-06", "Albert")
+    # …and archiving an empty month is a no-op that creates no archive row
+    assert not any(tmp_db.archive_month(
+        tmp_db.get_engine(), "2026-06", "Albert").values())
+    with tmp_db.get_engine().connect() as conn:
+        assert len(tmp_db.list_archives(conn, "2026-06")) == 2
+
+
+def test_archive_route_guards_running_month(authed_app, tmp_db):
+    from mm import console as mconsole
+    _seed_post(tmp_db, post_id="weibo:AR1", month="2026-03")
+    c = _login(TestClient(authed_app()), "Albert")
+    # busy month refuses
+    mconsole.TASKS["2026-03:ingest_filter"] = {"state": "running", "detail": ""}
+    try:
+        r = c.post("/runs/2026-03/archive", follow_redirects=False)
+        assert "Stop%20first" in r.headers["location"]
+        with tmp_db.get_engine().connect() as conn:
+            assert conn.execute(select(tmp_db.posts)).first() is not None
+    finally:
+        del mconsole.TASKS["2026-03:ingest_filter"]
+    # idle month archives + audits
+    r = c.post("/runs/2026-03/archive", follow_redirects=False)
+    assert r.status_code == 303 and "Archived%201%20posts" in r.headers["location"]
+    with tmp_db.get_engine().connect() as conn:
+        assert conn.execute(select(tmp_db.posts)).first() is None
+        row = tmp_db.last_audit(conn, "archive_month", "month", "2026-03")
+    assert row and row["actor_name"] == "Albert"
+
+
+def test_run_ingest_is_parallel_across_brands(tmp_db, monkeypatch):
+    import threading
+    from mm import ingest as ingest_mod, pipeline
+
+    barrier = threading.Barrier(5, timeout=8)   # all 5 brands in flight at once
+
+    def fake_ingest(engine, client, cfg, month, brand_key, *,
+                    progress=None, should_stop=None, **kw):
+        barrier.wait()                           # sequential execution deadlocks
+        if progress:
+            progress(brand_key, 1, 2)
+        return {"brand": brand_key, "posts": 2, "skipped_reposts": 0}
+
+    class DummyClient:
+        def __init__(self, *a, **k): pass
+        def close(self): pass
+
+    monkeypatch.setattr(ingest_mod, "ingest_weibo", fake_ingest)
+    monkeypatch.setattr(pipeline, "TikHubClient", DummyClient)
+    monkeypatch.setattr(pipeline, "Settings",
+                        type("S", (), {"load": staticmethod(lambda: None)}))
+    notes = []
+    res = pipeline.run_ingest("2026-06", progress=notes.append)
+    assert set(res) == {"chanel", "lv", "tiffany", "gucci", "fendi"}
+    assert all(r["posts"] == 2 for r in res.values())
+    with tmp_db.get_engine().connect() as conn:
+        assert tmp_db.get_run(conn, "2026-06")["phases"]["ingest"] == "done"
+    # combined progress line mentions brands with their page state
+    assert any("p1·2 in window" in n for n in notes)
+
+
 def test_hosted_account_overrides_overlay(tmp_path, monkeypatch):
     import mm.config as mconfig
     monkeypatch.setattr(mconfig, "IS_HOSTED", True)

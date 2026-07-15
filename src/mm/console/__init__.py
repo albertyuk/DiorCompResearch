@@ -191,7 +191,8 @@ def create_app() -> FastAPI:
                 months.append({**dict(row), "phases": json.loads(row["phase_status"] or "{}"),
                                "cost": db.cost_summary(conn, row["month"]),
                                "started_by": db.last_audit(conn, "start_month",
-                                                           "month", row["month"])})
+                                                           "month", row["month"]),
+                               "archives": db.list_archives(conn, row["month"])})
         return TEMPLATES.TemplateResponse(request, "runs.html", {
             "months": months, "default_month": previous_month(),
             "unresolved": unresolved_accounts(cfg), "msg": msg, "tasks": TASKS})
@@ -317,6 +318,27 @@ def create_app() -> FastAPI:
                    "resumes it; nothing already fetched or decided is lost.")
         else:
             msg = f"Nothing is running for {month}."
+        return RedirectResponse(f"/?msg={quote(msg)}", status_code=303)
+
+    @app.post("/runs/{month}/archive")
+    def archive_run(request: Request, month: str):
+        from urllib.parse import quote
+        busy = any(k.startswith(f"{month}:") and v.get("state") == "running"
+                   for k, v in TASKS.items())
+        if busy:
+            msg = (f"A run is working on {month} — press Stop first, "
+                   f"then archive.")
+        else:
+            summary = db.archive_month(db.get_engine(), month, _actor(request))
+            if any(summary.values()):
+                _log_activity(month, f"archived by {_actor(request)} "
+                                     f"({summary['posts']} posts, "
+                                     f"{summary['projects']} projects)")
+                msg = (f"Archived {summary['posts']} posts and "
+                       f"{summary['projects']} projects for {month}. "
+                       f"Start month now runs a completely fresh search.")
+            else:
+                msg = f"Nothing to archive for {month}."
         return RedirectResponse(f"/?msg={quote(msg)}", status_code=303)
 
     @app.get("/api/runs/{month}/status")
