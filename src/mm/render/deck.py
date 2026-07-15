@@ -105,10 +105,19 @@ def _social_text(platforms: list[str]) -> str:
     return "/".join(v for k, v in order.items() if k in present)
 
 
+def _resolve_media(path: str) -> Path | None:
+    """Anchor relative visual paths at the repo root; None if missing."""
+    p = Path(path)
+    if not p.is_absolute():
+        from ..config import ROOT
+        p = ROOT / p
+    return p if p.is_file() else None
+
+
 def _img_aspect(path: str) -> float:
     with Image.open(path) as im:
         w, h = im.size
-    return w / h
+    return w / h if h else 1.0
 
 
 class DeckBuilder:
@@ -228,8 +237,15 @@ class DeckBuilder:
         slide.shapes.add_picture(str(path), Inches(x), Inches(max(1.9, first_y - 0.03)),
                                  Inches(w), Inches(h))
 
-    def _add_logo(self, slide, brand_key: str) -> None:
-        path = TEMPLATE_DIR / "logos" / LOGOS[brand_key]
+    def _add_logo(self, slide, brand_key: str, display_name: str = "") -> None:
+        filename = LOGOS.get(brand_key)
+        path = (TEMPLATE_DIR / "logos" / filename) if filename else None
+        if path is None or not path.is_file():
+            # unknown brand: render the display name as a wordmark-ish label
+            box = self._add_textbox(slide, LOGO_X, LOGO_Y, 4.0, LOGO_MAX_H)
+            p = box.text_frame.paragraphs[0]
+            self._run(p, display_name or brand_key.upper(), size=22, bold=True)
+            return
         if brand_key in LOGO_SIZES:
             w, h = LOGO_SIZES[brand_key]
         else:
@@ -242,10 +258,19 @@ class DeckBuilder:
 
     # -- table slide ----------------------------------------------------------
 
-    def add_table_slide(self, brand: BrandSpec):
+    # max body rows per table slide before splitting to a continuation slide
+    TABLE_MAX_ROWS = 7
+
+    def add_table_slides(self, brand: BrandSpec) -> list:
+        chunks = [brand.projects[i:i + self.TABLE_MAX_ROWS]
+                  for i in range(0, max(len(brand.projects), 1),
+                                 self.TABLE_MAX_ROWS)]
+        return [self._table_slide(brand, chunk) for chunk in chunks]
+
+    def _table_slide(self, brand: BrandSpec, projects: list[ProjectSpec]):
         slide = self._new_body_slide()
-        self._add_logo(slide, brand.key)
-        rows = len(brand.projects) + 1
+        self._add_logo(slide, brand.key, brand.display_name)
+        rows = len(projects) + 1
         gfx = slide.shapes.add_table(rows, 6, Inches(TABLE_X), Inches(TABLE_Y),
                                      Inches(TABLE_W), Inches(HEADER_ROW_H +
                                                              BODY_ROW_H * (rows - 1)))
@@ -269,7 +294,7 @@ class DeckBuilder:
         headers = ["DATE", "PROJECT", "ASSETS", "SOCIAL", "EC", "AD"]
         for c, text in enumerate(headers):
             self._fill_cell(table.cell(0, c), [(text, False, False)])
-        for ri, proj in enumerate(brand.projects, start=1):
+        for ri, proj in enumerate(projects, start=1):
             runs = [(t, False, sup) for t, sup in
                     date_runs(parse_iso(proj.date_start),
                               parse_iso(proj.date_end), proj.ongoing)]
@@ -297,9 +322,17 @@ class DeckBuilder:
     # -- project slides -------------------------------------------------------
 
     def add_project_slides(self, brand: BrandSpec, proj: ProjectSpec):
-        """One slide per ≤GRID_CAP visuals; overflow continues on extra slides."""
-        chunks = [proj.visuals[i:i + GRID_CAP]
-                  for i in range(0, max(len(proj.visuals), 1), GRID_CAP)]
+        """One slide per chunk of visuals; overflow continues on extra slides.
+        Photo slides hold up to GRID_CAP (14); video layouts hold up to 6."""
+        usable = []
+        for v in proj.visuals:            # drop visuals whose file is missing
+            resolved = _resolve_media(v.image)
+            if resolved is not None:
+                v.image = str(resolved)
+                usable.append(v)
+        cap = 6 if proj.assets == "VIDEO" else GRID_CAP
+        chunks = [usable[i:i + cap]
+                  for i in range(0, max(len(usable), 1), cap)]
         slides = []
         for chunk in chunks:
             slide = self._new_body_slide()
@@ -396,7 +429,7 @@ class DeckBuilder:
 
     def build(self, brands: list[BrandSpec], out_path: Path) -> Path:
         for brand in brands:
-            self.add_table_slide(brand)
+            self.add_table_slides(brand)
             for proj in brand.projects:
                 self.add_project_slides(brand, proj)
         out_path.parent.mkdir(parents=True, exist_ok=True)

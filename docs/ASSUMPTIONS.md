@@ -88,6 +88,25 @@ below were mine; each is easy to revisit.
 24. **EN gloss** on the Posts tab is approximated by the filter verdict's
     English `reasons` rather than a separate translation call per post.
 
+## Post-review hardening (adversarial multi-agent review, 28 confirmed findings fixed)
+
+26. **SQLite runs in WAL mode with a 60s busy timeout**, and no phase holds a
+    write transaction across network work: ingest/pulls commit per page,
+    filter commits per post, enrichment writes in one short transaction at
+    the end. A crash never loses paid LLM work.
+27. **Brand table slides split after 7 project rows** (continuation table
+    slide) so the table can't run off the 7.5" canvas; VIDEO projects chunk
+    at 6 stills per slide (the video layouts' maximum).
+28. **A post pulled by two adjacent months' padded windows keeps its first
+    month assignment**; cross-check candidates are queried by date window,
+    not month.
+29. **Transient LLM failures during filtering record nothing** — the post
+    stays unfiltered, the phase reports `error: N posts failed`, and the next
+    run picks up only the missing posts.
+30. **Re-running enrich never regresses a confirmed review**: the checkpoint
+    only reopens when enrichment actually produced drafts, and confirmed/
+    rendered projects are never overwritten (dropped drafts are replaced).
+
 ## Testing
 
 25. The ~15 caption fixtures test the deterministic layers (@-tag extraction,

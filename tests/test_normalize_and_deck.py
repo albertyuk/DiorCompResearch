@@ -89,3 +89,43 @@ def test_grid_overflow_creates_continuation(tmp_path):
     slides = b.add_project_slides(fendi, baguette)
     assert len(slides) == 2
     assert len(baguette.visuals) == 2 * GRID_CAP
+
+
+def test_short_commentary_repost_is_ambiguous_not_dropped():
+    p = normalize.normalize_weibo(
+        _mblog(text_raw="好看！", retweeted_status={"id": 1}), "1")
+    assert not p["is_repost"] and p["repost_ambiguous"]
+
+
+def test_video_project_chunks_by_six():
+    spec = json.loads((ROOT / "fixtures/projects.json").read_text())
+    brands = load_spec(spec)
+    chanel = next(b for b in brands if b.key == "chanel")
+    video = chanel.projects[0]
+    assert video.assets == "VIDEO"
+    video.visuals = video.visuals * 7   # 14 stills → 3 slides of ≤6
+    b = DeckBuilder(ROOT / "template/reference.pptx")
+    slides = b.add_project_slides(chanel, video)
+    assert len(slides) == 3
+
+
+def test_missing_visual_file_skipped_not_fatal(tmp_path):
+    spec = json.loads((ROOT / "fixtures/projects.json").read_text())
+    brands = load_spec(spec)
+    gucci = next(b for b in brands if b.key == "gucci")
+    gucci.projects[0].visuals[0].image = "fixtures/media/DOES_NOT_EXIST.jpg"
+    out = DeckBuilder(ROOT / "template/reference.pptx").build(
+        [gucci], tmp_path / "g.pptx")
+    assert out.exists()
+
+
+def test_table_splits_after_seven_projects(tmp_path):
+    spec = json.loads((ROOT / "fixtures/projects.json").read_text())
+    brands = load_spec(spec)
+    fendi = next(b for b in brands if b.key == "fendi")
+    fendi.projects = fendi.projects * 5      # 10 projects → 2 table slides
+    for p in fendi.projects:
+        p.visuals = []
+    b = DeckBuilder(ROOT / "template/reference.pptx")
+    slides = b.add_table_slides(fendi)
+    assert len(slides) == 2

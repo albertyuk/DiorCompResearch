@@ -190,19 +190,18 @@ def smoke(brand: str = "lv", days: int = 7,
     if missing:
         typer.echo(f"⚠ endpoints missing from live spec: {missing}")
     engine = db.get_engine()
-    with engine.begin() as conn:
-        result = ingest_weibo(conn, client, cfg, month, brand, max_pages=3)
-        typer.echo(f"ingest: {result}")
-        llm = LLM(settings)
-        # limit the filter to a handful of posts for the smoke
-        from sqlalchemy import select
+    result = ingest_weibo(engine, client, cfg, month, brand, max_pages=3)
+    typer.echo(f"ingest: {result}")
+    llm = LLM(settings)
+    from sqlalchemy import select
+    with engine.connect() as conn:
         rows = list(conn.execute(
             select(db.posts.c.post_id).where(db.posts.c.month == month,
                                              db.posts.c.brand == brand)
             .limit(1000)).scalars())
-        typer.echo(f"posts in db for {brand}/{month}: {len(rows)}")
-        stats = filtering.filter_month(conn, llm, cfg, month, brand)
-        typer.echo(f"filter: {stats}")
+    typer.echo(f"posts in db for {brand}/{month}: {len(rows)}")
+    stats = filtering.filter_month(engine, llm, cfg, month, brand)
+    typer.echo(f"filter: {stats}")
     client.close()
     costs(month)
 

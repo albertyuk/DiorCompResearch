@@ -38,8 +38,13 @@ def norm_name_cn(raw: str) -> str:
 
 
 def registry_get(conn, name_cn: str) -> dict | None:
-    row = conn.execute(select(db.celeb_registry)
-                       .where(db.celeb_registry.c.name_cn == name_cn)).mappings().first()
+    from sqlalchemy.engine import Engine
+    stmt = select(db.celeb_registry).where(db.celeb_registry.c.name_cn == name_cn)
+    if isinstance(conn, Engine):
+        with conn.connect() as c:
+            row = c.execute(stmt).mappings().first()
+    else:
+        row = conn.execute(stmt).mappings().first()
     return dict(row) if row else None
 
 
@@ -61,7 +66,12 @@ def registry_update(conn, name_cn: str, *, name_en: str | None = None,
               "name_en": name_en or (row or {}).get("name_en"),
               "occupation": occupation or (row or {}).get("occupation"),
               "relations_json": json.dumps(relations, ensure_ascii=False)}
-    db.upsert(conn, db.celeb_registry, values, ["name_cn"])
+    from sqlalchemy.engine import Engine
+    if isinstance(conn, Engine):
+        with conn.begin() as c:
+            db.upsert(c, db.celeb_registry, values, ["name_cn"])
+    else:
+        db.upsert(conn, db.celeb_registry, values, ["name_cn"])
 
 
 def registry_export(conn) -> list[dict]:
@@ -218,43 +228,52 @@ def _hero_media(posts: list[dict], limit: int = 3) -> list[str]:
     return out
 
 
-def enrich_brand(conn, llm: LLM, cfg: BrandsConfig, month: str, brand_key: str,
+def enrich_brand(engine, llm: LLM, cfg: BrandsConfig, month: str, brand_key: str,
                  crosscheck_matches: dict | None = None) -> dict:
     brand = cfg.brand(brand_key)
-    posts = kept_posts(conn, month, brand_key)
+    with engine.connect() as conn:
+        posts = kept_posts(conn, month, brand_key)
+        existing_confirmed = conn.execute(select(db.projects).where(
+            db.projects.c.month == month, db.projects.c.brand == brand_key,
+            db.projects.c.status.in_(("confirmed", "rendered")))).mappings().first()
     if not posts:
         return {"projects": 0, "note": "no kept posts"}
-    existing_confirmed = conn.execute(select(db.projects).where(
-        db.projects.c.month == month, db.projects.c.brand == brand_key,
-        db.projects.c.status != "draft")).mappings().first()
     if existing_confirmed:
         return {"projects": -1, "note": "confirmed projects exist; not overwriting"}
 
-    celebs = extract_caption_relations(conn, llm, cfg, month, brand_key, posts)
+    # LLM-heavy work happens with no transaction open
+    celebs = extract_caption_relations(engine, llm, cfg, month, brand_key, posts)
 
     posts_json = [{"post_id": r["post_id"], "date": (r["created_at"] or "")[:10],
-                   "caption": (r["caption"] or "")[:500],
+                   "caption": (r["caption"] or "")[:300],
                    "celebs": json.loads(r["celebs_tagged"] or "[]")
                    if "celebs_tagged" in r else []}
                   for r in posts]
     clusters = llm.call_json("consolidate", {
         "brand_display": brand.display_name,
         "posts_json": posts_json,
-    }, conn=conn, brand=brand_key, month=month, max_tokens=4000)
+    }, conn=engine, brand=brand_key, month=month, max_tokens=8000)
 
-    # drop previous drafts (idempotent re-run)
-    old = conn.execute(select(db.projects.c.id).where(
-        db.projects.c.month == month, db.projects.c.brand == brand_key,
-        db.projects.c.status == "draft")).scalars().all()
-    if old:
-        conn.execute(delete(db.project_posts).where(db.project_posts.c.project_id.in_(old)))
-        conn.execute(delete(db.platform_matches).where(db.platform_matches.c.project_id.in_(old)))
-        conn.execute(delete(db.projects).where(db.projects.c.id.in_(old)))
+    # merge clusters that collapse onto the same (title, phase_suffix) after
+    # normalization — db.projects has a natural-key unique constraint
+    merged: dict[tuple, dict] = {}
+    for cluster in clusters.get("projects") or []:
+        title, suffix = naming.split_phase_suffix(cluster.get("title") or "PROJECT")
+        suffix = suffix or cluster.get("phase_suffix")
+        key = (title.upper(), (suffix or "").upper() or None)
+        if key in merged:
+            merged[key]["post_ids"] = list(dict.fromkeys(
+                (merged[key].get("post_ids") or []) + (cluster.get("post_ids") or [])))
+            merged[key]["ongoing"] = merged[key].get("ongoing") or cluster.get("ongoing")
+        else:
+            cluster = dict(cluster)
+            cluster["_title"], cluster["_suffix"] = title, suffix
+            merged[key] = cluster
 
     by_id = {r["post_id"]: r for r in posts}
     month_start, month_end = month_bounds(month)
-    n = 0
-    for cluster in clusters.get("projects") or []:
+    prepared = []
+    for cluster in merged.values():
         member_ids = [pid for pid in (cluster.get("post_ids") or []) if pid in by_id]
         if not member_ids:
             continue
@@ -296,8 +315,7 @@ def enrich_brand(conn, llm: LLM, cfg: BrandsConfig, month: str, brand_key: str,
         # union across matched platforms is refined by the human at checkpoint #2
         assets = naming.assets_label(has_photo or not has_video, has_video)
 
-        title, suffix = naming.split_phase_suffix(cluster.get("title") or "PROJECT")
-        suffix = suffix or cluster.get("phase_suffix")
+        title, suffix = cluster["_title"], cluster["_suffix"]
         try:
             desc = llm.call_json("describe", {
                 "brand_display": brand.display_name,
@@ -306,36 +324,59 @@ def enrich_brand(conn, llm: LLM, cfg: BrandsConfig, month: str, brand_key: str,
                 "celebs": [{ "name": c["display"], "relation": c["relation_display"]}
                            for c in proj_celebs],
                 "captions": "\n---\n".join((m["caption"] or "")[:300] for m in members[:5]),
-            }, conn=conn, brand=brand_key, month=month)
+            }, conn=engine, brand=brand_key, month=month)
             description = naming.format_title(desc.get("description") or title, None)
             if len(description) > 90:
                 description = naming.format_title(title, suffix)
         except Exception:
             description = naming.format_title(title, suffix)
 
-        res = conn.execute(db.projects.insert().values(
-            month=month, brand=brand_key, title=title.upper(),
-            phase_suffix=suffix, date_start=date_start.isoformat(),
-            date_end=date_end.isoformat(), ongoing=ongoing, assets=assets,
-            description=description,
-            celebs=json.dumps(proj_celebs, ensure_ascii=False),
-            hero_media=json.dumps(_hero_media(members), ensure_ascii=False),
-            status="draft"))
-        project_id = res.inserted_primary_key[0]
-        for pid in member_ids:
-            db.upsert(conn, db.project_posts,
-                      {"project_id": project_id, "post_id": pid, "role": "member"},
-                      ["project_id", "post_id"])
-        db.upsert(conn, db.platform_matches,
-                  {"project_id": project_id, "platform": "weibo", "present": True,
-                   "matched_url": members[0]["url"],
-                   "matched_date": members[0]["created_at"], "confidence": 1.0},
-                  ["project_id", "platform"])
-        for plat, hit in matches.items():
+        prepared.append({
+            "values": dict(
+                month=month, brand=brand_key, title=title.upper(),
+                phase_suffix=suffix, date_start=date_start.isoformat(),
+                date_end=date_end.isoformat(), ongoing=ongoing, assets=assets,
+                description=description,
+                celebs=json.dumps(proj_celebs, ensure_ascii=False),
+                hero_media=json.dumps(_hero_media(members), ensure_ascii=False),
+                status="draft"),
+            "member_ids": member_ids,
+            "first_member": members[0],
+            "matches": matches,
+        })
+
+    # single short write transaction: replace previous draft/dropped projects
+    # (confirmed ones were guarded against above) and insert the new set
+    with engine.begin() as conn:
+        old = conn.execute(select(db.projects.c.id).where(
+            db.projects.c.month == month, db.projects.c.brand == brand_key,
+            db.projects.c.status.in_(("draft", "dropped")))).scalars().all()
+        if old:
+            conn.execute(delete(db.project_posts)
+                         .where(db.project_posts.c.project_id.in_(old)))
+            conn.execute(delete(db.platform_matches)
+                         .where(db.platform_matches.c.project_id.in_(old)))
+            conn.execute(delete(db.projects).where(db.projects.c.id.in_(old)))
+        n = 0
+        for item in prepared:
+            res = conn.execute(db.projects.insert().values(**item["values"]))
+            project_id = res.inserted_primary_key[0]
+            for pid in item["member_ids"]:
+                db.upsert(conn, db.project_posts,
+                          {"project_id": project_id, "post_id": pid,
+                           "role": "member"}, ["project_id", "post_id"])
+            first = item["first_member"]
             db.upsert(conn, db.platform_matches,
-                      {"project_id": project_id, "platform": plat, "present": True,
-                       "matched_url": hit["url"], "matched_date": hit["date"],
-                       "confidence": hit["confidence"]},
+                      {"project_id": project_id, "platform": "weibo",
+                       "present": True, "matched_url": first["url"],
+                       "matched_date": first["created_at"], "confidence": 1.0},
                       ["project_id", "platform"])
-        n += 1
+            for plat, hit in item["matches"].items():
+                db.upsert(conn, db.platform_matches,
+                          {"project_id": project_id, "platform": plat,
+                           "present": True, "matched_url": hit["url"],
+                           "matched_date": hit["date"],
+                           "confidence": hit["confidence"]},
+                          ["project_id", "platform"])
+            n += 1
     return {"projects": n, "celebs": len(celebs)}

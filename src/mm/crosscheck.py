@@ -24,13 +24,21 @@ from .tikhub import TikHubClient
 MATCH_CONFIDENCE = 0.7
 WINDOW_DAYS = 5
 
-_WORD_RE = re.compile(r"[A-Za-z0-9]{3,}|[一-鿿]{2,}")
+_LATIN_RE = re.compile(r"[A-Za-z0-9]{3,}")
+_CJK_RE = re.compile(r"[一-鿿]{2,}")
 
 
 def _keywords(text: str) -> set[str]:
+    """Latin words plus CJK bigrams (whole CJK runs are punctuation-delimited
+    phrases and almost never match across platforms)."""
     stop = {"the", "and", "with", "for", "chanel", "gucci", "fendi", "tiffany",
-            "louis", "vuitton", "weibo", "video", "photo"}
-    return {w.lower() for w in _WORD_RE.findall(text or "") if w.lower() not in stop}
+            "louis", "vuitton", "weibo", "video", "photo", "品牌", "全新",
+            "系列", "查看", "点击", "官方"}
+    words = {w.lower() for w in _LATIN_RE.findall(text or "")}
+    for run in _CJK_RE.findall(text or ""):
+        for i in range(len(run) - 1):
+            words.add(run[i:i + 2])
+    return {w for w in words if w not in stop}
 
 
 def _celeb_names(verdict_row: dict) -> set[str]:
@@ -43,27 +51,36 @@ def _celeb_names(verdict_row: dict) -> set[str]:
     return names
 
 
-def pull_all(conn, client: TikHubClient, cfg: BrandsConfig, month: str,
+def pull_all(engine, client: TikHubClient, cfg: BrandsConfig, month: str,
              brand_key: str) -> dict:
     """Pull each cross-check platform once per run (cached by idempotent upserts)."""
     counts = {}
     for platform in ("douyin", "xhs", "wechat_mp", "wechat_channels"):
         try:
-            counts[platform] = pull_platform(conn, client, cfg, month,
+            counts[platform] = pull_platform(engine, client, cfg, month,
                                              brand_key, platform)
         except Exception as e:
             counts[platform] = f"error: {e}"
     return counts
 
 
-def crosscheck_brand(conn, llm: LLM, cfg: BrandsConfig, month: str,
+def crosscheck_brand(engine, llm: LLM, cfg: BrandsConfig, month: str,
                      brand_key: str) -> dict:
+    from datetime import timedelta
+    from .dates import month_bounds
     brand = cfg.brand(brand_key)
-    kept = kept_posts(conn, month, brand_key)
-    others = list(conn.execute(
-        select(db.posts).where(db.posts.c.month == month,
-                               db.posts.c.brand == brand_key,
-                               db.posts.c.platform != "weibo")).mappings())
+    start, end = month_bounds(month)
+    lo = (start - timedelta(days=WINDOW_DAYS)).isoformat()
+    hi = (end + timedelta(days=WINDOW_DAYS)).isoformat()
+    with engine.connect() as conn:
+        kept = kept_posts(conn, month, brand_key)
+        # candidates by date window, not month — padded pulls from adjacent
+        # months keep their first month assignment
+        others = list(conn.execute(
+            select(db.posts).where(db.posts.c.brand == brand_key,
+                                   db.posts.c.platform != "weibo",
+                                   db.posts.c.created_at >= lo,
+                                   db.posts.c.created_at < hi)).mappings())
     matched_other_ids: set[str] = set()
     results = {}
     for row in kept:
@@ -82,9 +99,9 @@ def crosscheck_brand(conn, llm: LLM, cfg: BrandsConfig, month: str,
             confidence, why = 0.0, ""
             if overlap_celeb:
                 confidence, why = 0.85, f"shared celeb: {sorted(overlap_celeb)[:2]}"
-            elif len(overlap_kw) >= 3:
+            elif len(overlap_kw) >= 6:
                 confidence, why = 0.75, f"shared keywords: {sorted(overlap_kw)[:4]}"
-            elif len(overlap_kw) == 2:
+            elif len(overlap_kw) >= 2:
                 try:
                     j = llm.call_json("match", {
                         "brand_display": brand.display_name,
@@ -95,7 +112,7 @@ def crosscheck_brand(conn, llm: LLM, cfg: BrandsConfig, month: str,
                         "candidate_platform": cand["platform"],
                         "candidate_date": cand["created_at"] or "",
                         "candidate_caption": (cand["caption"] or "")[:1500],
-                    }, conn=conn, brand=brand_key, month=month)
+                    }, conn=engine, brand=brand_key, month=month)
                     if j.get("same_event"):
                         confidence = float(j.get("confidence") or 0)
                         why = j.get("reason") or "llm match"
@@ -113,10 +130,13 @@ def crosscheck_brand(conn, llm: LLM, cfg: BrandsConfig, month: str,
 
     # orphans: pulled cross-platform posts matching no kept Weibo post
     n_orphans = 0
-    for cand in others:
-        if cand["post_id"] in matched_other_ids:
-            continue
-        db.upsert(conn, db.orphans, {"post_id": cand["post_id"], "month": month,
-                                     "resolution": "pending"}, ["post_id"])
-        n_orphans += 1
+    with engine.begin() as conn:
+        for cand in others:
+            if cand["post_id"] in matched_other_ids:
+                continue
+            db.upsert(conn, db.orphans,
+                      {"post_id": cand["post_id"], "month": month,
+                       "resolution": "pending"}, ["post_id"],
+                      no_update_cols=["month", "resolution"])
+            n_orphans += 1
     return {"matches": results, "orphans": n_orphans}

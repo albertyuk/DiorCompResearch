@@ -2,6 +2,10 @@
 
 Every fetched post: raw JSON archived on disk, normalized row upserted into
 `posts` (idempotent by post_id), media downloaded immediately (CDN URLs expire).
+
+Transaction discipline: network work (TikHub calls, media downloads) happens
+OUTSIDE any DB transaction; rows are committed in one short transaction per
+page, so a crash never loses more than a page and the console stays writable.
 """
 from __future__ import annotations
 
@@ -37,23 +41,31 @@ def _download_post_media(store: MediaStore, brand_key: str, post: dict,
         post["author_avatar_path"] = None
 
 
-def _store_post(conn, month: str, brand_key: str, post: dict, raw_path: str) -> None:
-    db.upsert(conn, db.posts, {
-        "post_id": post["post_id"], "month": month, "brand": brand_key,
-        "platform": post["platform"], "url": post["url"],
-        "created_at": post["created_at"], "caption": post["caption"],
-        "at_tags": json.dumps(post["at_tags"], ensure_ascii=False),
-        "hashtags": json.dumps(post["hashtags"], ensure_ascii=False),
-        "media": json.dumps(post["media"], ensure_ascii=False),
-        "is_repost": post["is_repost"],
-        "repost_ambiguous": post["repost_ambiguous"],
-        "author_name": post.get("author_name"),
-        "author_avatar_path": post.get("author_avatar_path"),
-        "raw_path": raw_path,
-    }, ["post_id"])
+def _store_posts(engine, month: str, brand_key: str, posts: list[dict],
+                 raw_path: str) -> None:
+    if not posts:
+        return
+    with engine.begin() as conn:
+        for post in posts:
+            db.upsert(conn, db.posts, {
+                "post_id": post["post_id"], "month": month, "brand": brand_key,
+                "platform": post["platform"], "url": post["url"],
+                "created_at": post["created_at"], "caption": post["caption"],
+                "at_tags": json.dumps(post["at_tags"], ensure_ascii=False),
+                "hashtags": json.dumps(post["hashtags"], ensure_ascii=False),
+                "media": json.dumps(post["media"], ensure_ascii=False),
+                "is_repost": post["is_repost"],
+                "repost_ambiguous": post["repost_ambiguous"],
+                "author_name": post.get("author_name"),
+                "author_avatar_path": post.get("author_avatar_path"),
+                "raw_path": raw_path,
+            }, ["post_id"],
+            # a post pulled by two adjacent months' padded windows keeps its
+            # first month assignment (cross-check queries go by date, not month)
+            no_update_cols=["month"])
 
 
-def resolve_weibo_uid(client: TikHubClient, brand: Brand, conn=None,
+def resolve_weibo_uid(client: TikHubClient, brand: Brand, engine=None,
                       month: str | None = None) -> str | None:
     """Fill in a missing Weibo uid from the vanity URL / screen name."""
     acct = brand.account("weibo")
@@ -64,13 +76,13 @@ def resolve_weibo_uid(client: TikHubClient, brand: Brand, conn=None,
     custom = None
     if acct.vanity_url:
         custom = acct.vanity_url.rstrip("/").rsplit("/", 1)[-1]
-    data = client.call("weibo_user_info", conn=conn, brand=brand.key, month=month,
+    data = client.call("weibo_user_info", conn=engine, brand=brand.key, month=month,
                        custom=custom, uid=None)
     uid = normalize.find_key(data, "idstr") or normalize.find_key(data, "id")
     return str(uid) if uid else None
 
 
-def ingest_weibo(conn, client: TikHubClient, cfg: BrandsConfig, month: str,
+def ingest_weibo(engine, client: TikHubClient, cfg: BrandsConfig, month: str,
                  brand_key: str, *, max_pages: int = 40,
                  progress=None) -> dict:
     """Page the official timeline for [month_start, month_end) CST."""
@@ -82,7 +94,7 @@ def ingest_weibo(conn, client: TikHubClient, cfg: BrandsConfig, month: str,
             f"(Phase R) first; refusing to ingest.")
     uid = acct.uid
     if not uid:
-        uid = resolve_weibo_uid(client, brand, conn, month)
+        uid = resolve_weibo_uid(client, brand, engine, month)
         if not uid:
             raise RuntimeError(f"{brand_key}: could not resolve weibo uid")
         cfg.save_account_resolution(brand.key, "weibo", uid, acct.screen_name,
@@ -90,50 +102,53 @@ def ingest_weibo(conn, client: TikHubClient, cfg: BrandsConfig, month: str,
     start, end = month_bounds(month)
     store = MediaStore(month)
     n_new, n_reposts, page, since_id = 0, 0, 1, None
-    done = False
-    while page <= max_pages and not done:
+    while page <= max_pages:
         # live-verified param shape: first page takes uid only; pagination is
         # since_id from the previous response (an explicit page=1 returns 400)
-        data = client.call("weibo_user_posts", conn=conn, brand=brand_key,
+        data = client.call("weibo_user_posts", conn=engine, brand=brand_key,
                            month=month, uid=uid, since_id=since_id)
         raw_path = _archive_raw(store, brand_key, f"weibo_page{page:03d}", data)
         mblogs = normalize.weibo_posts_from_response(data)
         if not mblogs:
             break
-        older_seen = 0
+        batch, older_seen, considered = [], 0, 0
         for mblog in mblogs:
             post = normalize.normalize_weibo(mblog, uid)
             if post is None or post["created_dt"] is None:
                 continue
             dt = post["created_dt"]
+            if post.get("is_top") and not (start <= dt < end):
+                continue              # pinned out-of-window post; keep paging
+            considered += 1
             if dt >= end:
                 continue
             if dt < start:
-                if post.get("is_top"):
-                    continue          # pinned old post, keep paging
                 older_seen += 1
                 continue
             if post["is_repost"]:
                 n_reposts += 1
                 continue              # pure repost without commentary
             _download_post_media(store, brand_key, post, "https://weibo.com/")
-            _store_post(conn, month, brand_key, post, raw_path)
-            n_new += 1
-        if older_seen >= max(1, len(mblogs) - 2):
-            done = True               # page fully older than the window
-        new_since = normalize.find_key(data, "since_id")
-        since_id = str(new_since) if new_since else None
-        page += 1
+            batch.append(post)
+        _store_posts(engine, month, brand_key, batch, raw_path)
+        n_new += len(batch)
         if progress:
             progress(brand_key, page, n_new)
-        if since_id is None and older_seen:
-            done = True
+        # stop when the page is (almost) entirely older than the window, or
+        # the timeline has no next page
+        if considered and older_seen >= max(1, considered - 1):
+            break
+        new_since = normalize.find_key(data, "since_id")
+        since_id = str(new_since) if new_since not in (None, "", 0) else None
+        if since_id is None:
+            break
+        page += 1
     return {"brand": brand_key, "posts": n_new, "skipped_reposts": n_reposts}
 
 
 # -- Phase 4 pulls (other platforms), cached once per run ------------------------
 
-def pull_platform(conn, client: TikHubClient, cfg: BrandsConfig, month: str,
+def pull_platform(engine, client: TikHubClient, cfg: BrandsConfig, month: str,
                   brand_key: str, platform: str, *, max_pages: int = 15) -> int:
     """Pull a brand's timeline on douyin/xhs/wechat_mp/wechat_channels for
     [month_start − 5d, month_end + 5d]; normalize, download media, store."""
@@ -149,7 +164,7 @@ def pull_platform(conn, client: TikHubClient, cfg: BrandsConfig, month: str,
     cursor = None
     for page in range(max_pages):
         if platform == "douyin":
-            data = client.call("douyin_user_posts", conn=conn, brand=brand_key,
+            data = client.call("douyin_user_posts", conn=engine, brand=brand_key,
                                month=month, sec_user_id=acct.uid,
                                max_cursor=cursor, count=20)
             items = normalize.douyin_posts_from_response(data)
@@ -157,14 +172,14 @@ def pull_platform(conn, client: TikHubClient, cfg: BrandsConfig, month: str,
             cursor = normalize.find_key(data, "max_cursor")
             has_more = bool(normalize.find_key(data, "has_more"))
         elif platform == "xhs":
-            data = client.call("xhs_user_notes", conn=conn, brand=brand_key,
+            data = client.call("xhs_user_notes", conn=engine, brand=brand_key,
                                month=month, user_id=acct.uid, cursor=cursor)
             items = normalize.xhs_notes_from_response(data)
             posts = [normalize.normalize_xhs(i) for i in items]
             cursor = normalize.find_key(data, "cursor")
             has_more = bool(normalize.find_key(data, "has_more"))
         elif platform == "wechat_mp":
-            data = client.call("wechat_mp_articles", conn=conn, brand=brand_key,
+            data = client.call("wechat_mp_articles", conn=engine, brand=brand_key,
                                month=month, username=acct.uid, offset=cursor,
                                raw=False)
             items = normalize.wechat_mp_articles_from_response(data)
@@ -172,7 +187,7 @@ def pull_platform(conn, client: TikHubClient, cfg: BrandsConfig, month: str,
             cursor = normalize.find_key(data, "next_offset")
             has_more = bool(normalize.find_key(data, "has_more")) or bool(cursor)
         elif platform == "wechat_channels":
-            data = client.call("wechat_ch_videos", conn=conn, brand=brand_key,
+            data = client.call("wechat_ch_videos", conn=engine, brand=brand_key,
                                month=month, username=acct.uid,
                                last_buffer=cursor, raw=False)
             items = normalize.wechat_ch_videos_from_response(data)
@@ -183,24 +198,27 @@ def pull_platform(conn, client: TikHubClient, cfg: BrandsConfig, month: str,
             raise ValueError(platform)
 
         raw_path = _archive_raw(store, brand_key, f"{platform}_page{page:03d}", data)
-        stop = False
+        batch, older_seen, considered = [], 0, 0
+        referer = {"douyin": "https://www.douyin.com/",
+                   "xhs": "https://www.xiaohongshu.com/",
+                   "wechat_mp": "https://mp.weixin.qq.com/",
+                   "wechat_channels": "https://channels.weixin.qq.com/"}[platform]
         for post in posts:
             if post is None:
                 continue
             dt = post["created_dt"]
-            if dt is None or dt >= end:
+            if dt is None:
+                continue
+            considered += 1
+            if dt >= end:
                 continue
             if dt < start:
-                if not post.get("is_top"):
-                    stop = True
-                continue
-            referer = {"douyin": "https://www.douyin.com/",
-                       "xhs": "https://www.xiaohongshu.com/",
-                       "wechat_mp": "https://mp.weixin.qq.com/",
-                       "wechat_channels": "https://channels.weixin.qq.com/"}[platform]
+                older_seen += 1       # pinned posts can't be detected on all
+                continue              # platforms — stop only on a fully-old page
             _download_post_media(store, brand_key, post, referer)
-            _store_post(conn, month, brand_key, post, raw_path)
-            n += 1
-        if stop or not has_more or not items:
+            batch.append(post)
+        _store_posts(engine, month, brand_key, batch, raw_path)
+        n += len(batch)
+        if (considered and older_seen >= considered) or not has_more or not items:
             break
     return n

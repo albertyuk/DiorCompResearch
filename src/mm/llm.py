@@ -95,12 +95,19 @@ class LLM:
                   "no commentary. Your entire response must be a single JSON value.")
         messages = [{"role": "user", "content": prompt}]
         last_err = None
-        for attempt in range(2):
+        for attempt in range(3):
             response = self.client.messages.create(
                 model=self.model, max_tokens=max_tokens,
                 system=system, messages=messages)
             text = "".join(b.text for b in response.content if b.type == "text")
             self._log(conn, prompt_name, brand, month, response)
+            if response.stop_reason == "max_tokens":
+                # truncated output can never parse — retry with more room,
+                # not with a "correct your JSON" turn
+                max_tokens = min(max_tokens * 4, 16000)
+                last_err = ValueError(
+                    f"{prompt_name}: output truncated at max_tokens; retried")
+                continue
             try:
                 return parse_json_loose(text)
             except ValueError as e:

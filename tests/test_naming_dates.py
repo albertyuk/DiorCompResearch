@@ -75,3 +75,8 @@ def test_assets_label():
     assert naming.assets_label(True, False) == "PHOTO"
     assert naming.assets_label(False, True) == "VIDEO"
     assert naming.assets_label(True, True) == "PHOTO VIDEO"
+
+
+def test_date_runs_none_start_is_tbd():
+    assert date_text(None, None) == "TBD"
+    assert date_text(None, None, ongoing=True) == "TBD"

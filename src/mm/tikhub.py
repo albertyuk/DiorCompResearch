@@ -114,8 +114,13 @@ class TikHubClient:
                 continue
             if r.status_code in (429,) or r.status_code >= 500:
                 last = TikHubError(f"{key}: HTTP {r.status_code} {r.text[:200]}")
+                delay = min(30, 2 ** attempt + random.random())
                 retry_after = r.headers.get("retry-after")
-                delay = float(retry_after) if retry_after else min(30, 2 ** attempt + random.random())
+                if retry_after:
+                    try:
+                        delay = min(60.0, float(retry_after))
+                    except ValueError:
+                        pass          # HTTP-date form — keep the backoff delay
                 time.sleep(delay)
                 continue
             if r.status_code >= 400:

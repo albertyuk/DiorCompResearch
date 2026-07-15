@@ -30,27 +30,31 @@ def run_resolve_check(cfg: BrandsConfig) -> list[dict]:
     return unresolved_accounts(cfg)
 
 
+def _set_phase(engine, month: str, phase: str, status: str) -> None:
+    with engine.begin() as conn:
+        db.set_phase(conn, month, phase, status)
+
+
 def run_ingest(month: str, brand_keys: list[str] | None = None) -> dict:
     cfg = BrandsConfig.load()
     settings = Settings.load()
     client = TikHubClient(settings)
     engine = db.get_engine()
     results = {}
-    with engine.begin() as conn:
-        db.set_phase(conn, month, "ingest", "running")
-    for brand in cfg.brands:
-        if brand_keys and brand.key not in brand_keys:
-            continue
-        with engine.begin() as conn:
+    _set_phase(engine, month, "ingest", "running")
+    try:
+        for brand in cfg.brands:
+            if brand_keys and brand.key not in brand_keys:
+                continue
             try:
-                results[brand.key] = ingest.ingest_weibo(conn, client, cfg,
+                results[brand.key] = ingest.ingest_weibo(engine, client, cfg,
                                                          month, brand.key)
             except Exception as e:
                 results[brand.key] = {"error": str(e)}
-    with engine.begin() as conn:
-        ok = not any("error" in r for r in results.values())
-        db.set_phase(conn, month, "ingest", "done" if ok else "error")
-    client.close()
+    finally:
+        client.close()
+    ok = not any("error" in r for r in results.values())
+    _set_phase(engine, month, "ingest", "done" if ok else "error")
     return results
 
 
@@ -58,13 +62,18 @@ def run_filter(month: str, brand_keys: list[str] | None = None) -> dict:
     cfg = BrandsConfig.load()
     llm = LLM()
     engine = db.get_engine()
-    with engine.begin() as conn:
-        db.set_phase(conn, month, "filter", "running")
-        stats = filtering.filter_month(conn, llm, cfg, month,
+    _set_phase(engine, month, "filter", "running")
+    try:
+        stats = filtering.filter_month(engine, llm, cfg, month,
                                        brand_keys[0] if brand_keys and
                                        len(brand_keys) == 1 else None)
-        db.set_phase(conn, month, "filter", "done")
-        db.set_phase(conn, month, "review_posts", "waiting")
+    except Exception:
+        _set_phase(engine, month, "filter", "error")
+        raise
+    ok = stats.get("errors", 0) == 0
+    _set_phase(engine, month, "filter", "done" if ok
+               else f"error: {stats['errors']} posts failed — re-run filter")
+    _set_phase(engine, month, "review_posts", "waiting")
     return stats
 
 
@@ -81,20 +90,23 @@ def run_crosscheck(month: str, brand_keys: list[str] | None = None) -> dict:
     llm = LLM(settings)
     engine = db.get_engine()
     results = {}
-    with engine.begin() as conn:
-        db.set_phase(conn, month, "crosscheck", "running")
-    for brand in cfg.brands:
-        if brand_keys and brand.key not in brand_keys:
-            continue
-        with engine.begin() as conn:
-            pulls = xc.pull_all(conn, client, cfg, month, brand.key)
-            res = xc.crosscheck_brand(conn, llm, cfg, month, brand.key)
-            _matches_path(month, brand.key).write_text(
-                json.dumps(res["matches"], ensure_ascii=False, indent=1))
-            results[brand.key] = {"pulls": pulls, "orphans": res["orphans"]}
-    with engine.begin() as conn:
-        db.set_phase(conn, month, "crosscheck", "done")
-    client.close()
+    _set_phase(engine, month, "crosscheck", "running")
+    try:
+        for brand in cfg.brands:
+            if brand_keys and brand.key not in brand_keys:
+                continue
+            try:
+                pulls = xc.pull_all(engine, client, cfg, month, brand.key)
+                res = xc.crosscheck_brand(engine, llm, cfg, month, brand.key)
+                _matches_path(month, brand.key).write_text(
+                    json.dumps(res["matches"], ensure_ascii=False, indent=1))
+                results[brand.key] = {"pulls": pulls, "orphans": res["orphans"]}
+            except Exception as e:
+                results[brand.key] = {"error": str(e)}
+    finally:
+        client.close()
+    ok = not any(isinstance(r, dict) and "error" in r for r in results.values())
+    _set_phase(engine, month, "crosscheck", "done" if ok else "error")
     return results
 
 
@@ -103,8 +115,7 @@ def run_enrich(month: str, brand_keys: list[str] | None = None) -> dict:
     llm = LLM()
     engine = db.get_engine()
     results = {}
-    with engine.begin() as conn:
-        db.set_phase(conn, month, "enrich", "running")
+    _set_phase(engine, month, "enrich", "running")
     for brand in cfg.brands:
         if brand_keys and brand.key not in brand_keys:
             continue
@@ -112,15 +123,22 @@ def run_enrich(month: str, brand_keys: list[str] | None = None) -> dict:
         mp = _matches_path(month, brand.key)
         if mp.exists():
             matches = json.loads(mp.read_text())
-        with engine.begin() as conn:
-            try:
-                results[brand.key] = enrich_mod.enrich_brand(
-                    conn, llm, cfg, month, brand.key, matches)
-            except Exception as e:
-                results[brand.key] = {"error": str(e)}
-    with engine.begin() as conn:
-        db.set_phase(conn, month, "enrich", "done")
-        db.set_phase(conn, month, "review_projects", "waiting")
+        try:
+            results[brand.key] = enrich_mod.enrich_brand(
+                engine, llm, cfg, month, brand.key, matches)
+        except Exception as e:
+            results[brand.key] = {"error": str(e)}
+    ok = not any("error" in r for r in results.values())
+    _set_phase(engine, month, "enrich", "done" if ok else "error")
+    # only (re)open checkpoint #2 when enrichment actually produced/refreshed
+    # drafts — a wholesale "confirmed already, untouched" rerun must not
+    # regress a confirmed review
+    produced = any(r.get("projects", 0) > 0 for r in results.values()
+                   if isinstance(r, dict))
+    with engine.connect() as conn:
+        current = db.get_run(conn, month)["phases"].get("review_projects")
+    if produced or current not in ("confirmed",):
+        _set_phase(engine, month, "review_projects", "waiting")
     return results
 
 
@@ -179,22 +197,20 @@ def run_render(month: str, *, visuals_mode: str = "live",
 
     cfg = BrandsConfig.load()
     engine = db.get_engine()
-    with engine.begin() as conn:
-        db.set_phase(conn, month, "render", "running")
+    _set_phase(engine, month, "render", "running")
     brands_spec: list[BrandSpec] = []
     with engine.connect() as conn, \
             VisualFactory(month, mode=visuals_mode) as factory:
         for brand in cfg.brands:
             q = select(db.projects).where(db.projects.c.month == month,
-                                          db.projects.c.brand == brand.key)
+                                          db.projects.c.brand == brand.key,
+                                          db.projects.c.status != "dropped")
             if not include_drafts:
-                q = q.where(db.projects.c.status != "dropped")
+                q = q.where(db.projects.c.status != "draft")
             rows = [dict(r) for r in conn.execute(
                 q.order_by(db.projects.c.date_start)).mappings()]
             projects = []
             for p in rows:
-                if p["status"] == "dropped":
-                    continue
                 celebs = json.loads(p["celebs"] or "[]")
                 plats = [r["platform"] for r in conn.execute(
                     select(db.platform_matches)
@@ -203,7 +219,8 @@ def run_render(month: str, *, visuals_mode: str = "live",
                 vis = _project_visuals(conn, factory, brand.key, p, celebs)
                 projects.append(ProjectSpec(
                     title=p["title"], phase_suffix=p["phase_suffix"],
-                    date_start=p["date_start"], date_end=p["date_end"],
+                    date_start=p["date_start"] or f"{month}-01",
+                    date_end=p["date_end"],
                     ongoing=bool(p["ongoing"]), assets=p["assets"],
                     platforms=plats or ["weibo"],
                     description=p["description"] or p["title"],

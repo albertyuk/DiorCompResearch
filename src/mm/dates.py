@@ -25,14 +25,18 @@ def month_name(d: date) -> str:
     return MONTHS[d.month - 1]
 
 
-def date_runs(start: date, end: date | None, ongoing: bool = False) -> list[tuple[str, bool]]:
+def date_runs(start: date | None, end: date | None,
+              ongoing: bool = False) -> list[tuple[str, bool]]:
     """Segments (text, superscript) for the DATE cell.
 
     - single day:            JULY 9 + ^TH
     - same-month range:      JULY 2 + ^ND + " – 3" + ^RD
     - cross-month range:     JUNE 28 + ^TH + " – JULY 3" + ^RD
     - ongoing at month end:  JULY 1 + ^ST + " – TBD"
+    - unknown start:         TBD
     """
+    if start is None:
+        return [("TBD", False)]
     runs: list[tuple[str, bool]] = [(f"{month_name(start)} {start.day}", False),
                                     (ordinal_suffix(start.day), True)]
     if ongoing:
@@ -48,7 +52,7 @@ def date_runs(start: date, end: date | None, ongoing: bool = False) -> list[tupl
     return runs
 
 
-def date_text(start: date, end: date | None, ongoing: bool = False) -> str:
+def date_text(start: date | None, end: date | None, ongoing: bool = False) -> str:
     return "".join(t for t, _ in date_runs(start, end, ongoing))
 
 

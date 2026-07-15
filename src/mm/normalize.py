@@ -36,11 +36,14 @@ def parse_unix(ts) -> datetime | None:
 
 
 def find_post_list(data, marker_keys: set[str], max_depth: int = 8) -> list[dict]:
-    """Find the first list of dicts where items carry any marker key."""
+    """Find the first list of dicts where items carry any marker key.
+    Checks the first few elements, not just [0] — feeds sometimes lead with
+    ad cards / deleted-post placeholders."""
     if max_depth < 0:
         return []
     if isinstance(data, list):
-        if data and isinstance(data[0], dict) and (marker_keys & set(data[0].keys())):
+        head = [d for d in data[:3] if isinstance(d, dict)]
+        if any(marker_keys & set(d.keys()) for d in head):
             return [d for d in data if isinstance(d, dict)]
         for item in data:
             found = find_post_list(item, marker_keys, max_depth - 1)
@@ -89,9 +92,10 @@ def normalize_weibo(mblog: dict, uid: str) -> dict | None:
     text = mblog.get("text_raw") or strip_html(mblog.get("text", ""))
     retweet = mblog.get("retweeted_status")
     commentary = text.split("//@")[0].strip() if retweet else text
+    # only the literal no-commentary forms count as pure reposts; short real
+    # commentary is flagged ambiguous (surfaced at review), never dropped
     is_pure_repost = bool(retweet) and (
-        not commentary or commentary in ("转发微博", "轉發微博", "Repost")
-        or len(commentary) <= 4)
+        not commentary or commentary in ("转发微博", "轉發微博", "Repost", "转发"))
     repost_ambiguous = bool(retweet) and not is_pure_repost
 
     media = []

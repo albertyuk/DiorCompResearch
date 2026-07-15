@@ -199,7 +199,10 @@ def create_app() -> FastAPI:
             if k in form:
                 v = form[k].strip()
                 values[k] = v or None
-        if "ongoing" in form:
+        # checkboxes: browsers omit unchecked boxes entirely, so treat any
+        # submission of this form (marked by _platforms_submitted) as
+        # authoritative for ongoing too
+        if "ongoing" in form or form.get("_platforms_submitted"):
             values["ongoing"] = form.get("ongoing") == "on"
         if "celebs_json" in form:
             try:
@@ -303,17 +306,18 @@ def create_app() -> FastAPI:
     @app.get("/media")
     def media(path: str):
         p = Path(path).resolve()
-        if not str(p).startswith(str(DATA_DIR.resolve())) \
-                and not str(p).startswith(str(OUTPUT_DIR.resolve())):
+        allowed = (p.is_relative_to(DATA_DIR.resolve())
+                   or p.is_relative_to(OUTPUT_DIR.resolve()))
+        if not allowed:
             return JSONResponse({"error": "forbidden"}, status_code=403)
-        if not p.exists():
+        if not p.is_file():
             return JSONResponse({"error": "not found"}, status_code=404)
         return FileResponse(str(p))
 
     @app.get("/download/{name}")
     def download(name: str):
         p = (OUTPUT_DIR / name).resolve()
-        if not str(p).startswith(str(OUTPUT_DIR.resolve())) or not p.exists():
+        if not p.is_relative_to(OUTPUT_DIR.resolve()) or not p.is_file():
             return JSONResponse({"error": "not found"}, status_code=404)
         return FileResponse(str(p), filename=name)
 

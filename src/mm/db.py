@@ -131,7 +131,20 @@ def get_engine() -> Engine:
     global _engine
     if _engine is None:
         ensure_dirs()
-        _engine = create_engine(f"sqlite:///{DB_PATH}", future=True)
+        # WAL + generous busy timeout: the console (reads + small writes) and
+        # background phase threads share this file; readers must never block
+        # on a writer.
+        _engine = create_engine(f"sqlite:///{DB_PATH}", future=True,
+                                connect_args={"timeout": 60})
+        from sqlalchemy import event
+
+        @event.listens_for(_engine, "connect")
+        def _set_wal(dbapi_conn, _):
+            cur = dbapi_conn.cursor()
+            cur.execute("PRAGMA journal_mode=WAL")
+            cur.execute("PRAGMA synchronous=NORMAL")
+            cur.close()
+
         metadata.create_all(_engine)
     return _engine
 
@@ -140,9 +153,11 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def upsert(conn, table: Table, values: dict, key_cols: list[str]) -> None:
+def upsert(conn, table: Table, values: dict, key_cols: list[str],
+           no_update_cols: list[str] | None = None) -> None:
     stmt = sqlite_insert(table).values(**values)
-    update_cols = {c: stmt.excluded[c] for c in values if c not in key_cols}
+    skip = set(key_cols) | set(no_update_cols or [])
+    update_cols = {c: stmt.excluded[c] for c in values if c not in skip}
     if update_cols:
         stmt = stmt.on_conflict_do_update(index_elements=key_cols, set_=update_cols)
     else:
@@ -178,10 +193,18 @@ def log_api_call(conn, kind: str, endpoint: str, *, brand: str | None = None,
                  month: str | None = None, status: int | None = None,
                  ok: bool = True, cost_usd: float = 0.0,
                  tokens_in: int = 0, tokens_out: int = 0) -> None:
-    conn.execute(api_calls.insert().values(
+    """`conn` may be a Connection (joins its transaction) or an Engine
+    (opens its own short transaction) — so API-call logging never forces a
+    caller to hold a write transaction across network calls."""
+    stmt = api_calls.insert().values(
         ts=now_iso(), kind=kind, endpoint=endpoint, brand=brand, month=month,
         status=status, ok=ok, cost_usd=cost_usd,
-        tokens_in=tokens_in, tokens_out=tokens_out))
+        tokens_in=tokens_in, tokens_out=tokens_out)
+    if isinstance(conn, Engine):
+        with conn.begin() as c:
+            c.execute(stmt)
+    else:
+        conn.execute(stmt)
 
 
 def cost_summary(conn, month: str | None = None) -> dict:

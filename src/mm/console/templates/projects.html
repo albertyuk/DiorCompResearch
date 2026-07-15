@@ -108,12 +108,12 @@
     </td>
     <td>
       <form class="inline" method="post"
-            action="/review/{{ month }}/orphans/{{ o.post_id }}/resolve">
+            action="/review/{{ month }}/orphans/{{ o.post_id | urlencode }}/resolve">
         <input type="hidden" name="action" value="promote">
         <button type="submit">Promote to project</button>
       </form>
       <form class="inline" method="post"
-            action="/review/{{ month }}/orphans/{{ o.post_id }}/resolve">
+            action="/review/{{ month }}/orphans/{{ o.post_id | urlencode }}/resolve">
         <input type="hidden" name="action" value="ignore">
         <button class="ghost" type="submit">Ignore</button>
       </form>

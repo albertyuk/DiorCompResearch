@@ -12,15 +12,21 @@ from .llm import LLM
 CONFIDENCE_REVIEW_THRESHOLD = 0.65   # bias to recall
 
 
-def filter_month(conn, llm: LLM, cfg: BrandsConfig, month: str,
+def filter_month(engine, llm: LLM, cfg: BrandsConfig, month: str,
                  brand_key: str | None = None, progress=None) -> dict:
+    """One LLM call per unfiltered post; each verdict commits in its own short
+    transaction, so a mid-run crash loses nothing already paid for and the
+    console stays writable while this runs."""
     q = (select(db.posts)
          .where(db.posts.c.month == month, db.posts.c.platform == "weibo"))
     if brand_key:
         q = q.where(db.posts.c.brand == brand_key)
-    rows = list(conn.execute(q).mappings())
-    done = {r["post_id"] for r in conn.execute(select(db.verdicts.c.post_id)).mappings()}
-    stats = {"total": len(rows), "filtered": 0, "kept": 0, "needs_review": 0}
+    with engine.connect() as conn:
+        rows = list(conn.execute(q).mappings())
+        done = {r["post_id"]
+                for r in conn.execute(select(db.verdicts.c.post_id)).mappings()}
+    stats = {"total": len(rows), "filtered": 0, "kept": 0, "needs_review": 0,
+             "errors": 0}
     for row in rows:
         if row["post_id"] in done:
             continue
@@ -38,12 +44,12 @@ def filter_month(conn, llm: LLM, cfg: BrandsConfig, month: str,
                 "at_tags": json.loads(row["at_tags"] or "[]"),
                 "hashtags": json.loads(row["hashtags"] or "[]"),
                 "media_summary": media_summary,
-            }, conn=conn, brand=row["brand"], month=month)
-        except Exception as e:
-            verdict = {"keep": True, "confidence": 0.0,
-                       "reasons": [f"filter error, kept for review: {e}"],
-                       "celebs_tagged": [], "category": "other",
-                       "media_focus": "photo"}
+            }, conn=engine, brand=row["brand"], month=month)
+        except Exception:
+            # transient API failure: record nothing — the post stays
+            # unfiltered and the next `mm filter` run picks it up cheaply
+            stats["errors"] += 1
+            continue
         keep = bool(verdict.get("keep"))
         conf = float(verdict.get("confidence") or 0)
         # ambiguous reposts always surface for human review
@@ -58,15 +64,17 @@ def filter_month(conn, llm: LLM, cfg: BrandsConfig, month: str,
             needs_review = True
             verdict.setdefault("reasons", []).append(
                 "keyword signal: makeup/skincare terms present")
-        db.upsert(conn, db.verdicts, {
-            "post_id": row["post_id"], "keep": keep, "confidence": conf,
-            "reasons": json.dumps(verdict.get("reasons") or [], ensure_ascii=False),
-            "celebs_tagged": json.dumps(verdict.get("celebs_tagged") or [],
-                                        ensure_ascii=False),
-            "category": verdict.get("category") or "other",
-            "media_focus": verdict.get("media_focus") or "photo",
-            "needs_review": needs_review,
-        }, ["post_id"])
+        with engine.begin() as wconn:
+            db.upsert(wconn, db.verdicts, {
+                "post_id": row["post_id"], "keep": keep, "confidence": conf,
+                "reasons": json.dumps(verdict.get("reasons") or [],
+                                      ensure_ascii=False),
+                "celebs_tagged": json.dumps(verdict.get("celebs_tagged") or [],
+                                            ensure_ascii=False),
+                "category": verdict.get("category") or "other",
+                "media_focus": verdict.get("media_focus") or "photo",
+                "needs_review": needs_review,
+            }, ["post_id"])
         stats["filtered"] += 1
         stats["kept"] += int(keep)
         stats["needs_review"] += int(needs_review)
