@@ -1,0 +1,162 @@
+[
+  {
+    "id": 1,
+    "note": "全球代言人 variant, single celeb",
+    "brand": "chanel",
+    "caption": "香奈儿全球代言人@王一博 演绎全新COCO CRUSH高级珠宝形象大片，光影交错间尽显自在态度。#CHANEL# #COCOCRUSH#",
+    "expect_at_tags": ["王一博"],
+    "expect_title_map": {"raw": "全球代言人", "relation": "BRAND AMBASSADOR"},
+    "expect_cosmetics_signal": null,
+    "expect_keep_policy": true
+  },
+  {
+    "id": 2,
+    "note": "品牌大使 variant",
+    "brand": "gucci",
+    "caption": "GUCCI品牌大使@宋威龙 登上《时尚芭莎男士》六月刊封面，演绎古驰2026春夏系列。",
+    "expect_at_tags": ["宋威龙"],
+    "expect_title_map": {"raw": "品牌大使", "relation": "BRAND AMBASSADOR"},
+    "expect_cosmetics_signal": null,
+    "expect_keep_policy": true
+  },
+  {
+    "id": 3,
+    "note": "品牌挚友 variant (validated live on LV posts)",
+    "brand": "lv",
+    "caption": "路易威登品牌挚友@朱一龙 现身2027春夏男装秀场，演绎新季造型。#LouisVuitton#",
+    "expect_at_tags": ["朱一龙"],
+    "expect_title_map": {"raw": "品牌挚友", "relation": "BRAND FRIEND"},
+    "expect_cosmetics_signal": null,
+    "expect_keep_policy": true
+  },
+  {
+    "id": 4,
+    "note": "bare 代言人 variant",
+    "brand": "tiffany",
+    "caption": "蒂芙尼代言人@李云睿Lyra 佩戴Bird on a Rock系列，探访Oak Spring花园。",
+    "expect_at_tags": ["李云睿Lyra"],
+    "expect_title_map": {"raw": "代言人", "relation": "BRAND AMBASSADOR"},
+    "expect_cosmetics_signal": null,
+    "expect_keep_policy": true
+  },
+  {
+    "id": 5,
+    "note": "bare 大使 variant",
+    "brand": "fendi",
+    "caption": "FENDI大使@唐嫣 亮相2026/27秋冬高定大秀，演绎Baguette手袋。",
+    "expect_at_tags": ["唐嫣"],
+    "expect_title_map": {"raw": "大使", "relation": "BRAND AMBASSADOR"},
+    "expect_cosmetics_signal": null,
+    "expect_keep_policy": true
+  },
+  {
+    "id": 6,
+    "note": "品牌好友 variant",
+    "brand": "chanel",
+    "caption": "品牌好友@辛芷蕾 出席香奈儿2026巴黎高级手工坊系列上海发布会。",
+    "expect_at_tags": ["辛芷蕾"],
+    "expect_title_map": {"raw": "品牌好友", "relation": "BRAND FRIEND"},
+    "expect_cosmetics_signal": null,
+    "expect_keep_policy": true
+  },
+  {
+    "id": 7,
+    "note": "multi-celeb post, mixed titles",
+    "brand": "chanel",
+    "caption": "香奈儿品牌大使@张子枫 与品牌挚友@单依纯 一同亮相2026/27高级定制服系列发布会。",
+    "expect_at_tags": ["张子枫", "单依纯"],
+    "expect_title_map": {"raw": "品牌大使", "relation": "BRAND AMBASSADOR"},
+    "expect_cosmetics_signal": null,
+    "expect_keep_policy": true
+  },
+  {
+    "id": 8,
+    "note": "multi-celeb, three tags no titles",
+    "brand": "lv",
+    "caption": "@徐冰 @王羽佳YujaWang @贾樟柯 齐聚路易威登Rebonds艺术项目发布现场，见证与联合国儿童基金会合作十周年。",
+    "expect_at_tags": ["徐冰", "王羽佳YujaWang", "贾樟柯"],
+    "expect_title_map": null,
+    "expect_cosmetics_signal": null,
+    "expect_keep_policy": true
+  },
+  {
+    "id": 9,
+    "note": "no-celeb China-exclusive pop-up (still KEEP)",
+    "brand": "chanel",
+    "caption": "COCO CRUSH快闪空间将于7月27日登陆杭州湖滨银泰in77，邀您步入自在之境。",
+    "expect_at_tags": [],
+    "expect_title_map": null,
+    "expect_cosmetics_signal": null,
+    "expect_keep_policy": true
+  },
+  {
+    "id": 10,
+    "note": "no-celeb exhibition announcement",
+    "brand": "chanel",
+    "caption": "「LA GALERIE DU 19M上海」将于六月底开幕，呈现巴黎19M高级手工坊的精湛技艺。",
+    "expect_at_tags": [],
+    "expect_title_map": null,
+    "expect_cosmetics_signal": null,
+    "expect_keep_policy": true
+  },
+  {
+    "id": 11,
+    "note": "makeup — hard exclude",
+    "brand": "chanel",
+    "caption": "香奈儿全新炼金术口红系列，31色释放唇间光芒。#香奈儿美妆#",
+    "expect_at_tags": [],
+    "expect_title_map": null,
+    "expect_cosmetics_signal": "makeup_skincare",
+    "expect_keep_policy": false
+  },
+  {
+    "id": 12,
+    "note": "skincare — hard exclude even with celeb",
+    "brand": "chanel",
+    "caption": "品牌大使@刘雨昕 分享一号红山茶花精华液的焕活体验。#香奈儿护肤#",
+    "expect_at_tags": ["刘雨昕"],
+    "expect_title_map": {"raw": "品牌大使", "relation": "BRAND AMBASSADOR"},
+    "expect_cosmetics_signal": "makeup_skincare",
+    "expect_keep_policy": false
+  },
+  {
+    "id": 13,
+    "note": "fragrance — stays IN scope (June deck evidence: LV Scent of Color)",
+    "brand": "lv",
+    "caption": "路易威登香水系列「色彩之息」全新演绎，@宋茜 以嗅觉旅行开启色彩之境。",
+    "expect_at_tags": ["宋茜"],
+    "expect_title_map": null,
+    "expect_cosmetics_signal": "fragrance",
+    "expect_keep_policy": true
+  },
+  {
+    "id": 14,
+    "note": "pure global repost, no China angle — drop (policy, not keyword)",
+    "brand": "gucci",
+    "caption": "Discover the new Gucci Horsebit 1955 campaign, now live worldwide.",
+    "expect_at_tags": [],
+    "expect_title_map": null,
+    "expect_cosmetics_signal": null,
+    "expect_keep_policy": false
+  },
+  {
+    "id": 15,
+    "note": "CN livestream announcement, no celeb",
+    "brand": "fendi",
+    "caption": "今晚8点，FENDI官方直播间开启2026秋冬新品首秀直播，敬请锁定。",
+    "expect_at_tags": [],
+    "expect_title_map": null,
+    "expect_cosmetics_signal": null,
+    "expect_keep_policy": true
+  },
+  {
+    "id": 16,
+    "note": "fragrance english term also in scope",
+    "brand": "gucci",
+    "caption": "Gucci Flora Gorgeous Gardenia fragrance 古驰绮梦花园淡香氛，走进花园秘境。",
+    "expect_at_tags": [],
+    "expect_title_map": null,
+    "expect_cosmetics_signal": "fragrance",
+    "expect_keep_policy": true
+  }
+]

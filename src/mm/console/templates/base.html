@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{% block title %}MAISON MONITOR{% endblock %}</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+:root { --ink:#111; --mut:#8a8a8a; --line:#e3e3e3; --accent:#111; }
+* { box-sizing:border-box; margin:0; padding:0; }
+body { font-family:-apple-system,"Helvetica Neue",Helvetica,Arial,sans-serif;
+       color:var(--ink); background:#fff; font-size:14px; line-height:1.5; }
+a { color:inherit; }
+header { display:flex; align-items:baseline; gap:32px; padding:26px 40px 18px;
+         border-bottom:1px solid var(--ink); }
+header .wordmark { font-size:19px; letter-spacing:4px; font-weight:600; }
+nav { display:flex; gap:22px; }
+nav a { text-decoration:none; font-size:11px; letter-spacing:2px; color:var(--mut);
+        text-transform:uppercase; padding-bottom:2px; }
+nav a.active, nav a:hover { color:var(--ink); border-bottom:1px solid var(--ink); }
+main { padding:30px 40px 80px; max-width:1500px; }
+h2 { font-size:12px; letter-spacing:3px; text-transform:uppercase; font-weight:600;
+     margin:34px 0 14px; }
+h2:first-child { margin-top:0; }
+.micro { font-size:10px; letter-spacing:2px; text-transform:uppercase; color:var(--mut); }
+.rule { border:0; border-top:1px solid var(--line); margin:20px 0; }
+table.grid { width:100%; border-collapse:collapse; }
+table.grid th { text-align:left; font-size:10px; letter-spacing:2px;
+  text-transform:uppercase; color:var(--mut); font-weight:500;
+  border-bottom:1px solid var(--ink); padding:6px 10px 8px; }
+table.grid td { border-bottom:1px solid var(--line); padding:10px; vertical-align:top; }
+button, .btn { background:#fff; border:1px solid var(--ink); color:var(--ink);
+  font-size:10px; letter-spacing:2px; text-transform:uppercase; padding:7px 16px;
+  cursor:pointer; text-decoration:none; display:inline-block; }
+button:hover, .btn:hover { background:var(--ink); color:#fff; }
+button.ghost { border-color:var(--line); color:var(--mut); }
+button.ghost:hover { background:#f4f4f4; color:var(--ink); }
+input[type=text], input[type=date], select, textarea {
+  border:1px solid var(--line); padding:6px 8px; font:inherit; width:100%;
+  background:#fff; }
+input:focus, select:focus, textarea:focus { outline:1px solid var(--ink); }
+.pill { display:inline-block; font-size:9px; letter-spacing:1.5px;
+  text-transform:uppercase; border:1px solid var(--line); border-radius:999px;
+  padding:2px 9px; color:var(--mut); margin-right:4px; }
+.pill.on { border-color:var(--ink); color:var(--ink); }
+.pill.warn { border-color:#c99700; color:#a37b00; }
+.pill.err { border-color:#b3261e; color:#b3261e; }
+.pill.ok { border-color:#2e7d32; color:#2e7d32; }
+.thumb { width:84px; height:84px; object-fit:cover; background:#f2f2f2;
+  border:1px solid var(--line); }
+.caption-cn { white-space:pre-wrap; max-width:520px; }
+.dropped { opacity:.38; }
+.row-flex { display:flex; gap:14px; align-items:flex-start; flex-wrap:wrap; }
+form.inline { display:inline; }
+.note { font-size:12px; color:var(--mut); max-width:760px; }
+.hero-strip img { height:64px; border:1px solid var(--line); margin-right:6px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="wordmark">MAISON&nbsp;MONITOR</div>
+  <nav>
+    <a href="/" {% if active == 'runs' %}class="active"{% endif %}>Runs</a>
+    {% if month is defined and month %}
+    <a href="/review/{{ month }}/posts" {% if active == 'posts' %}class="active"{% endif %}>Review · Posts</a>
+    <a href="/review/{{ month }}/projects" {% if active == 'projects' %}class="active"{% endif %}>Review · Projects</a>
+    {% endif %}
+    <a href="/decks" {% if active == 'decks' %}class="active"{% endif %}>Decks</a>
+  </nav>
+</header>
+<main>
+{% block content %}{% endblock %}
+</main>
+{% block scripts %}{% endblock %}
+</body>
+</html>

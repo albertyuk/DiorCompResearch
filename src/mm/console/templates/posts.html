@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% set active = 'posts' %}
+{% block title %}Review · Posts · {{ month }}{% endblock %}
+{% block content %}
+<div class="row-flex" style="justify-content:space-between">
+  <div>
+    <h2 style="margin-top:0">Review checkpoint #1 — posts · {{ month }}</h2>
+    <p class="note">Confirm locks these decisions and starts cross-platform
+    verification + enrichment. <em>Needs review</em> posts are listed first.</p>
+  </div>
+  <form method="post" action="/review/{{ month }}/posts/confirm"
+        onsubmit="return confirm('Lock post decisions and start cross-check + enrichment?')">
+    <button type="submit">Confirm &amp; continue →</button>
+  </form>
+</div>
+<hr class="rule">
+
+{% for g in groups %}
+<h2>{{ g.brand.display_name }} <span class="micro">— {{ g.posts|length }} weibo posts</span></h2>
+{% if not g.posts %}<p class="note">Nothing ingested.</p>{% endif %}
+<table class="grid">
+  <tr><th style="width:96px"></th><th>Post</th><th style="width:210px">Filter verdict</th>
+      <th style="width:150px">Decision</th></tr>
+  {% for p in g.posts %}
+  <tr class="{% if not p.effective_keep %}dropped{% endif %}">
+    <td>{% if p.thumb %}<img class="thumb" loading="lazy"
+          src="/media?path={{ p.thumb | urlencode }}">{% endif %}</td>
+    <td>
+      <div class="micro">{{ (p.created_at or '')[:16] }} ·
+        <a href="{{ p.url }}" target="_blank">post ↗</a>
+        {% if p.repost_ambiguous %} · <span class="pill warn">repost w/ commentary</span>{% endif %}
+        {% if p.needs_review %} <span class="pill warn">needs review</span>{% endif %}
+      </div>
+      <div class="caption-cn">{{ (p.caption or '')[:400] }}</div>
+      {% if p.celebs_list %}<div class="micro" style="margin-top:4px">
+        {% for c in p.celebs_list %}<span class="pill">{{ c.name_cn or c.handle }}
+          {% if c.name_en_guess %}· {{ c.name_en_guess }}{% endif %}</span>{% endfor %}
+      </div>{% endif %}
+    </td>
+    <td>
+      <span class="pill {% if p.keep %}ok{% else %}err{% endif %}">
+        {{ 'KEEP' if p.keep else 'DROP' }} · {{ '%.2f'|format(p.confidence or 0) }}</span>
+      <div class="micro" style="margin-top:4px">{{ p.reasons_list | join(' · ') }}</div>
+      <div class="micro">{{ p.category }} · {{ p.media_focus }}</div>
+    </td>
+    <td>
+      {% if p.human_decision %}
+        <div class="micro">human: {{ p.human_decision }}</div>
+        <form class="inline" method="post"
+              action="/review/{{ month }}/posts/{{ p.post_id }}/decision">
+          <input type="hidden" name="decision" value="restore">
+          <button class="ghost" type="submit">Restore</button>
+        </form>
+      {% else %}
+        <form class="inline" method="post"
+              action="/review/{{ month }}/posts/{{ p.post_id }}/decision">
+          <input type="hidden" name="decision" value="{{ 'drop' if p.effective_keep else 'keep' }}">
+          <button class="{% if p.effective_keep %}ghost{% endif %}" type="submit">
+            {{ 'Delete' if p.effective_keep else 'Keep' }}</button>
+        </form>
+      {% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% endfor %}
+{% endblock %}

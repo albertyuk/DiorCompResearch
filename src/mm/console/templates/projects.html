@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% set active = 'projects' %}
+{% block title %}Review · Projects · {{ month }}{% endblock %}
+{% block content %}
+<div class="row-flex" style="justify-content:space-between">
+  <div>
+    <h2 style="margin-top:0">Review checkpoint #2 — projects · {{ month }}</h2>
+    <p class="note">Edit titles, descriptions, celeb relations (the trailing
+    <code>?</code> marks unverified relations — keep it unless you are sure),
+    platform presence (WeChat is the weakest signal by design — fix it here),
+    dates and asset types. Then render.</p>
+  </div>
+  <form method="post" action="/review/{{ month }}/render"
+        onsubmit="return confirm('Confirm projects and render the deck?')">
+    <select name="visuals" style="width:auto; display:inline-block">
+      <option value="live">visuals: live screenshots (weibo) + cards</option>
+      <option value="card">visuals: cards only</option>
+    </select>
+    <button type="submit">Confirm &amp; render →</button>
+  </form>
+</div>
+<div class="micro" id="task-line"></div>
+<hr class="rule">
+
+{% for g in groups %}
+<h2>{{ g.brand.display_name }} <span class="micro">— {{ g.projects|length }} projects</span></h2>
+{% for p in g.projects %}
+<form method="post" action="/review/{{ month }}/projects/{{ p.id }}/update"
+      class="{% if p.status == 'dropped' %}dropped{% endif %}"
+      style="border:1px solid var(--line); padding:16px; margin-bottom:14px">
+  <input type="hidden" name="_platforms_submitted" value="1">
+  <div class="row-flex">
+    <div style="flex:2; min-width:340px">
+      <div class="micro">Title / phase</div>
+      <div class="row-flex" style="gap:6px">
+        <input type="text" name="title" value="{{ p.title }}" style="flex:3">
+        <input type="text" name="phase_suffix" value="{{ p.phase_suffix or '' }}"
+               placeholder="TEASER / CELEBS / …" style="flex:1">
+      </div>
+      <div class="micro" style="margin-top:8px">Project line (table cell)</div>
+      <input type="text" name="description" value="{{ p.description or '' }}" maxlength="90">
+      <div class="micro" style="margin-top:8px">Celebs (JSON — relation_display keeps the ?)</div>
+      <textarea name="celebs_json" rows="2">{{ p.celebs }}</textarea>
+    </div>
+    <div style="flex:1; min-width:230px">
+      <div class="micro">Dates</div>
+      <div class="row-flex" style="gap:6px">
+        <input type="date" name="date_start" value="{{ p.date_start }}" style="flex:1">
+        <input type="date" name="date_end" value="{{ p.date_end or '' }}" style="flex:1">
+      </div>
+      <label class="micro" style="display:block; margin-top:6px">
+        <input type="checkbox" name="ongoing" {% if p.ongoing %}checked{% endif %}>
+        ongoing (— TBD)</label>
+      <div class="micro" style="margin-top:8px">Assets</div>
+      <select name="assets">
+        {% for a in ['PHOTO', 'VIDEO', 'PHOTO VIDEO'] %}
+        <option {% if p.assets == a %}selected{% endif %}>{{ a }}</option>
+        {% endfor %}
+      </select>
+      <div class="micro" style="margin-top:8px">Platforms (SOCIAL column)</div>
+      {% for plat in ['weibo', 'xhs', 'wechat_mp', 'wechat_channels', 'douyin'] %}
+      <label class="micro" style="display:block">
+        <input type="checkbox" name="platform_{{ plat }}"
+          {% if p.platforms.get(plat) and p.platforms[plat].present %}checked{% endif %}>
+        {{ plat }}
+        {% if p.platforms.get(plat) and p.platforms[plat].confidence is not none %}
+          · conf {{ '%.2f'|format(p.platforms[plat].confidence) }}
+        {% endif %}
+      </label>
+      {% endfor %}
+    </div>
+    <div style="flex:1; min-width:200px">
+      <div class="micro">Hero media</div>
+      <div class="hero-strip">
+        {% for h in p.hero_list[:3] %}
+        <img src="/media?path={{ h | urlencode }}" loading="lazy">
+        {% endfor %}
+      </div>
+      <div class="micro" style="margin-top:8px">Status: {{ p.status }}</div>
+      <div class="row-flex" style="margin-top:10px">
+        <button type="submit">Save</button>
+      </div>
+    </div>
+  </div>
+</form>
+<form class="inline" method="post" action="/review/{{ month }}/projects/{{ p.id }}/status"
+      style="margin:-8px 0 18px; display:block">
+  <input type="hidden" name="value"
+         value="{{ 'draft' if p.status == 'dropped' else 'dropped' }}">
+  <button class="ghost" type="submit">
+    {{ 'Restore project' if p.status == 'dropped' else 'Drop project' }}</button>
+</form>
+{% endfor %}
+{% endfor %}
+
+{% if orphans %}
+<hr class="rule">
+<h2>Orphans <span class="micro">— cross-platform posts matching no kept Weibo post</span></h2>
+<table class="grid">
+  <tr><th style="width:96px"></th><th>Post</th><th style="width:220px"></th></tr>
+  {% for o in orphans %}
+  <tr>
+    <td>{% if o.thumb %}<img class="thumb" src="/media?path={{ o.thumb | urlencode }}">{% endif %}</td>
+    <td>
+      <div class="micro">{{ o.platform }} · {{ (o.created_at or '')[:10] }} ·
+        <a href="{{ o.url }}" target="_blank">post ↗</a></div>
+      <div class="caption-cn">{{ (o.caption or '')[:280] }}</div>
+    </td>
+    <td>
+      <form class="inline" method="post"
+            action="/review/{{ month }}/orphans/{{ o.post_id }}/resolve">
+        <input type="hidden" name="action" value="promote">
+        <button type="submit">Promote to project</button>
+      </form>
+      <form class="inline" method="post"
+            action="/review/{{ month }}/orphans/{{ o.post_id }}/resolve">
+        <input type="hidden" name="action" value="ignore">
+        <button class="ghost" type="submit">Ignore</button>
+      </form>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function poll() {
+  try {
+    const r = await fetch(`/api/runs/{{ month }}/status`);
+    const j = await r.json();
+    const t = Object.entries(j.tasks || {})
+      .map(([k, v]) => `${k.split(':')[1]}: ${v.state}`).join('  ·  ');
+    document.getElementById('task-line').textContent = t ? `background — ${t}` : '';
+  } catch (e) {}
+}
+setInterval(poll, 4000); poll();
+</script>
+{% endblock %}

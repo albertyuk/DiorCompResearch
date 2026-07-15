@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% set active = 'runs' %}
+{% block title %}Resolve · {{ brand.display_name }} · {{ platform }}{% endblock %}
+{% block content %}
+<h2>Confirm {{ brand.display_name }} — {{ platform }}</h2>
+<p class="note">Candidates for “{{ query }}”. Confirming freezes the internal ID
+into <code>config/brands.yaml</code> and flips the account to
+<em>verified</em>.</p>
+{% if manual_note %}<p class="note" style="color:#a37b00">{{ manual_note }}</p>{% endif %}
+{% if error %}<p class="note" style="color:#b3261e">Lookup failed: {{ error }}</p>{% endif %}
+
+{% if candidates %}
+<table class="grid" style="max-width:1000px">
+  <tr><th>Name</th><th>Followers</th><th>Verification</th><th>ID</th><th></th></tr>
+  {% for c in candidates %}
+  <tr>
+    <td>{{ c.name }}{% if c.profile_url %} · <a href="{{ c.profile_url }}"
+        target="_blank">profile ↗</a>{% endif %}</td>
+    <td>{{ c.followers }}</td>
+    <td class="note">{{ c.verified_reason or '—' }}</td>
+    <td class="micro">{{ c.uid }}</td>
+    <td>
+      <form class="inline" method="post"
+            action="/resolve/{{ brand.key }}/{{ platform }}/confirm">
+        <input type="hidden" name="uid" value="{{ c.uid }}">
+        <input type="hidden" name="name" value="{{ c.name }}">
+        <button type="submit">Confirm</button>
+      </form>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+
+<hr class="rule">
+<h2>Manual entry</h2>
+<form method="post" action="/resolve/{{ brand.key }}/{{ platform }}/confirm"
+      class="row-flex" style="max-width:700px">
+  <input type="text" name="uid" placeholder="internal id (uid / sec_uid / user_id / gh_… / v2_…@finder)" style="flex:2">
+  <input type="text" name="name" placeholder="display name (optional)" style="flex:1">
+  <button type="submit">Confirm</button>
+</form>
+{% endblock %}

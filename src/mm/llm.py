@@ -74,7 +74,14 @@ def parse_json_loose(text: str):
 class LLM:
     def __init__(self, settings: Settings | None = None):
         self.settings = settings or Settings.load()
-        self.client = anthropic.Anthropic(api_key=self.settings.anthropic_api_key)
+        # Pin the base URL: a stray ANTHROPIC_BASE_URL in the environment must
+        # not silently reroute calls made with the app's own API key.
+        # Override deliberately with MM_ANTHROPIC_BASE_URL if ever needed.
+        import os
+        base_url = os.environ.get("MM_ANTHROPIC_BASE_URL",
+                                  "https://api.anthropic.com")
+        self.client = anthropic.Anthropic(
+            api_key=self.settings.anthropic_api_key, base_url=base_url)
         self.model = self.settings.model
 
     def call_json(self, prompt_name: str, variables: dict, *,
