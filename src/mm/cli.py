@@ -340,9 +340,12 @@ def deploy():
                    f"re-run `mm deploy` when it's back.")
         raise typer.Exit(1)
     try:
-        my_apps = {a.get("Name") or a.get("name") for a in _json.loads(lst.stdout)}
+        # a brand-new Fly account yields the literal JSON `null`
+        apps_json = _json.loads(lst.stdout or "null") or []
     except ValueError:
-        my_apps = set()
+        apps_json = []
+    my_apps = {(a.get("Name") or a.get("name"))
+               for a in apps_json if isinstance(a, dict)}
 
     if app_name not in my_apps:
         name = None
