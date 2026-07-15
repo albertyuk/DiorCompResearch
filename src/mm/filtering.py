@@ -50,6 +50,8 @@ def filter_month(engine, llm: LLM, cfg: BrandsConfig, month: str,
             # transient API failure: record nothing — the post stays
             # unfiltered and the next `mm filter` run picks it up cheaply
             stats["errors"] += 1
+            if progress:
+                progress(stats)   # failures must move the progress line too
             continue
         keep = bool(verdict.get("keep"))
         conf = float(verdict.get("confidence") or 0)

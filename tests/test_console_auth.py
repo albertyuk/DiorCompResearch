@@ -257,6 +257,31 @@ def test_status_reports_interrupted_phase(authed_app, tmp_db):
         del mconsole.TASKS["2026-06:ingest_filter"]
 
 
+def test_filter_progress_fires_on_llm_errors(tmp_db):
+    # every LLM call failing must still move the progress line (paid retries
+    # were previously invisible: cost climbed while the UI froze)
+    from mm import filtering
+    from mm.config import BrandsConfig
+    with tmp_db.get_engine().begin() as conn:
+        tmp_db.upsert(conn, tmp_db.posts, {
+            "post_id": "weibo:BOOM", "month": "2026-06", "brand": "lv",
+            "platform": "weibo", "url": "https://weibo.com/1/BOOM",
+            "created_at": "2026-06-05T12:00:00+08:00", "caption": "x",
+            "at_tags": "[]", "hashtags": "[]", "media": "[]",
+            "is_repost": False, "repost_ambiguous": False}, ["post_id"])
+
+    class BoomLLM:
+        def call_json(self, *a, **k):
+            raise RuntimeError("api down")
+
+    seen = []
+    stats = filtering.filter_month(tmp_db.get_engine(), BoomLLM(),
+                                   BrandsConfig.load(), "2026-06",
+                                   progress=lambda s: seen.append(dict(s)))
+    assert stats["errors"] == 1
+    assert seen and seen[-1]["errors"] == 1
+
+
 def test_hosted_account_overrides_overlay(tmp_path, monkeypatch):
     import mm.config as mconfig
     monkeypatch.setattr(mconfig, "IS_HOSTED", True)

@@ -81,7 +81,10 @@ def run_filter(month: str, brand_keys: list[str] | None = None,
     def note(stats):
         if progress:
             done = stats["filtered"] + stats["errors"]
-            progress(f"filter · {done}/{stats.get('pending', stats['total'])} posts")
+            msg = f"filter · {done}/{stats.get('pending', stats['total'])} posts"
+            if stats["errors"]:
+                msg += f" · {stats['errors']} failed so far"
+            progress(msg)
 
     try:
         stats = filtering.filter_month(engine, llm, cfg, month,
