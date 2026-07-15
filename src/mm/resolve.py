@@ -120,7 +120,32 @@ def unresolved_accounts(cfg: BrandsConfig) -> list[dict]:
                             "platform": platform,
                             "lookup_query": acct.lookup_query or acct.screen_name
                                             or brand.display_name,
-                            "note": acct.note})
+                            "note": acct.note,
+                            "blocking": platform == "weibo"
+                                        and not can_ingest_weibo(acct)})
+    return out
+
+
+def can_ingest_weibo(acct) -> bool:
+    """A Weibo account is ingestable if it has a uid, or is 'verified' with a
+    vanity_url we can auto-resolve the uid from at first ingest. Only accounts
+    that fail both genuinely need Phase R confirmation before a run."""
+    if acct is None:
+        return False
+    return bool(acct.uid) or (acct.status == "verified" and bool(acct.vanity_url))
+
+
+def weibo_blockers(cfg: BrandsConfig) -> list[dict]:
+    """Weibo accounts that actually block a run (neither resolved nor
+    auto-resolvable) — e.g. a 'resolve'-status account with no vanity_url."""
+    out = []
+    for brand in cfg.brands:
+        acct = brand.account("weibo")
+        if not can_ingest_weibo(acct):
+            out.append({"brand": brand.key, "brand_display": brand.display_name,
+                        "lookup_query": (acct.lookup_query or acct.screen_name
+                                         or brand.display_name) if acct
+                                        else brand.display_name})
     return out
 
 

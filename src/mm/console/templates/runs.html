@@ -2,17 +2,24 @@
 {% set active = 'runs' %}
 {% block content %}
 
+{% if msg %}<div class="banner">{{ msg }}</div>{% endif %}
+
 {% if unresolved %}
-<h2>Account confirmation required</h2>
-<p class="note">These accounts are still <em>resolve</em> — ingest refuses to run
-until each is confirmed. Click one to look up candidates via TikHub, then confirm
-the match (it is written back into <code>config/brands.yaml</code>).</p>
+<h2>Accounts</h2>
+<p class="note">Accounts marked <span class="pill err">required</span> must be
+confirmed before a run can start (Weibo is the ingestion source). The rest are
+<span class="pill">optional</span> — resolve them to populate the SOCIAL column,
+or skip them. Click <strong>Resolve</strong> to look up candidates via TikHub and
+confirm the match; the ID is written into <code>config/brands.yaml</code>, so this
+is a one-time step — commit that file and teammates never see it.</p>
 <table class="grid" style="max-width:900px">
-  <tr><th>Brand</th><th>Platform</th><th>Lookup query</th><th></th></tr>
+  <tr><th>Brand</th><th>Platform</th><th></th><th>Lookup query</th><th></th></tr>
   {% for u in unresolved %}
   <tr id="row-{{ u.brand }}-{{ u.platform }}">
     <td>{{ u.brand_display }}</td>
     <td class="micro">{{ u.platform }}</td>
+    <td>{% if u.blocking %}<span class="pill err">required</span>
+        {% else %}<span class="pill">optional</span>{% endif %}</td>
     <td>{{ u.lookup_query }}</td>
     <td><a class="btn" href="/resolve/{{ u.brand }}/{{ u.platform }}">Resolve</a></td>
   </tr>

@@ -18,7 +18,8 @@ from sqlalchemy import func, select
 from .. import db, pipeline
 from ..config import DATA_DIR, OUTPUT_DIR, BrandsConfig, Settings
 from ..dates import previous_month
-from ..resolve import confirm_account, lookup_candidates, unresolved_accounts
+from ..resolve import (confirm_account, lookup_candidates, unresolved_accounts,
+                       weibo_blockers)
 from ..tikhub import TikHubClient
 
 TEMPLATES = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
@@ -67,7 +68,7 @@ def create_app() -> FastAPI:
     # ---------- pages ----------
 
     @app.get("/", response_class=HTMLResponse)
-    def runs_view(request: Request):
+    def runs_view(request: Request, msg: str = ""):
         cfg = BrandsConfig.load()
         engine = db.get_engine()
         months = []
@@ -77,7 +78,7 @@ def create_app() -> FastAPI:
                                "cost": db.cost_summary(conn, row["month"])})
         return TEMPLATES.TemplateResponse(request, "runs.html", {
             "months": months, "default_month": previous_month(),
-            "unresolved": unresolved_accounts(cfg), "tasks": TASKS})
+            "unresolved": unresolved_accounts(cfg), "msg": msg, "tasks": TASKS})
 
     @app.get("/review/{month}", response_class=HTMLResponse)
     @app.get("/review/{month}/posts", response_class=HTMLResponse)
@@ -159,11 +160,14 @@ def create_app() -> FastAPI:
 
     @app.post("/runs/{month}/start")
     def start_run(month: str):
+        from urllib.parse import quote
         cfg = BrandsConfig.load()
-        missing = [u for u in unresolved_accounts(cfg) if u["platform"] == "weibo"]
-        if missing:
-            return JSONResponse({"error": "unresolved weibo accounts",
-                                 "accounts": missing}, status_code=409)
+        blockers = weibo_blockers(cfg)
+        if blockers:
+            names = ", ".join(b["brand_display"] for b in blockers)
+            msg = quote(f"Can't start {month} yet — confirm the Weibo account "
+                        f"for {names} in the list below, then Start again.")
+            return RedirectResponse(f"/?msg={msg}", status_code=303)
         _spawn(month, "ingest_filter", _ingest_and_filter, month)
         return RedirectResponse("/", status_code=303)
 
