@@ -473,6 +473,68 @@ def test_celeb_image_library_upload_and_delete(client, tmp_db):
                        data={"idx": 5}).status_code == 400
 
 
+# ── registry/media RMW writes serialize with the pipeline locks ──────────────
+
+def test_celeb_update_waits_for_registry_lock(client, tmp_db):
+    """relations_json is read-modify-written by BOTH enrichment (behind
+    _REG_LOCK) and the console — a console edit landing inside an enrich
+    read→write window was silently lost. The route must join the lock."""
+    import threading
+    from mm import enrich
+    client.post("/celebs/new", data={"name_cn": "王一博"})
+    with tmp_db.get_engine().connect() as conn:
+        cid = conn.execute(select(tmp_db.celeb_registry.c.id)).scalar()
+    done = []
+
+    def edit():
+        r = client.post(f"/celebs/{cid}/update",
+                        data={"name_cn": "王一博", "name_en": "WY",
+                              "occupation": "", "relation_gucci": "brand friend"},
+                        follow_redirects=False)
+        done.append(r.status_code)
+
+    t = threading.Thread(target=edit, daemon=True)
+    with enrich._REG_LOCK:            # enrichment mid-registry-write
+        t.start()
+        t.join(0.6)
+        assert t.is_alive() and not done      # edit waits, is not interleaved
+    t.join(8)
+    assert done == [303]
+    with tmp_db.get_engine().connect() as conn:
+        rel = json.loads(conn.execute(
+            select(tmp_db.celeb_registry.c.relations_json)).scalar())
+    assert rel["gucci"]["relation"] == "BRAND FRIEND"
+
+
+def test_media_select_waits_for_media_lock(client, tmp_db, tmp_path):
+    """posts.media is read-modify-written by media_select and media_upload —
+    both must serialize behind the console media lock."""
+    import threading
+    import mm.console as console_mod
+    img = tmp_path / "i.jpg"
+    img.write_bytes(b"\xff\xd8\xff")
+    _post(tmp_db, "weibo:ML1", keep=True,
+          media=[{"kind": "image", "local_path": str(img)}])
+    done = []
+
+    def tick():
+        r = client.post("/review/2026-06/posts/weibo:ML1/media/select",
+                        data={"idx": 0, "selected": "true"})
+        done.append(r.status_code)
+
+    t = threading.Thread(target=tick, daemon=True)
+    with console_mod._MEDIA_LOCK:     # an upload mid-merge
+        t.start()
+        t.join(0.6)
+        assert t.is_alive() and not done
+    t.join(8)
+    assert done == [200]
+    with tmp_db.get_engine().connect() as conn:
+        media = json.loads(conn.execute(select(tmp_db.posts.c.media).where(
+            tmp_db.posts.c.post_id == "weibo:ML1")).scalar())
+    assert media[0]["selected"] is True
+
+
 # ── renderer: celeb library images + platform members ────────────────────────
 
 def test_visuals_use_celeb_library_and_skip_unticked_platform_posts(tmp_db, tmp_path):

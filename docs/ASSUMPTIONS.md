@@ -407,6 +407,17 @@ each is easy to revisit.
     raster still runs by default. (c) run_qa parses the deck once instead of
     three times.
 
+62. **RMW serialization (architecture review)**: every read-modify-write of a
+    JSON blob now serializes behind an in-process lock — celeb registry rows
+    (relations_json/images_json) behind enrich._REG_LOCK from the console
+    routes too (previously a console edit landing inside an enrichment
+    read→write window was silently lost), and posts.media behind a console
+    _MEDIA_LOCK shared by media_select and media_upload. Async routes run
+    their locked sections via run_in_threadpool so the event loop never
+    blocks on a threading.Lock. In-process locking is sufficient by design:
+    the console process is the only writer (#CO-01); concurrent CLI writes
+    against a live hosted DB remain out of contract.
+
 ## Testing
 
 25. The ~15 caption fixtures test the deterministic layers (@-tag extraction,

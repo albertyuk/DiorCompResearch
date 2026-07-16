@@ -29,6 +29,11 @@ TEMPLATES = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 # background task registry: {(month, phase): {"state": .., "detail": ..}}
 TASKS: dict = {}
+# posts.media is a JSON blob edited read-modify-write by media_select and
+# media_upload — concurrent edits (two reviewers, or a double-click racing an
+# upload) must serialize or one edit is silently lost. In-process lock is
+# sufficient: the console process is the only writer by design.
+_MEDIA_LOCK = threading.Lock()
 # cooperative-stop flags per task key; kept out of TASKS so the status
 # endpoint's JSON never has to serialize an Event
 STOP_EVENTS: dict[str, threading.Event] = {}
@@ -568,7 +573,7 @@ def create_app() -> FastAPI:
         """Checkbox next to an image: exactly the ticked images render into
         the slide for this post (untick all → automatic card/screenshot)."""
         engine = db.get_engine()
-        with engine.begin() as conn:
+        with _MEDIA_LOCK, engine.begin() as conn:
             row = conn.execute(select(db.posts).where(
                 db.posts.c.post_id == post_id)).mappings().first()
             if row is None:
@@ -637,17 +642,27 @@ def create_app() -> FastAPI:
                               "local_path": str(path), "source": "upload",
                               "selected": True})
             added += 1
-        with engine.begin() as conn:
-            fresh = conn.execute(select(db.posts.c.media).where(
-                db.posts.c.post_id == post_id)).scalar()
-            media = json.loads(fresh or "[]")
-            have = {m.get("local_path") for m in media}
-            media.extend(m for m in new_items if m["local_path"] not in have)
-            conn.execute(db.posts.update()
-                         .where(db.posts.c.post_id == post_id)
-                         .values(media=json.dumps(media, ensure_ascii=False)))
-            db.audit(conn, _actor(request), "media_upload", "post",
-                     f"{post_id} (+{added})")
+        from starlette.concurrency import run_in_threadpool
+        actor = _actor(request)
+
+        def merge():
+            # posts.media is RMW-shared with media_select — same lock; runs
+            # in the threadpool so the event loop never blocks on it
+            with _MEDIA_LOCK, engine.begin() as conn:
+                fresh = conn.execute(select(db.posts.c.media).where(
+                    db.posts.c.post_id == post_id)).scalar()
+                media = json.loads(fresh or "[]")
+                have = {m.get("local_path") for m in media}
+                media.extend(m for m in new_items
+                             if m["local_path"] not in have)
+                conn.execute(db.posts.update()
+                             .where(db.posts.c.post_id == post_id)
+                             .values(media=json.dumps(media,
+                                                      ensure_ascii=False)))
+                db.audit(conn, actor, "media_upload", "post",
+                         f"{post_id} (+{added})")
+
+        await run_in_threadpool(merge)
         return JSONResponse({"ok": True, "added": added})
 
     @app.post("/review/{month}/posts/confirm")
@@ -1069,45 +1084,59 @@ def create_app() -> FastAPI:
     @app.post("/celebs/{celeb_id}/update")
     async def celeb_update(request: Request, celeb_id: int):
         from urllib.parse import quote
+        from starlette.concurrency import run_in_threadpool
+        from ..enrich import _REG_LOCK
         cfg = BrandsConfig.load()
         form = dict(await request.form())
-        with db.get_engine().begin() as conn:
-            row = conn.execute(select(db.celeb_registry).where(
-                db.celeb_registry.c.id == celeb_id)).mappings().first()
-            if row is None:
-                return JSONResponse({"error": "unknown celeb"}, status_code=404)
-            relations = json.loads(row["relations_json"] or "{}")
-            for brand in cfg.brands:
-                key = f"relation_{brand.key}"
-                if key not in form:
-                    continue
-                rel = form[key].strip()
-                if rel:
-                    prev = relations.get(brand.key, {})
-                    relations[brand.key] = {
-                        **prev, "relation": rel.upper(),
-                        "verified": form.get(f"verified_{brand.key}") == "on"}
-                else:
-                    relations.pop(brand.key, None)
-            values = {"name_en": form.get("name_en", "").strip() or None,
-                      "occupation": form.get("occupation", "").strip() or None,
-                      "relations_json": json.dumps(relations,
-                                                   ensure_ascii=False)}
-            new_name = form.get("name_cn", "").strip()
-            if new_name and new_name != row["name_cn"]:
-                dup = conn.execute(select(db.celeb_registry.c.id).where(
-                    db.celeb_registry.c.name_cn == new_name)).first()
-                if dup:
-                    return RedirectResponse(
-                        f"/celebs?msg={quote(f'{new_name} already exists')}",
-                        status_code=303)
-                values["name_cn"] = new_name
-            conn.execute(db.celeb_registry.update()
-                         .where(db.celeb_registry.c.id == celeb_id)
-                         .values(**values))
-            db.audit(conn, _actor(request), "celeb_edit", "celeb",
-                     values.get("name_cn", row["name_cn"]))
-        return RedirectResponse("/celebs", status_code=303)
+        actor = _actor(request)
+
+        # relations_json is read-modify-written here AND by enrichment
+        # threads (which serialize behind _REG_LOCK) — a console edit landing
+        # between an enrich read and write would be silently lost, so this
+        # route joins the same lock. The locked section runs in the
+        # threadpool: an async route must never block the event loop on a
+        # threading.Lock.
+        def commit() -> str:
+            with _REG_LOCK, db.get_engine().begin() as conn:
+                row = conn.execute(select(db.celeb_registry).where(
+                    db.celeb_registry.c.id == celeb_id)).mappings().first()
+                if row is None:
+                    return "notfound"
+                relations = json.loads(row["relations_json"] or "{}")
+                for brand in cfg.brands:
+                    key = f"relation_{brand.key}"
+                    if key not in form:
+                        continue
+                    rel = form[key].strip()
+                    if rel:
+                        prev = relations.get(brand.key, {})
+                        relations[brand.key] = {
+                            **prev, "relation": rel.upper(),
+                            "verified": form.get(f"verified_{brand.key}") == "on"}
+                    else:
+                        relations.pop(brand.key, None)
+                values = {"name_en": form.get("name_en", "").strip() or None,
+                          "occupation": form.get("occupation", "").strip() or None,
+                          "relations_json": json.dumps(relations,
+                                                       ensure_ascii=False)}
+                new_name = form.get("name_cn", "").strip()
+                if new_name and new_name != row["name_cn"]:
+                    dup = conn.execute(select(db.celeb_registry.c.id).where(
+                        db.celeb_registry.c.name_cn == new_name)).first()
+                    if dup:
+                        return f"/celebs?msg={quote(f'{new_name} already exists')}"
+                    values["name_cn"] = new_name
+                conn.execute(db.celeb_registry.update()
+                             .where(db.celeb_registry.c.id == celeb_id)
+                             .values(**values))
+                db.audit(conn, actor, "celeb_edit", "celeb",
+                         values.get("name_cn", row["name_cn"]))
+                return "/celebs"
+
+        outcome = await run_in_threadpool(commit)
+        if outcome == "notfound":
+            return JSONResponse({"error": "unknown celeb"}, status_code=404)
+        return RedirectResponse(outcome, status_code=303)
 
     @app.post("/celebs/{celeb_id}/images/upload")
     async def celeb_image_upload(request: Request, celeb_id: int):
@@ -1141,22 +1170,33 @@ def create_app() -> FastAPI:
                                  f"{_hashlib.sha1(data).hexdigest()[:16]}{ext}")
             path.write_bytes(data)
             new_paths.append(str(path))
-        with engine.begin() as conn:
-            fresh = conn.execute(select(db.celeb_registry.c.images_json).where(
-                db.celeb_registry.c.id == celeb_id)).scalar()
-            images = json.loads(fresh or "[]")
-            images.extend(p for p in new_paths if p not in images)
-            conn.execute(db.celeb_registry.update()
-                         .where(db.celeb_registry.c.id == celeb_id)
-                         .values(images_json=json.dumps(images)))
-            db.audit(conn, _actor(request), "celeb_image_upload", "celeb",
-                     f"{row['name_cn']} (+{len(new_paths)})")
+        from starlette.concurrency import run_in_threadpool
+        from ..enrich import _REG_LOCK
+        actor = _actor(request)
+
+        def merge():
+            # registry rows are RMW-shared with enrichment — same lock; runs
+            # in the threadpool so the event loop never blocks on it
+            with _REG_LOCK, engine.begin() as conn:
+                fresh = conn.execute(
+                    select(db.celeb_registry.c.images_json).where(
+                        db.celeb_registry.c.id == celeb_id)).scalar()
+                images = json.loads(fresh or "[]")
+                images.extend(p for p in new_paths if p not in images)
+                conn.execute(db.celeb_registry.update()
+                             .where(db.celeb_registry.c.id == celeb_id)
+                             .values(images_json=json.dumps(images)))
+                db.audit(conn, actor, "celeb_image_upload", "celeb",
+                         f"{row['name_cn']} (+{len(new_paths)})")
+
+        await run_in_threadpool(merge)
         return JSONResponse({"ok": True, "added": len(new_paths)})
 
     @app.post("/celebs/{celeb_id}/images/delete")
     def celeb_image_delete(request: Request, celeb_id: int,
                            idx: int = Form(...)):
-        with db.get_engine().begin() as conn:
+        from ..enrich import _REG_LOCK
+        with _REG_LOCK, db.get_engine().begin() as conn:
             row = conn.execute(select(db.celeb_registry).where(
                 db.celeb_registry.c.id == celeb_id)).mappings().first()
             if row is None:
