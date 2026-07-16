@@ -624,6 +624,54 @@ def test_run_render_reports_progress(tmp_db, monkeypatch, tmp_path):
     assert status == "rendered" and phases["render"] == "done"
 
 
+def test_run_render_builds_visuals_in_parallel(tmp_db, monkeypatch, tmp_path):
+    import threading
+    from pathlib import Path
+    import mm.render.deck as deck_mod
+    import mm.render.qa as qa_mod
+    import mm.render.visuals as vis_mod
+    import mm.render.xlsx as xlsx_mod
+    from mm import pipeline
+
+    barrier = threading.Barrier(3, timeout=8)
+
+    class BarrierFactory:
+        def __init__(self, month, mode=None):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def visual_for_post(self, brand, post):
+            barrier.wait()          # deadlocks unless 3 projects run at once
+            return None
+
+    class FakeBuilder:
+        def build(self, spec, out):
+            Path(out).write_bytes(b"pptx")
+
+    # three confirmed single-post projects; posts carry no selected images so
+    # the factory is exercised
+    for i in range(3):
+        _post(tmp_db, f"weibo:PAR{i}", keep=True,
+              created=f"2026-06-0{i + 1}T10:00:00+08:00")
+        pid = _project(tmp_db, f"PROJECT {i}", post_ids=(f"weibo:PAR{i}",))
+        with tmp_db.get_engine().begin() as conn:
+            conn.execute(tmp_db.projects.update()
+                         .where(tmp_db.projects.c.id == pid)
+                         .values(status="confirmed"))
+    monkeypatch.setattr(vis_mod, "VisualFactory", BarrierFactory)
+    monkeypatch.setattr(deck_mod, "DeckBuilder", lambda: FakeBuilder())
+    monkeypatch.setattr(xlsx_mod, "write_projects_xlsx", lambda spec, out: out)
+    monkeypatch.setattr(qa_mod, "run_qa", lambda p, d: {"ok": True})
+    monkeypatch.setattr(pipeline, "OUTPUT_DIR", tmp_path)
+    res = pipeline.run_render("2026-06", visuals_mode="card")
+    assert res["qa"]["ok"] is True
+
+
 def test_run_render_cooperative_stop(tmp_db, monkeypatch, tmp_path):
     from mm import pipeline
     import mm.render.deck as deck_mod

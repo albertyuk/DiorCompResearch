@@ -381,6 +381,17 @@ each is easy to revisit.
     visibly moving; (c) Stop is honored between posts, not just between
     projects.
 
+60. **Parallel render (owner request)**: visual assembly — the slow part of
+    the render — now fans projects out across RENDER_WORKERS=4 threads
+    (MM_RENDER_WORKERS overrides). Sync Playwright objects are strictly
+    single-threaded, so each worker thread owns its own headless Chromium
+    (~150-200MB; fits the 2GB Fly VM, and all browsers close before the
+    LibreOffice QA raster starts). Deck order is reassembled from (brand,
+    project) indexes, progress stays a global i/N with per-post detail, and
+    Stop still bails between posts. This supersedes the "live/card visual
+    rendering deliberately sequential" clause of #52. Deck composition,
+    XLSX, and the QA raster remain single-threaded (fast or subprocess).
+
 ## Testing
 
 25. The ~15 caption fixtures test the deterministic layers (@-tag extraction,

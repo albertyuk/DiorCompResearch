@@ -19,6 +19,13 @@ from .llm import LLM
 from .tikhub import TikHubClient
 
 
+# concurrent visual-assembly workers for the render phase — each owns a
+# headless Chromium (~150-200MB; the 2GB Fly VM fits the default comfortably
+# and the browsers close before LibreOffice QA starts). MM_RENDER_WORKERS
+# overrides.
+RENDER_WORKERS = 4
+
+
 def _matches_path(month: str, brand_key: str) -> Path:
     p = RUNS_DIR / month / brand_key
     p.mkdir(parents=True, exist_ok=True)
@@ -425,13 +432,15 @@ def run_render(month: str, *, visuals_mode: str | None = None,
         if progress:
             progress(msg)
 
+    import os
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
     cfg = BrandsConfig.load()
     engine = db.get_engine()
     _set_phase(engine, month, "render", "running")
-    brands_spec: list[BrandSpec] = []
-    with engine.connect() as conn, \
-            VisualFactory(month, mode=visuals_mode) as factory:
-        # collect first so progress can report a real i/N over all projects
+    # collect first so progress can report a real i/N over all projects
+    with engine.connect() as conn:
         brand_rows = []
         for brand in cfg.brands:
             q = select(db.projects).where(db.projects.c.month == month,
@@ -441,54 +450,90 @@ def run_render(month: str, *, visuals_mode: str | None = None,
                 q = q.where(db.projects.c.status != "draft")
             brand_rows.append((brand, [dict(r) for r in conn.execute(
                 q.order_by(db.projects.c.date_start)).mappings()]))
-        total = sum(len(rows) for _, rows in brand_rows)
-        done = 0
-        note(f"render · visuals 0/{total} projects ({visuals_mode} mode)")
-        for brand, rows in brand_rows:
-            projects = []
-            for p in rows:
-                # cooperative stop: finished visuals are cached on disk per
-                # post, so a stopped render re-runs quickly
-                if should_stop and should_stop():
-                    note("render · stopped — nothing written; "
-                         "Confirm & render restarts")
-                    _set_phase(engine, month, "render",
-                               "stopped — Confirm & render restarts")
-                    return {"stopped": True, "visuals_done": done,
-                            "visuals_total": total}
-                # the slow part is per-project visual assembly (screenshots /
-                # card composition) — narrate before, count after
-                head = (f"render · visuals {done}/{total} · "
-                        f"{brand.key} {p['title'][:44]}")
-                note(head)
-                celebs = json.loads(p["celebs"] or "[]")
-                plats = [r["platform"] for r in conn.execute(
-                    select(db.platform_matches)
-                    .where(db.platform_matches.c.project_id == p["id"],
-                           db.platform_matches.c.present.is_(True))).mappings()]
-                vis = _project_visuals(conn, factory, brand.key, p, celebs,
-                                       note=(lambda msg, h=head:
-                                             note(f"{h} · {msg}")),
-                                       should_stop=should_stop)
-                done += 1
-                note(f"render · visuals {done}/{total} projects")
-                projects.append(ProjectSpec(
-                    title=p["title"], phase_suffix=p["phase_suffix"],
-                    date_start=p["date_start"] or f"{month}-01",
-                    date_end=p["date_end"],
-                    ongoing=bool(p["ongoing"]), assets=p["assets"],
-                    platforms=plats or ["weibo"],
-                    description=p["description"] or p["title"],
-                    visuals=[Visual(**v) for v in vis]))
-            if projects:
-                brands_spec.append(BrandSpec(key=brand.key,
-                                             display_name=brand.display_name,
-                                             projects=projects))
+    total = sum(len(rows) for _, rows in brand_rows)
+    note(f"render · visuals 0/{total} projects ({visuals_mode} mode)")
+
+    # projects render in parallel: each is an independent read + Playwright
+    # composition. Sync Playwright objects are single-threaded, so every
+    # worker THREAD owns its own factory (browser); deck order is restored
+    # from (brand index, project index) afterwards.
+    tasks = [(bi, brand, pi, p)
+             for bi, (brand, rows) in enumerate(brand_rows)
+             for pi, p in enumerate(rows)]
+    state = {"done": 0}
+    lock = threading.Lock()
+    tl = threading.local()
+    factories: list = []
+
+    def thread_factory():
+        f = getattr(tl, "factory", None)
+        if f is None:
+            f = VisualFactory(month, mode=visuals_mode).__enter__()
+            tl.factory = f
+            with lock:
+                factories.append(f)
+        return f
+
+    def build(task):
+        bi, brand, pi, p = task
+        # cooperative stop: finished visuals are cached on disk per post,
+        # so a stopped render re-runs quickly
+        if should_stop and should_stop():
+            return bi, pi, None
+        head = (f"render · visuals {state['done']}/{total} · "
+                f"{brand.key} {p['title'][:44]}")
+        note(head)
+        celebs = json.loads(p["celebs"] or "[]")
+        with engine.connect() as conn:
+            plats = [r["platform"] for r in conn.execute(
+                select(db.platform_matches)
+                .where(db.platform_matches.c.project_id == p["id"],
+                       db.platform_matches.c.present.is_(True))).mappings()]
+            vis = _project_visuals(conn, thread_factory(), brand.key, p,
+                                   celebs,
+                                   note=(lambda msg, h=head:
+                                         note(f"{h} · {msg}")),
+                                   should_stop=should_stop)
+        with lock:
+            state["done"] += 1
+            done_now = state["done"]
+        note(f"render · visuals {done_now}/{total} projects")
+        return bi, pi, ProjectSpec(
+            title=p["title"], phase_suffix=p["phase_suffix"],
+            date_start=p["date_start"] or f"{month}-01",
+            date_end=p["date_end"],
+            ongoing=bool(p["ongoing"]), assets=p["assets"],
+            platforms=plats or ["weibo"],
+            description=p["description"] or p["title"],
+            visuals=[Visual(**v) for v in vis])
+
+    workers = int(os.environ.get("MM_RENDER_WORKERS", RENDER_WORKERS))
+    specs: dict = {}
+    try:
+        if tasks:
+            with ThreadPoolExecutor(
+                    max_workers=max(1, min(workers, len(tasks)))) as ex:
+                for bi, pi, spec in ex.map(build, tasks):
+                    specs[(bi, pi)] = spec
+    finally:
+        # browsers close before the memory-hungry QA raster starts
+        for f in factories:
+            f.__exit__(None, None, None)
+
     if should_stop and should_stop():
         note("render · stopped — nothing written; Confirm & render restarts")
         _set_phase(engine, month, "render",
                    "stopped — Confirm & render restarts")
-        return {"stopped": True, "visuals_done": done, "visuals_total": total}
+        return {"stopped": True, "visuals_done": state["done"],
+                "visuals_total": total}
+    brands_spec: list[BrandSpec] = []
+    for bi, (brand, rows) in enumerate(brand_rows):
+        projects = [specs[(bi, pi)] for pi in range(len(rows))
+                    if specs.get((bi, pi)) is not None]
+        if projects:
+            brands_spec.append(BrandSpec(key=brand.key,
+                                         display_name=brand.display_name,
+                                         projects=projects))
     year, mm_ = month.split("-")
     name = f"_CREATIVE_{year}_{deck_month_token(month)}_PR_COMPETITOR_REPORT_FASHION.pptx"
     out_pptx = OUTPUT_DIR / name
