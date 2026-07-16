@@ -13,7 +13,11 @@ from .config import BrandsConfig
 from .llm import LLM
 
 CONFIDENCE_REVIEW_THRESHOLD = 0.65   # bias to recall
-DEFAULT_FILTER_WORKERS = 4           # concurrent LLM calls (MM_FILTER_WORKERS)
+# Concurrent LLM calls (MM_FILTER_WORKERS overrides). Same model for every
+# call (claude-sonnet-5 default — owner: never downgrade the filter model);
+# throughput comes from concurrency. If the account tier rate-limits, the
+# SDK absorbs 429s with backoff and truly failed posts stay re-runnable.
+DEFAULT_FILTER_WORKERS = 12
 
 
 def filter_month(engine, llm: LLM, cfg: BrandsConfig, month: str,

@@ -89,8 +89,11 @@ class LLM:
         import os
         base_url = os.environ.get("MM_ANTHROPIC_BASE_URL",
                                   "https://api.anthropic.com")
+        # max_retries=4: with a dozen filter calls in flight, transient 429s
+        # must be absorbed by backoff instead of surfacing as failed posts
         self.client = anthropic.Anthropic(
-            api_key=self.settings.anthropic_api_key, base_url=base_url)
+            api_key=self.settings.anthropic_api_key, base_url=base_url,
+            max_retries=4)
         self.model = self.settings.model
 
     def call_json(self, prompt_name: str, variables: dict, *,

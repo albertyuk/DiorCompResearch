@@ -250,13 +250,16 @@ each is easy to revisit.
     name labels under slide visuals are Calibre 9 (link lines keep their
     original size).
 
-50. **The filter runs its LLM calls in parallel** (default 4 in flight,
-    `MM_FILTER_WORKERS` to tune): posts are independent, the Anthropic client
-    is thread-safe, verdicts still commit per post in short transactions, and
-    the stats/progress line updates under a lock. Stop semantics with workers:
-    no NEW posts are dispatched once Stop is pressed; the handful already in
-    flight complete and are saved. 4 workers stays comfortably inside
-    standard-tier Anthropic rate limits.
+50. **The filter runs its LLM calls in parallel** (default 12 in flight,
+    `MM_FILTER_WORKERS` to tune; owner directive — the model stays
+    claude-sonnet-5, never a smaller tier: speed comes from concurrency, not
+    downgrading judgment): posts are independent, the Anthropic client is
+    thread-safe (max_retries=4 so bursts of 429s are absorbed by backoff),
+    verdicts still commit per post in short transactions, and the
+    stats/progress line updates under a lock. Stop semantics with workers:
+    no NEW posts are dispatched once Stop is pressed; those already in
+    flight complete and are saved. If a tight rate limit still fails posts,
+    they stay unfiltered and the next run picks them up.
 
 ## Testing
 
