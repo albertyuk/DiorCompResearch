@@ -9,7 +9,9 @@ labels:
   timezone: Asia/Shanghai
 filters:
   exclude_makeup_skincare: true
-  exclude_fragrance: false
+  # owner directive 2026-07: perfume/fragrance is OUT of scope (supersedes
+  # the original Decision Record's fragrance-IN rule)
+  exclude_fragrance: true
 brands:
 - key: chanel
   display_name: CHANEL

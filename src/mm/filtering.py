@@ -19,6 +19,7 @@ def filter_month(engine, llm: LLM, cfg: BrandsConfig, month: str,
     transaction, so a mid-run crash loses nothing already paid for and the
     console stays writable while this runs. `should_stop()` is checked between
     posts — a stop pauses cleanly and the next run picks up the rest."""
+    from .learn import learned_rules_block
     q = (select(db.posts)
          .where(db.posts.c.month == month, db.posts.c.platform == "weibo"))
     if brand_key:
@@ -27,6 +28,7 @@ def filter_month(engine, llm: LLM, cfg: BrandsConfig, month: str,
         rows = list(conn.execute(q).mappings())
         done = {r["post_id"]
                 for r in conn.execute(select(db.verdicts.c.post_id)).mappings()}
+        learned = learned_rules_block(conn)
     stats = {"total": len(rows), "filtered": 0, "kept": 0, "needs_review": 0,
              "errors": 0, "stopped": False,
              "pending": sum(1 for r in rows if r["post_id"] not in done)}
@@ -50,6 +52,7 @@ def filter_month(engine, llm: LLM, cfg: BrandsConfig, month: str,
                 "at_tags": json.loads(row["at_tags"] or "[]"),
                 "hashtags": json.loads(row["hashtags"] or "[]"),
                 "media_summary": media_summary,
+                "learned_rules": learned,
             }, conn=engine, brand=row["brand"], month=month)
         except Exception:
             # transient API failure: record nothing — the post stays
@@ -64,19 +67,22 @@ def filter_month(engine, llm: LLM, cfg: BrandsConfig, month: str,
         needs_review = conf < CONFIDENCE_REVIEW_THRESHOLD or bool(row["repost_ambiguous"])
         if not keep and conf < CONFIDENCE_REVIEW_THRESHOLD:
             keep, needs_review = True, True    # bias to recall
-        # deterministic cosmetics signal (fragrance stays IN) — disagreement
-        # with the LLM verdict always surfaces for human review
+        # deterministic beauty signal — perfume AND makeup/skincare are policy
+        # DROP (owner directive); if the LLM kept one anyway, flag it for the
+        # human rather than silently overriding (flag-not-drop)
         from .naming import cosmetics_signal
         signal = cosmetics_signal(row["caption"] or "")
-        if signal == "makeup_skincare" and keep:
+        if signal and keep:
             needs_review = True
+            label = "perfume" if signal == "fragrance" else "makeup/skincare"
             verdict.setdefault("reasons", []).append(
-                "keyword signal: makeup/skincare terms present")
+                f"keyword signal: {label} terms present — policy is DROP")
         with engine.begin() as wconn:
             db.upsert(wconn, db.verdicts, {
                 "post_id": row["post_id"], "keep": keep, "confidence": conf,
                 "reasons": json.dumps(verdict.get("reasons") or [],
                                       ensure_ascii=False),
+                "rationale": str(verdict.get("rationale") or "")[:2000],
                 "celebs_tagged": json.dumps(verdict.get("celebs_tagged") or [],
                                             ensure_ascii=False),
                 "category": verdict.get("category") or "other",

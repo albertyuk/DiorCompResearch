@@ -276,6 +276,87 @@ def create_app() -> FastAPI:
             "confirmed_by": confirmed_by, "rendered_by": rendered_by,
             "default_visuals": DEFAULT_VISUALS, "busy": busy})
 
+    @app.get("/archives", response_class=HTMLResponse)
+    def archives_view(request: Request):
+        with db.get_engine().connect() as conn:
+            items = db.list_archives(conn)
+        return TEMPLATES.TemplateResponse(request, "archives.html",
+                                          {"items": items})
+
+    @app.get("/archives/{archive_id}", response_class=HTMLResponse)
+    def archive_detail(request: Request, archive_id: int):
+        cfg = BrandsConfig.load()
+        with db.get_engine().connect() as conn:
+            meta = conn.execute(select(db.archives).where(
+                db.archives.c.id == archive_id)).mappings().first()
+            if meta is None:
+                return HTMLResponse("archive not found", status_code=404)
+            rows = conn.execute(select(db.archive_rows).where(
+                db.archive_rows.c.archive_id == archive_id)).mappings().all()
+        by_tbl: dict[str, list] = {}
+        for r in rows:
+            by_tbl.setdefault(r["tbl"], []).append(json.loads(r["row"]))
+        verdicts_by_post = {v["post_id"]: v for v in by_tbl.get("verdicts", [])}
+        groups = []
+        for brand in cfg.brands:
+            posts = []
+            for p in by_tbl.get("posts", []):
+                if p.get("brand") != brand.key:
+                    continue
+                v = verdicts_by_post.get(p["post_id"], {})
+                media = json.loads(p.get("media") or "[]")
+                decision = v.get("human_decision")
+                keep = v.get("keep") if decision is None else decision == "keep"
+                posts.append({
+                    **p, "verdict": v,
+                    "thumb": next((m.get("local_path") for m in media
+                                   if m.get("local_path")), None),
+                    "effective_keep": keep})
+            posts.sort(key=lambda p: p.get("created_at") or "")
+            if posts:
+                groups.append({"brand": brand, "posts": posts})
+        return TEMPLATES.TemplateResponse(request, "archive_detail.html", {
+            "meta": dict(meta), "groups": groups,
+            "projects": by_tbl.get("projects", [])})
+
+    @app.get("/learning", response_class=HTMLResponse)
+    def learning_view(request: Request, msg: str = ""):
+        from .. import learn
+        with db.get_engine().connect() as conn:
+            rules = learn.current_rules(conn)
+            feedback = [dict(r) for r in conn.execute(
+                select(db.filter_feedback)
+                .order_by(db.filter_feedback.c.id.desc())
+                .limit(100)).mappings()]
+            history = [dict(r) for r in conn.execute(
+                select(db.learned_rules)
+                .order_by(db.learned_rules.c.id.desc())
+                .limit(10)).mappings()]
+        pending = 0
+        if feedback:
+            since = rules["feedback_through"] if rules else 0
+            pending = sum(1 for f in feedback if f["id"] > since)
+        return TEMPLATES.TemplateResponse(request, "learning.html", {
+            "rules": rules, "feedback": feedback, "history": history,
+            "pending": pending, "msg": msg})
+
+    @app.post("/learning/update")
+    def learning_update(request: Request):
+        from urllib.parse import quote
+        from .. import learn
+        from ..llm import LLM
+        try:
+            upd = learn.synthesize_rules(db.get_engine(), LLM(),
+                                         actor=_actor(request))
+        except Exception as e:
+            return RedirectResponse(
+                f"/learning?msg={quote(f'Update failed: {str(e)[:200]}')}",
+                status_code=303)
+        msg = (f"Learned rules updated from {upd['corrections']} corrections: "
+               f"{upd['summary']}" if upd else
+               "No new corrections since the last update.")
+        return RedirectResponse(f"/learning?msg={quote(msg)}", status_code=303)
+
     @app.get("/decks", response_class=HTMLResponse)
     def decks_view(request: Request):
         files = sorted(OUTPUT_DIR.glob("*.pptx")) + sorted(OUTPUT_DIR.glob("*.xlsx"))
@@ -360,13 +441,16 @@ def create_app() -> FastAPI:
     @app.post("/review/{month}/posts/{post_id}/decision")
     def post_decision(request: Request, month: str, post_id: str,
                       decision: str = Form(...)):
+        from ..learn import record_feedback
         engine = db.get_engine()
         with engine.begin() as conn:
-            exists = conn.execute(select(db.posts.c.post_id)
-                                  .where(db.posts.c.post_id == post_id)).first()
-            if exists is None:
+            post_row = conn.execute(select(db.posts).where(
+                db.posts.c.post_id == post_id)).mappings().first()
+            if post_row is None:
                 return JSONResponse({"error": f"unknown post {post_id}"},
                                     status_code=404)
+            verdict_row = conn.execute(select(db.verdicts).where(
+                db.verdicts.c.post_id == post_id)).mappings().first()
             value = None if decision == "restore" else decision
             # upsert: a post whose LLM verdict failed (no verdicts row yet)
             # must still take a human decision — and the audit row must only
@@ -375,6 +459,9 @@ def create_app() -> FastAPI:
                 "post_id": post_id, "human_decision": value,
                 "decided_at": db.now_iso(), "decided_by": _actor(request),
             }, ["post_id"])
+            # the self-tuning catalogue: what the LLM said vs what the human did
+            record_feedback(conn, post_row, verdict_row, decision,
+                            _actor(request))
             db.audit(conn, _actor(request), f"post_{decision}", "post", post_id)
         return RedirectResponse(f"/review/{month}/posts", status_code=303)
 

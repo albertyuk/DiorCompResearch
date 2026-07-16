@@ -102,6 +102,17 @@ def run_filter(month: str, brand_keys: list[str] | None = None,
     engine = db.get_engine()
     _set_phase(engine, month, "filter", "running")
 
+    # self-tuning: fold any new human corrections into the learned guidance
+    # BEFORE filtering, so this run already benefits. Never blocks the run.
+    try:
+        from . import learn
+        upd = learn.synthesize_rules(engine, llm)
+        if upd and progress:
+            progress(f"filter · learned rules updated from "
+                     f"{upd['corrections']} corrections")
+    except Exception:
+        pass
+
     def note(stats):
         if progress:
             done = stats["filtered"] + stats["errors"]

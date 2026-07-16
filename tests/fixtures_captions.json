@@ -121,13 +121,13 @@
   },
   {
     "id": 13,
-    "note": "fragrance — stays IN scope (June deck evidence: LV Scent of Color)",
+    "note": "perfume — policy DROP (owner directive 2026-07), even with a CN celeb",
     "brand": "lv",
     "caption": "路易威登香水系列「色彩之息」全新演绎，@宋茜 以嗅觉旅行开启色彩之境。",
     "expect_at_tags": ["宋茜"],
     "expect_title_map": null,
     "expect_cosmetics_signal": "fragrance",
-    "expect_keep_policy": true
+    "expect_keep_policy": false
   },
   {
     "id": 14,
@@ -151,12 +151,12 @@
   },
   {
     "id": 16,
-    "note": "fragrance english term also in scope",
+    "note": "perfume english term — policy DROP (owner directive 2026-07)",
     "brand": "gucci",
     "caption": "Gucci Flora Gorgeous Gardenia fragrance 古驰绮梦花园淡香氛，走进花园秘境。",
     "expect_at_tags": [],
     "expect_title_map": null,
     "expect_cosmetics_signal": "fragrance",
-    "expect_keep_policy": true
+    "expect_keep_policy": false
   }
 ]

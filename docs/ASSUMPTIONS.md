@@ -1,7 +1,9 @@
 # ASSUMPTIONS — judgment calls made during the one-shot build
 
-Everything the Decision Record locked is implemented as specified. The calls
-below were mine; each is easy to revisit.
+Everything the Decision Record locked is implemented as specified — except
+where a later owner directive superseded it; those reversals are called out
+explicitly (see #46: perfume is now OUT of scope). The calls below were mine;
+each is easy to revisit.
 
 ## Repo & environment
 
@@ -197,6 +199,28 @@ below were mine; each is easy to revisit.
     transactions, per-brand failures stay isolated, and the progress line
     shows a combined per-brand state. Pages within a brand remain sequential
     (cursor pagination is inherently serial).
+
+46. **OWNER DIRECTIVE 2026-07 — supersedes the Decision Record's "fragrance
+    IN" rule**: anything perfume/fragrance related is DROPPED, same as
+    makeup/skincare. The filter prompt's core test was reframed to match the
+    owner's stated logic: *China-market-specific → KEEP; global campaign with
+    no China angle → DROP*, with CN celebrities (especially @-tagged) and
+    specific China locations as strong keep signals. The deterministic
+    keyword layer flags (never silently drops) LLM-kept perfume/beauty posts
+    as needs_review — flag-not-drop still governs machine overrides; the drop
+    itself is the rubric's job.
+
+47. **Self-tuning filter loop**: every human keep/drop/restore is catalogued
+    in `filter_feedback` with the LLM's stance and rationale at decision
+    time. Before each filter run (and on demand from the Learning page), new
+    corrections are distilled (prompts/learn.md) into a short learned-
+    guidance block — appended to the filter prompt via `{{learned_rules}}`,
+    capped at 4 KB, replaced wholesale each synthesis (history kept in
+    `learned_rules`). The base rubric is fixed; the learner is instructed it
+    may refine but never contradict it, may not invent rules unsupported by
+    corrections, and synthesis failures never block a filter run. The model
+    also now returns a `rationale` (3–5 sentences of its thinking), stored on
+    the verdict and shown in review ("why?") and in archives.
 
 ## Testing
 

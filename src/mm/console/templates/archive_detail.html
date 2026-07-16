@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% set active = 'archives' %}
+{% block title %}Archive #{{ meta.id }} · {{ meta.month }}{% endblock %}
+{% block content %}
+<h2 style="margin-top:0">Archive #{{ meta.id }} — {{ meta.month }}
+  <span class="micro">archived {{ meta.archived_at[:16] }} by {{ meta.archived_by }}</span></h2>
+<p class="note">Read-only snapshot of the search as it was when archived.
+Greyed posts were dropped (by the filter or a reviewer) at the time.</p>
+<a class="btn" href="/archives">← All archives</a>
+<hr class="rule">
+
+{% for g in groups %}
+<h2>{{ g.brand.display_name }} <span class="micro">— {{ g.posts|length }} posts</span></h2>
+<table class="grid">
+  <tr><th style="width:96px"></th><th>Post</th><th style="width:260px">Verdict at archive time</th></tr>
+  {% for p in g.posts %}
+  <tr class="{% if not p.effective_keep %}dropped{% endif %}">
+    <td>{% if p.thumb %}<img class="thumb" loading="lazy"
+          src="/media?path={{ p.thumb | urlencode }}">{% endif %}</td>
+    <td>
+      <div class="micro">{{ (p.created_at or '')[:16] }} ·
+        <a href="{{ p.url }}" target="_blank">post ↗</a></div>
+      <div class="caption-cn">{{ (p.caption or '')[:400] }}</div>
+    </td>
+    <td>
+      {% set v = p.verdict %}
+      {% if v %}
+      <span class="pill {% if v.keep %}ok{% else %}err{% endif %}">
+        llm: {{ 'keep' if v.keep else 'drop' }}</span>
+      {% if v.human_decision %}
+      <span class="pill on">human: {{ v.human_decision }}
+        {% if v.decided_by %}({{ v.decided_by }}){% endif %}</span>
+      {% endif %}
+      {% if v.rationale %}
+      <details><summary class="micro" style="cursor:pointer">rationale</summary>
+        <div class="note" style="font-size:11px">{{ v.rationale }}</div></details>
+      {% endif %}
+      {% else %}<span class="micro">no verdict</span>{% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% endfor %}
+
+{% if projects %}
+<h2>Projects at archive time <span class="micro">— {{ projects|length }}</span></h2>
+<table class="grid" style="max-width:1100px">
+  <tr><th>Brand</th><th>Title</th><th>Dates</th><th>Status</th><th>Description</th></tr>
+  {% for p in projects %}
+  <tr>
+    <td class="micro">{{ p.brand }}</td>
+    <td>{{ p.title }}{% if p.phase_suffix %} — {{ p.phase_suffix }}{% endif %}</td>
+    <td class="micro">{{ p.date_start }}{% if p.date_end %} → {{ p.date_end }}{% endif %}</td>
+    <td class="micro">{{ p.status }}</td>
+    <td class="note" style="font-size:11px">{{ (p.description or '')[:160] }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+{% endblock %}

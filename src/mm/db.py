@@ -50,6 +50,7 @@ verdicts = Table(
     Column("keep", Boolean),
     Column("confidence", Float),
     Column("reasons", Text),                            # JSON list
+    Column("rationale", Text),                          # the model's detailed thinking
     Column("celebs_tagged", Text),                      # JSON list
     Column("category", String),
     Column("media_focus", String),
@@ -57,6 +58,34 @@ verdicts = Table(
     Column("human_decision", String),                   # keep|drop|None
     Column("decided_at", String),
     Column("decided_by", String),                       # actor display name
+)
+
+# Every human keep/drop/restore on a post, with what the LLM had said at the
+# time — the training signal for the self-tuning filter prompt.
+filter_feedback = Table(
+    "filter_feedback", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("post_id", String, nullable=False),
+    Column("month", String),
+    Column("brand", String),
+    Column("caption", Text),                            # snippet for the learner
+    Column("llm_keep", Boolean),                        # None = no LLM verdict yet
+    Column("llm_rationale", Text),
+    Column("human_decision", String, nullable=False),   # keep|drop|restore
+    Column("decided_by", String, nullable=False),
+    Column("at", String, nullable=False),
+)
+
+# Learned filter guidance synthesized from filter_feedback; the newest row is
+# appended to prompts/filter.md at run time. Append-only history.
+learned_rules = Table(
+    "learned_rules", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("created_at", String, nullable=False),
+    Column("created_by", String, nullable=False),       # actor or "auto"
+    Column("rules_md", Text, nullable=False),
+    Column("summary", String),
+    Column("feedback_through", Integer, nullable=False),  # last feedback id used
 )
 
 projects = Table(
@@ -189,6 +218,8 @@ def _migrate(engine: Engine) -> None:
         cols = [r[1] for r in c.exec_driver_sql("PRAGMA table_info(verdicts)")]
         if cols and "decided_by" not in cols:
             c.exec_driver_sql("ALTER TABLE verdicts ADD COLUMN decided_by VARCHAR")
+        if cols and "rationale" not in cols:
+            c.exec_driver_sql("ALTER TABLE verdicts ADD COLUMN rationale TEXT")
 
 
 def now_iso() -> str:

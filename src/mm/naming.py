@@ -101,10 +101,10 @@ def map_cn_title(raw_title: str) -> str | None:
     return None
 
 
-# Deterministic cosmetics signal — defense-in-depth beside the LLM filter
-# (Chanel's flagship account mixes fashion and beauty). Fragrance is IN scope
-# per the Decision Record, so fragrance terms are checked FIRST and never
-# excluded.
+# Deterministic beauty signal — defense-in-depth beside the LLM filter
+# (Chanel's flagship account mixes fashion and beauty). Owner directive
+# 2026-07 (supersedes the original Decision Record): perfume/fragrance is OUT
+# of scope, same as makeup/skincare.
 _FRAGRANCE_TERMS = ["香水", "香氛", "淡香", "浓香", "香调", "中性香",
                     "fragrance", "parfum", "eau de", "scent", "cologne"]
 _MAKEUP_SKINCARE_TERMS = ["彩妆", "美妆", "口红", "唇膏", "唇釉", "粉底", "粉饼",
@@ -116,7 +116,7 @@ _MAKEUP_SKINCARE_TERMS = ["彩妆", "美妆", "口红", "唇膏", "唇釉", "粉
 
 
 def cosmetics_signal(caption: str) -> str | None:
-    """'fragrance' (kept in scope), 'makeup_skincare' (hard exclude), or None."""
+    """'fragrance' or 'makeup_skincare' (both are policy DROP), or None."""
     text = (caption or "").lower()
     if any(t in text for t in _FRAGRANCE_TERMS):
         return "fragrance"

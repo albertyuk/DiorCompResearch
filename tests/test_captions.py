@@ -1,5 +1,6 @@
 """Caption fixtures (~15 realistic Weibo captions): @-tag extraction, Chinese
-title → relation mapping, cosmetics exclusion vs fragrance inclusion policy."""
+title → relation mapping, beauty exclusion policy (perfume AND makeup/skincare
+are both policy DROP — owner directive 2026-07)."""
 import json
 from pathlib import Path
 
@@ -32,10 +33,12 @@ def test_cosmetics_signal(fx):
     assert naming.cosmetics_signal(fx["caption"]) == fx["expect_cosmetics_signal"]
 
 
-def test_fragrance_never_flags_exclusion():
+def test_perfume_and_beauty_policy_is_drop():
+    # owner directive 2026-07: anything perfume related is dropped, same as
+    # makeup/skincare — even with a Chinese celebrity attached
     for fx in FIXTURES:
-        if fx["expect_cosmetics_signal"] == "fragrance":
-            assert fx["expect_keep_policy"] is True
+        if fx["expect_cosmetics_signal"] in ("fragrance", "makeup_skincare"):
+            assert fx["expect_keep_policy"] is False, fx["id"]
 
 
 def test_no_title_maps_to_none():

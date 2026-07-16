@@ -9,6 +9,13 @@ relevance filter → human review in a local web **Console** → cross-platform
 verification (Douyin / RED / WeChat) → celebrity & relationship enrichment →
 project consolidation → PPTX rendered to match the reference deck.
 
+The filter's core test: **China-market-specific → keep; global campaign with
+no China angle → drop.** Perfume and makeup/skincare are always out of scope.
+Every keep/drop a reviewer makes is catalogued (with the model's own
+rationale) on the **Learning** page and periodically distilled into learned
+guidance appended to the filter prompt — the filter gets more accurate with
+every review. **Archives** keeps browsable snapshots of past searches.
+
 ## Launch (Mac, zero setup)
 
 1. Get the folder — either clone this repo, or on GitHub click

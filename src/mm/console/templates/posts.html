@@ -50,6 +50,12 @@
         {{ 'KEEP' if p.keep else 'DROP' }} · {{ '%.2f'|format(p.confidence or 0) }}</span>
       <div class="micro" style="margin-top:4px">{{ p.reasons_list | join(' · ') }}</div>
       <div class="micro">{{ p.category }} · {{ p.media_focus }}</div>
+      {% if p.rationale %}
+      <details style="margin-top:4px">
+        <summary class="micro" style="cursor:pointer">why?</summary>
+        <div class="note" style="font-size:11px; max-width:260px">{{ p.rationale }}</div>
+      </details>
+      {% endif %}
     </td>
     <td>
       {% if p.human_decision %}

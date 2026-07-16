@@ -476,4 +476,4 @@ def test_hosted_account_overrides_overlay(tmp_path, monkeypatch):
     acct = fresh.brand("chanel").account("douyin")
     assert acct.resolved and acct.uid == "SEC_UID_X"
     # repo remains authoritative for everything else
-    assert fresh.filters["exclude_fragrance"] is False
+    assert fresh.filters["exclude_fragrance"] is True
