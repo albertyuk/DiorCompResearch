@@ -186,8 +186,6 @@ def run_crosscheck(month: str, brand_keys: list[str] | None = None,
             note("matching…")
             res = xc.crosscheck_brand(engine, llm, cfg, month, brand.key,
                                       should_stop=should_stop)
-            _matches_path(month, brand.key).write_text(
-                json.dumps(res["matches"], ensure_ascii=False, indent=1))
             # sift the orphans with the same rubric as review #1, so the
             # orphan list at checkpoint #2 arrives pre-filtered
             ostats = {}
@@ -196,9 +194,47 @@ def run_crosscheck(month: str, brand_keys: list[str] | None = None,
                 ostats = filtering.filter_orphans(
                     engine, llm, cfg, month, brand.key,
                     should_stop=should_stop)
+            # xhs URLs from timeline pulls are dead for humans (wrong id, no
+            # xsec_token) — swap in the official share link for every xhs
+            # post that will be shown as a link (matches + kept orphans)
+            hstats = {}
+            if not (should_stop and should_stop()):
+                xhs_ids = {hit["post_id"]
+                           for plats in res["matches"].values()
+                           for plat, hit in plats.items()
+                           if plat == "xhs" and hit.get("post_id")}
+                with engine.connect() as conn:
+                    xhs_ids |= {r[0] for r in conn.execute(
+                        select(db.posts.c.post_id)
+                        .join(db.orphans,
+                              db.orphans.c.post_id == db.posts.c.post_id)
+                        .join(db.verdicts,
+                              db.verdicts.c.post_id == db.posts.c.post_id)
+                        .where(db.orphans.c.month == month,
+                               db.orphans.c.resolution == "pending",
+                               db.posts.c.brand == brand.key,
+                               db.posts.c.platform == "xhs",
+                               db.verdicts.c.keep.is_(True)))}
+                if xhs_ids:
+                    note(f"fixing {len(xhs_ids)} xhs links…")
+                    hstats = xc.hydrate_xhs_links(engine, client, month,
+                                                  brand.key, xhs_ids)
+                    # matches carry pre-hydration URLs — refresh from the DB
+                    # so enrich stores working evidence links
+                    with engine.connect() as conn:
+                        fresh = {r[0]: r[1] for r in conn.execute(
+                            select(db.posts.c.post_id, db.posts.c.url)
+                            .where(db.posts.c.post_id.in_(xhs_ids)))}
+                    for plats in res["matches"].values():
+                        for hit in plats.values():
+                            if hit.get("post_id") in fresh:
+                                hit["url"] = fresh[hit["post_id"]]
+            _matches_path(month, brand.key).write_text(
+                json.dumps(res["matches"], ensure_ascii=False, indent=1))
             note("done")
             return brand.key, {"pulls": pulls, "orphans": res["orphans"],
-                               "orphans_kept": ostats.get("kept")}
+                               "orphans_kept": ostats.get("kept"),
+                               "xhs_links_fixed": hstats.get("hydrated")}
         except Exception as e:
             note("error")
             return brand.key, {"error": str(e)}

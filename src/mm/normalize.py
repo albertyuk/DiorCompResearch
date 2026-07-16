@@ -194,10 +194,14 @@ def normalize_xhs(note: dict) -> dict | None:
         if url:
             media.append({"kind": "image", "url": url})
     user = note.get("user") or {}
-    xsec = note.get("xsec_token")
+    # xiaohongshu gates note pages behind a per-note xsec_token, and the
+    # app_v2 timeline notes carry none (live-verified) — grab one from any
+    # depth if this source has it; otherwise the URL is provisional and
+    # crosscheck.hydrate_xhs_links replaces it with the official share link
+    xsec = note.get("xsec_token") or find_key(note, "xsec_token", 3)
     url = f"https://www.xiaohongshu.com/explore/{nid}"
     if xsec:
-        url += f"?xsec_token={xsec}"
+        url += f"?xsec_token={xsec}&xsec_source=pc_search"
     return {
         "native_id": nid,
         "post_id": f"xhs:{nid}",
@@ -236,11 +240,15 @@ def normalize_douyin(aweme: dict) -> dict | None:
     if urls:
         media.append({"kind": "video_cover", "url": urls[0], "is_cover": True})
     author = aweme.get("author") or {}
+    # the official share link (iesdouyin.com) opens without login from any
+    # region; the constructed www.douyin.com/video/{id} page often hits a
+    # login/verification wall (live-verified owner report)
+    share_url = ((aweme.get("share_info") or {}).get("share_url") or "").strip()
     return {
         "native_id": aid,
         "post_id": f"douyin:{aid}",
         "platform": "douyin",
-        "url": f"https://www.douyin.com/video/{aid}",
+        "url": share_url or f"https://www.douyin.com/video/{aid}",
         "created_at": created.isoformat() if created else None,
         "created_dt": created,
         "caption": caption,

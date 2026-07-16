@@ -340,6 +340,23 @@ each is easy to revisit.
     win in any mode, so nothing is lost. The LibreOffice QA raster is capped
     at 600s and cannot hang a render indefinitely.
 
+57. **Douyin/XHS links (owner report: none worked) — live-verified 2026-07**:
+    (a) XHS app_v2 timeline notes carry NO xsec_token and their `id` is NOT
+    the canonical web note id (probe: requested …07026a01, share link says
+    …0702ef3b), so the constructed explore/{id} URL lands on 你访问的页面不见了
+    for everyone. Only the note-detail `share_info.link` (canonical id +
+    xsec_token) opens — verified by fetching both. crosscheck now hydrates
+    that link (both note-detail endpoints tried, $0.01/note, capped at 40
+    per brand·month) for exactly the posts a human sees as links: matched
+    evidence + filter-kept orphans; the matches file is refreshed before
+    enrich stores matched_url. (b) douyin prefers the API's official
+    share_info.share_url (iesdouyin.com) over the constructed
+    www.douyin.com/video/{id}, which tends to hit a login/verification wall.
+    (c) The projects page resolves evidence links through matched_post_id to
+    the post's LIVE url, so re-pulls/hydration heal stale links without an
+    enrich re-run. Existing months self-heal on the next cross-check run
+    (re-Confirm posts).
+
 ## Testing
 
 25. The ~15 caption fixtures test the deterministic layers (@-tag extraction,

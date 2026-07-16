@@ -75,6 +75,73 @@ def pull_all(engine, client: TikHubClient, cfg: BrandsConfig, month: str,
         return dict(ex.map(one, platforms))
 
 
+# -- xiaohongshu link hydration -------------------------------------------------
+
+# per brand·month safety cap on note-detail calls ($0.01 each)
+XHS_HYDRATE_CAP = 40
+
+
+def _xhs_share_link(data) -> str | None:
+    """The official share link from a note-detail payload, normalized to
+    path + xsec_token only. Live-verified traps this codifies: the app_v2
+    timeline note ids are NOT the canonical web ids (the share link's path
+    carries the real one), and any xiaohongshu.com URL without an
+    xsec_token is login-walled for outsiders."""
+    from urllib.parse import parse_qs, urlsplit
+    raw = json.dumps(data, ensure_ascii=False)
+    for m in re.finditer(r'https://www\.xiaohongshu\.com/[^"\s\\]+', raw):
+        u = m.group(0)
+        if "xsec_token=" in u:
+            parts = urlsplit(u)
+            token = (parse_qs(parts.query).get("xsec_token") or [None])[0]
+            if token:
+                return (f"https://www.xiaohongshu.com{parts.path}"
+                        f"?xsec_source=app_share&xsec_token={token}")
+    return None
+
+
+def hydrate_xhs_links(engine, client: TikHubClient, month: str,
+                      brand_key: str, post_ids: set[str]) -> dict:
+    """Replace provisional xhs URLs (built from timeline ids, tokenless →
+    dead for anyone clicking them) with the official tokened share link via
+    a note-detail call. Only called for posts a human will actually see as
+    links (matched evidence + filter-kept orphans), capped per brand."""
+    todo = []
+    if post_ids:
+        with engine.connect() as conn:
+            for r in conn.execute(
+                    select(db.posts.c.post_id, db.posts.c.url)
+                    .where(db.posts.c.post_id.in_(post_ids),
+                           db.posts.c.platform == "xhs")).mappings():
+                if "xsec_token=" not in (r["url"] or ""):
+                    todo.append(r["post_id"])
+    stats = {"hydrated": 0, "failed": 0,
+             "capped": max(0, len(todo) - XHS_HYDRATE_CAP)}
+    for post_id in todo[:XHS_HYDRATE_CAP]:
+        note_id = post_id.split(":", 1)[1]
+        link = None
+        # image detail resolves image notes; video notes need the sibling
+        # endpoint — try both, first tokened link wins
+        for ep in ("xhs_note_detail_image", "xhs_note_detail_video"):
+            try:
+                d = client.call(ep, conn=engine, brand=brand_key,
+                                month=month, note_id=note_id)
+                link = _xhs_share_link(d)
+            except Exception:
+                link = None
+            if link:
+                break
+        if link:
+            with engine.begin() as conn:
+                conn.execute(db.posts.update()
+                             .where(db.posts.c.post_id == post_id)
+                             .values(url=link))
+            stats["hydrated"] += 1
+        else:
+            stats["failed"] += 1
+    return stats
+
+
 def crosscheck_brand(engine, llm: LLM, cfg: BrandsConfig, month: str,
                      brand_key: str, should_stop=None) -> dict:
     from datetime import timedelta

@@ -261,6 +261,17 @@ def create_app() -> FastAPI:
                         r["platform"]: dict(r) for r in conn.execute(
                             select(db.platform_matches)
                             .where(db.platform_matches.c.project_id == p["id"])).mappings()}
+                    # evidence links prefer the post's LIVE url — hydration /
+                    # re-pulls fix posts.url in place, while matched_url is
+                    # frozen at enrich time (and dead for old xhs matches)
+                    for pm in p["platforms"].values():
+                        if pm.get("matched_post_id"):
+                            live = conn.execute(
+                                select(db.posts.c.url).where(
+                                    db.posts.c.post_id == pm["matched_post_id"])
+                            ).scalar()
+                            if live:
+                                pm["matched_url"] = live
                     # the consolidated posts behind this project — weibo
                     # members first, then cross-platform matches
                     members = []
