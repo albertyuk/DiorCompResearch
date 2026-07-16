@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import re
+from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 
 from sqlalchemy import select
@@ -23,6 +24,7 @@ from .tikhub import TikHubClient
 
 MATCH_CONFIDENCE = 0.7
 WINDOW_DAYS = 5
+MATCH_LLM_WORKERS = 4     # concurrent match.md escalations per brand
 
 _LATIN_RE = re.compile(r"[A-Za-z0-9]{3,}")
 _CJK_RE = re.compile(r"[一-鿿]{2,}")
@@ -52,20 +54,29 @@ def _celeb_names(verdict_row: dict) -> set[str]:
 
 
 def pull_all(engine, client: TikHubClient, cfg: BrandsConfig, month: str,
-             brand_key: str) -> dict:
-    """Pull each cross-check platform once per run (cached by idempotent upserts)."""
-    counts = {}
-    for platform in ("douyin", "xhs", "wechat_mp", "wechat_channels"):
+             brand_key: str, progress=None) -> dict:
+    """Pull the four cross-check platforms concurrently (they're independent
+    cursor streams writing distinct post_ids; upserts stay idempotent).
+    Per-platform failures are captured, never fatal to the others."""
+    platforms = ("douyin", "xhs", "wechat_mp", "wechat_channels")
+    done = []
+
+    def one(platform):
         try:
-            counts[platform] = pull_platform(engine, client, cfg, month,
-                                             brand_key, platform)
+            n = pull_platform(engine, client, cfg, month, brand_key, platform)
         except Exception as e:
-            counts[platform] = f"error: {e}"
-    return counts
+            n = f"error: {e}"
+        done.append(platform)
+        if progress:
+            progress(f"pulled {len(done)}/{len(platforms)} platforms")
+        return platform, n
+
+    with ThreadPoolExecutor(max_workers=len(platforms)) as ex:
+        return dict(ex.map(one, platforms))
 
 
 def crosscheck_brand(engine, llm: LLM, cfg: BrandsConfig, month: str,
-                     brand_key: str) -> dict:
+                     brand_key: str, should_stop=None) -> dict:
     from datetime import timedelta
     from .dates import month_bounds
     brand = cfg.brand(brand_key)
@@ -83,6 +94,18 @@ def crosscheck_brand(engine, llm: LLM, cfg: BrandsConfig, month: str,
                                    db.posts.c.created_at < hi)).mappings())
     matched_other_ids: set[str] = set()
     results = {}
+
+    def record_hit(hits, cand, confidence, why):
+        plat = cand["platform"]
+        prev = hits.get(plat)
+        if prev is None or confidence > prev["confidence"]:
+            hits[plat] = {"post_id": cand["post_id"], "url": cand["url"],
+                          "date": cand["created_at"],
+                          "confidence": confidence, "why": why}
+        matched_other_ids.add(cand["post_id"])
+
+    # pass 1 — cheap heuristics inline; ambiguous pairs queue for the LLM
+    escalations = []          # (kept row, ref_celebs, candidate)
     for row in kept:
         ref_date = parse_iso(row["created_at"])
         ref_kw = _keywords(row["caption"])
@@ -92,41 +115,52 @@ def crosscheck_brand(engine, llm: LLM, cfg: BrandsConfig, month: str,
             cdate = parse_iso(cand["created_at"])
             if ref_date and cdate and abs((cdate - ref_date).days) > WINDOW_DAYS:
                 continue
-            ckw = _keywords(cand["caption"])
-            overlap_kw = ref_kw & ckw
+            overlap_kw = ref_kw & _keywords(cand["caption"])
             cand_text = (cand["caption"] or "").lower()
             overlap_celeb = {n for n in ref_celebs if n and n in cand_text}
-            confidence, why = 0.0, ""
             if overlap_celeb:
-                confidence, why = 0.85, f"shared celeb: {sorted(overlap_celeb)[:2]}"
+                record_hit(hits, cand, 0.85,
+                           f"shared celeb: {sorted(overlap_celeb)[:2]}")
             elif len(overlap_kw) >= 6:
-                confidence, why = 0.75, f"shared keywords: {sorted(overlap_kw)[:4]}"
+                record_hit(hits, cand, 0.75,
+                           f"shared keywords: {sorted(overlap_kw)[:4]}")
             elif len(overlap_kw) >= 2:
-                try:
-                    j = llm.call_json("match", {
-                        "brand_display": brand.display_name,
-                        "ref_date": row["created_at"] or "",
-                        "ref_caption": (row["caption"] or "")[:1500],
-                        "ref_celebs": json.dumps(sorted(ref_celebs), ensure_ascii=False),
-                        "ref_title": "",
-                        "candidate_platform": cand["platform"],
-                        "candidate_date": cand["created_at"] or "",
-                        "candidate_caption": (cand["caption"] or "")[:1500],
-                    }, conn=engine, brand=brand_key, month=month)
-                    if j.get("same_event"):
-                        confidence = float(j.get("confidence") or 0)
-                        why = j.get("reason") or "llm match"
-                except Exception:
-                    pass
-            if confidence >= MATCH_CONFIDENCE:
-                plat = cand["platform"]
-                prev = hits.get(plat)
-                if prev is None or confidence > prev["confidence"]:
-                    hits[plat] = {"post_id": cand["post_id"], "url": cand["url"],
-                                  "date": cand["created_at"],
-                                  "confidence": confidence, "why": why}
-                matched_other_ids.add(cand["post_id"])
+                escalations.append((row, ref_celebs, cand))
         results[row["post_id"]] = hits
+
+    # pass 2 — match.md escalations run concurrently (pairs are independent;
+    # the hit tables only mutate after the pool completes)
+    def judge(item):
+        row, ref_celebs, cand = item
+        if should_stop and should_stop():
+            return None
+        try:
+            j = llm.call_json("match", {
+                "brand_display": brand.display_name,
+                "ref_date": row["created_at"] or "",
+                "ref_caption": (row["caption"] or "")[:1500],
+                "ref_celebs": json.dumps(sorted(ref_celebs), ensure_ascii=False),
+                "ref_title": "",
+                "candidate_platform": cand["platform"],
+                "candidate_date": cand["created_at"] or "",
+                "candidate_caption": (cand["caption"] or "")[:1500],
+            }, conn=engine, brand=brand_key, month=month)
+        except Exception:
+            return None
+        if not j.get("same_event"):
+            return None
+        return row, cand, float(j.get("confidence") or 0), \
+            (j.get("reason") or "llm match")
+
+    if escalations:
+        with ThreadPoolExecutor(
+                max_workers=min(MATCH_LLM_WORKERS, len(escalations))) as ex:
+            for out in ex.map(judge, escalations):
+                if out is None:
+                    continue
+                row, cand, confidence, why = out
+                if confidence >= MATCH_CONFIDENCE:
+                    record_hit(results[row["post_id"]], cand, confidence, why)
 
     # orphans: pulled cross-platform posts matching no kept Weibo post
     n_orphans = 0

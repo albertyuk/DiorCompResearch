@@ -261,6 +261,15 @@ each is easy to revisit.
     flight complete and are saved. If a tight rate limit still fails posts,
     they stay unfiltered and the next run picks them up.
 
+51. **Cross-check is parallel at all three layers**: brands run concurrently
+    (one worker each), the four platform pulls inside a brand run
+    concurrently (independent cursor streams, per-platform failures
+    isolated), and match.md escalations are judged by a 4-worker pool per
+    brand after the cheap heuristics pass inline. Matching semantics are
+    unchanged (celeb 0.85 / ≥6 keywords 0.75 / LLM ≥0.7, best hit per
+    platform, every above-threshold candidate counts as matched for orphan
+    purposes). Stop is honored at brand start and before each LLM escalation.
+
 ## Testing
 
 25. The ~15 caption fixtures test the deterministic layers (@-tag extraction,

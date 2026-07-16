@@ -147,43 +147,70 @@ def confirm_posts_review(month: str) -> None:
 
 def run_crosscheck(month: str, brand_keys: list[str] | None = None,
                    progress=None, should_stop=None) -> dict:
+    """All brands cross-check in parallel (one worker each): the four
+    platform pulls inside a brand also run concurrently, and match.md
+    escalations use their own small pool — I/O-bound throughout, short WAL
+    transactions, per-brand failures isolated."""
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
     cfg = BrandsConfig.load()
     settings = Settings.load()
     client = TikHubClient(settings)
     llm = LLM(settings)
     engine = db.get_engine()
     results = {}
-    stopped = False
     _set_phase(engine, month, "crosscheck", "running")
+
+    brand_state: dict[str, str] = {}
+    note_lock = threading.Lock()
+
+    def note_for(bk):
+        def note(msg):
+            if not progress:
+                return
+            with note_lock:
+                brand_state[bk] = msg
+                line = "  ".join(f"{k} {v}" for k, v in brand_state.items())
+            progress(f"crosscheck · {line}")
+        return note
+
+    def one(brand):
+        if should_stop and should_stop():
+            return brand.key, None
+        note = note_for(brand.key)
+        try:
+            note("pulling…")
+            pulls = xc.pull_all(engine, client, cfg, month, brand.key,
+                                progress=note)
+            note("matching…")
+            res = xc.crosscheck_brand(engine, llm, cfg, month, brand.key,
+                                      should_stop=should_stop)
+            _matches_path(month, brand.key).write_text(
+                json.dumps(res["matches"], ensure_ascii=False, indent=1))
+            note("done")
+            return brand.key, {"pulls": pulls, "orphans": res["orphans"]}
+        except Exception as e:
+            note("error")
+            return brand.key, {"error": str(e)}
+
+    wanted = [b for b in cfg.brands if not brand_keys or b.key in brand_keys]
     try:
-        for brand in cfg.brands:
-            if brand_keys and brand.key not in brand_keys:
-                continue
-            if should_stop and should_stop():
-                stopped = True
-                break
-            if progress:
-                progress(f"crosscheck {brand.key} · pulling platforms…")
-            try:
-                pulls = xc.pull_all(engine, client, cfg, month, brand.key)
-                if progress:
-                    progress(f"crosscheck {brand.key} · matching…")
-                res = xc.crosscheck_brand(engine, llm, cfg, month, brand.key)
-                _matches_path(month, brand.key).write_text(
-                    json.dumps(res["matches"], ensure_ascii=False, indent=1))
-                results[brand.key] = {"pulls": pulls, "orphans": res["orphans"]}
-            except Exception as e:
-                results[brand.key] = {"error": str(e)}
+        with ThreadPoolExecutor(max_workers=max(1, len(wanted))) as ex:
+            for key, res in ex.map(one, wanted):
+                if res is not None:
+                    results[key] = res
     finally:
         client.close()
     errs = {k: r["error"] for k, r in results.items()
             if isinstance(r, dict) and "error" in r}
-    if stopped:
+    if should_stop and should_stop():
         _set_phase(engine, month, "crosscheck", "stopped — Confirm posts resumes")
-    else:
+    elif errs:
         _set_phase(engine, month, "crosscheck",
-                   ("error: " + "; ".join(f"{k}: {v[:90]}" for k, v in errs.items()))[:300]
-                   if errs else "done")
+                   ("error: " + "; ".join(f"{k}: {v[:90]}" for k, v in errs.items()))[:300])
+    else:
+        _set_phase(engine, month, "crosscheck", "done")
     return results
 
 
