@@ -34,13 +34,22 @@ def load_prompt(name: str) -> str:
 
 
 def render_prompt(name: str, variables: dict) -> str:
-    """Substitute {{var}} placeholders."""
+    """Substitute {{var}} placeholders in a SINGLE pass over the template.
+    Substituted values are never rescanned, so a value containing a literal
+    "{{other_var}}" (e.g. a hostile post caption) stays inert text instead of
+    injecting another variable's slot."""
     text = load_prompt(name)
-    for k, v in variables.items():
+
+    def sub(m: re.Match) -> str:
+        key = m.group(1)
+        if key not in variables:
+            return m.group(0)          # unknown placeholder stays literal
+        v = variables[key]
         if not isinstance(v, str):
             v = json.dumps(v, ensure_ascii=False, indent=1)
-        text = text.replace("{{" + k + "}}", v)
-    return text
+        return v
+
+    return re.sub(r"\{\{(\w+)\}\}", sub, text)
 
 
 _FENCE_RE = re.compile(r"```(?:json)?\s*(.*?)\s*```", re.S)

@@ -63,15 +63,18 @@ def filter_month(engine, llm: LLM, cfg: BrandsConfig, month: str,
             continue
         keep = bool(verdict.get("keep"))
         conf = float(verdict.get("confidence") or 0)
+        from .naming import cosmetics_signal
+        signal = cosmetics_signal(row["caption"] or "")
         # ambiguous reposts always surface for human review
         needs_review = conf < CONFIDENCE_REVIEW_THRESHOLD or bool(row["repost_ambiguous"])
-        if not keep and conf < CONFIDENCE_REVIEW_THRESHOLD:
+        # bias to recall applies ONLY to the China-angle judgment — never to
+        # the hard beauty excludes: a low-confidence drop of a perfume/makeup
+        # post stays dropped (it still shows greyed in review, restorable)
+        if not keep and conf < CONFIDENCE_REVIEW_THRESHOLD and not signal:
             keep, needs_review = True, True    # bias to recall
         # deterministic beauty signal — perfume AND makeup/skincare are policy
         # DROP (owner directive); if the LLM kept one anyway, flag it for the
         # human rather than silently overriding (flag-not-drop)
-        from .naming import cosmetics_signal
-        signal = cosmetics_signal(row["caption"] or "")
         if signal and keep:
             needs_review = True
             label = "perfume" if signal == "fragrance" else "makeup/skincare"

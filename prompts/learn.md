@@ -19,6 +19,11 @@ mistakes — so the filter gets more accurate over time.
 
 ## Human corrections since (each: what the model said → what the human decided)
 
+Decision meanings: `keep`/`drop` = the human's final call for the post.
+`restore` = the human RETRACTED an earlier override — the model's original
+verdict stands; treat it as agreement with the model, not a correction.
+Only the human's latest decision per post is listed.
+
 {{feedback}}
 
 ## Instructions

@@ -58,11 +58,12 @@ each is easy to revisit.
     commentary (or the literal 转发微博) is skipped; a repost *with* commentary
     is ingested and flagged `repost_ambiguous` → always `needs_review` at
     checkpoint #1 (flag-not-drop per the handoff).
-14. **Deterministic cosmetics keyword signal** runs beside the LLM filter as
-    defense-in-depth (Chanel's mixed account): fragrance terms are checked
-    first and never exclude; makeup/skincare terms merely force
-    `needs_review` when the LLM kept the post — the LLM + human remain the
-    deciders.
+14. **Deterministic beauty keyword signal** runs beside the LLM filter as
+    defense-in-depth (Chanel's mixed account). Since the 2026-07 owner
+    directive (see #46), perfume/fragrance AND makeup/skincare are both
+    policy DROP: the keyword signal forces `needs_review` when the LLM kept
+    such a post, and the recall-bias flip never resurrects a beauty post the
+    LLM dropped — the human remains the final decider either way.
 15. **Cross-platform matching heuristics before LLM**: shared celeb name
     (conf 0.85) or ≥3 shared keywords (conf 0.75) match directly; exactly 2
     shared keywords escalate to `match.md`. Threshold 0.7 per the handoff.
@@ -221,6 +222,21 @@ each is easy to revisit.
     corrections, and synthesis failures never block a filter run. The model
     also now returns a `rationale` (3–5 sentences of its thinking), stored on
     the verdict and shown in review ("why?") and in archives.
+
+48. **Learning-loop hardening (adversarial review round 3, 11 distinct
+    findings fixed)**: the feedback watermark drains oldest-first in batches
+    (a >200 backlog can no longer skip corrections); synthesis is serialized
+    per process with a commit-time watermark re-check (concurrent runs can't
+    double-count or regress); a schema-drifted learner response fails loudly
+    without consuming corrections or wiping guidance; learner output is
+    sanitized (bullets only, ≤15 lines, `{{ }}` stripped) and prompt
+    substitution is single-pass (values can never inject other variables'
+    slots — closes the caption→prompt injection route); the recall-bias flip
+    exempts beauty posts (a low-confidence perfume drop stays dropped);
+    drop-then-restore feeds only the final decision to the learner; the
+    archive viewer groups by snapshot brands (removed brands stay visible)
+    and never greys never-filtered posts; the Learning page's pending count
+    is a real DB count, not capped by the display window.
 
 ## Testing
 

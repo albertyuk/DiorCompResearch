@@ -297,24 +297,29 @@ def create_app() -> FastAPI:
         for r in rows:
             by_tbl.setdefault(r["tbl"], []).append(json.loads(r["row"]))
         verdicts_by_post = {v["post_id"]: v for v in by_tbl.get("verdicts", [])}
+        # group by the brand keys IN THE SNAPSHOT — the archive must stay
+        # complete even if a brand is later removed/renamed in brands.yaml
+        display = {b.key: b.display_name for b in cfg.brands}
+        order = {b.key: i for i, b in enumerate(cfg.brands)}
+        by_brand: dict[str, list] = {}
+        for p in by_tbl.get("posts", []):
+            v = verdicts_by_post.get(p["post_id"], {})
+            media = json.loads(p.get("media") or "[]")
+            decision = v.get("human_decision")
+            # a post that never got a verdict was not dropped — don't grey it
+            keep = (True if not v else
+                    v.get("keep") if decision is None else decision == "keep")
+            by_brand.setdefault(p.get("brand") or "unknown", []).append({
+                **p, "verdict": v,
+                "thumb": next((m.get("local_path") for m in media
+                               if m.get("local_path")), None),
+                "effective_keep": keep})
         groups = []
-        for brand in cfg.brands:
-            posts = []
-            for p in by_tbl.get("posts", []):
-                if p.get("brand") != brand.key:
-                    continue
-                v = verdicts_by_post.get(p["post_id"], {})
-                media = json.loads(p.get("media") or "[]")
-                decision = v.get("human_decision")
-                keep = v.get("keep") if decision is None else decision == "keep"
-                posts.append({
-                    **p, "verdict": v,
-                    "thumb": next((m.get("local_path") for m in media
-                                   if m.get("local_path")), None),
-                    "effective_keep": keep})
-            posts.sort(key=lambda p: p.get("created_at") or "")
-            if posts:
-                groups.append({"brand": brand, "posts": posts})
+        for bk in sorted(by_brand, key=lambda k: (order.get(k, 99), k)):
+            posts = sorted(by_brand[bk], key=lambda p: p.get("created_at") or "")
+            groups.append({"brand_key": bk,
+                           "display": display.get(bk, bk.upper()),
+                           "posts": posts})
         return TEMPLATES.TemplateResponse(request, "archive_detail.html", {
             "meta": dict(meta), "groups": groups,
             "projects": by_tbl.get("projects", [])})
@@ -332,10 +337,11 @@ def create_app() -> FastAPI:
                 select(db.learned_rules)
                 .order_by(db.learned_rules.c.id.desc())
                 .limit(10)).mappings()]
-        pending = 0
-        if feedback:
+            from sqlalchemy import func
             since = rules["feedback_through"] if rules else 0
-            pending = sum(1 for f in feedback if f["id"] > since)
+            pending = conn.execute(
+                select(func.count()).select_from(db.filter_feedback)
+                .where(db.filter_feedback.c.id > since)).scalar() or 0
         return TEMPLATES.TemplateResponse(request, "learning.html", {
             "rules": rules, "feedback": feedback, "history": history,
             "pending": pending, "msg": msg})

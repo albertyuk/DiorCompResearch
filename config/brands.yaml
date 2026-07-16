@@ -48,7 +48,7 @@ brands:
     uid: '1836003984'
     vanity_url: https://weibo.com/louisvuitton
     note: Verified 'Louis Vuitton官方微博', ~11.0M followers. Fragrance posts (e.g. The Scent of Color) appear
-      here and are IN scope.
+      here — OUT of scope since the 2026-07 owner directive (exclude_fragrance above).
   douyin:
     status: resolve
     lookup_query: 路易威登 Louis Vuitton

@@ -10,7 +10,7 @@ Greyed posts were dropped (by the filter or a reviewer) at the time.</p>
 <hr class="rule">
 
 {% for g in groups %}
-<h2>{{ g.brand.display_name }} <span class="micro">— {{ g.posts|length }} posts</span></h2>
+<h2>{{ g.display }} <span class="micro">— {{ g.posts|length }} posts</span></h2>
 <table class="grid">
   <tr><th style="width:96px"></th><th>Post</th><th style="width:260px">Verdict at archive time</th></tr>
   {% for p in g.posts %}
