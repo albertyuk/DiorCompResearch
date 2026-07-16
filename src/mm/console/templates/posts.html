@@ -32,8 +32,18 @@
   <tr><th style="width:96px"></th><th>Post</th><th style="width:210px">Filter verdict</th>
       <th style="width:150px">Decision</th></tr>
   {% for p in g.posts %}
-  <tr class="{% if not p.effective_keep %}dropped{% endif %}">
-    <td>{% if p.thumb %}<img class="thumb" loading="lazy"
+  {% set gal = namespace(items=[]) %}
+  {% for m in p.media_list %}{% if m.local_path %}
+    {% set _ = gal.items.append({"src": "/media?path=" ~ (m.local_path | urlencode),
+                                 "midx": loop.index0,
+                                 "hq": m.source == "upload",
+                                 "sel": m.selected or false}) %}
+  {% endif %}{% endfor %}
+  <tr class="{% if not p.effective_keep %}dropped{% endif %}"
+      {% if gal.items %}data-gallery='{{ gal.items | tojson }}'
+      data-post="{{ p.post_id }}"{% endif %}>
+    <td>{% if p.thumb %}<img class="thumb zoom" data-gidx="0" loading="lazy"
+          title="Click to preview all images"
           src="/media?path={{ p.thumb | urlencode }}">{% endif %}</td>
     <td>
       <div class="micro">{{ (p.created_at or '')[:16] }} ·
@@ -48,19 +58,21 @@
       </div>{% endif %}
       {% if p.effective_keep %}
       <div class="row-flex" style="gap:6px; margin-top:8px; align-items:center">
-        {% for m in p.media_list %}{% if m.local_path %}
-        <label style="position:relative; display:inline-block; cursor:pointer"
-               title="tick = this image goes on the slide{% if m.source == 'upload' %} (HQ upload){% endif %}">
-          <img class="thumb" loading="lazy" style="width:64px; height:64px;
-               {% if m.selected %}outline:3px solid #2e7d32{% endif %}"
-               src="/media?path={{ m.local_path | urlencode }}">
+        {% for gitem in gal.items %}
+        <span style="position:relative; display:inline-block">
+          <img class="thumb zoom" loading="lazy" data-gidx="{{ loop.index0 }}"
+               title="Click to preview"
+               style="width:64px; height:64px;
+               {% if gitem.sel %}outline:3px solid #3d6b45{% endif %}"
+               src="{{ gitem.src }}">
           <input type="checkbox" class="media-sel" data-post="{{ p.post_id }}"
-                 data-idx="{{ loop.index0 }}" {% if m.selected %}checked{% endif %}
-                 style="position:absolute; top:2px; left:2px">
-          {% if m.source == 'upload' %}<span class="pill ok"
+                 data-idx="{{ gitem.midx }}" {% if gitem.sel %}checked{% endif %}
+                 title="tick = this image goes on the slide"
+                 style="position:absolute; top:2px; left:2px; cursor:pointer">
+          {% if gitem.hq %}<span class="pill ok"
              style="position:absolute; bottom:2px; left:2px; background:#fff">HQ</span>{% endif %}
-        </label>
-        {% endif %}{% endfor %}
+        </span>
+        {% endfor %}
         <div class="dropzone" data-post="{{ p.post_id }}"
              style="width:64px; height:64px; border:1px dashed var(--mut);
                     display:flex; align-items:center; justify-content:center;
@@ -120,8 +132,8 @@ document.addEventListener('change', async e => {
       body: `idx=${t.dataset.idx}&selected=${t.checked}`,
     });
     if (!r.ok) throw new Error(await r.text());
-    t.closest('label').querySelector('img').style.outline =
-      t.checked ? '3px solid #2e7d32' : '';
+    t.parentElement.querySelector('img').style.outline =
+      t.checked ? '3px solid #3d6b45' : '';
   } catch (err) { t.checked = !t.checked; alert('Could not save selection: ' + err); }
 });
 

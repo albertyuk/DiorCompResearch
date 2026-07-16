@@ -286,6 +286,16 @@ each is easy to revisit.
     cross-check ≤20 (5 brands × 4), enrich ≤20 — inside standard-tier limits
     with SDK backoff absorbing bursts.
 
+53. **Image lightbox (owner request)**: every thumbnail on Review · Posts and
+    Archive detail is click-to-preview — a full-screen viewer over the post's
+    whole gallery with ←/→ / Esc keys, an image counter, an "HQ upload" tag,
+    and (on review pages) a toggle button wired to the same `.media-sel`
+    checkbox that decides what renders on the slide, so keep/drop image
+    choices can be made while looking at the full-size image. Gallery JSON is
+    embedded via `data-gallery='{{ … | tojson }}'` — Jinja's `tojson` escapes
+    `<>&'` but deliberately NOT double quotes, so the attribute must stay
+    single-quoted; a regression test locks this in.
+
 ## Testing
 
 25. The ~15 caption fixtures test the deterministic layers (@-tag extraction,

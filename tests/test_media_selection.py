@@ -111,6 +111,29 @@ def test_hq_upload_stores_selected_media(client, tmp_db):
     assert r.status_code == 400
 
 
+def test_review_page_gallery_and_lightbox(client, tmp_db, tmp_path):
+    img1, img2 = tmp_path / "one.jpg", tmp_path / "two.jpg"
+    for f in (img1, img2):
+        f.write_bytes(b"\xff\xd8\xff" + b"x" * 8)
+    _seed(tmp_db, media=[
+        {"kind": "image", "local_path": str(img1), "selected": True},
+        {"kind": "image", "url": "u", "local_path": None},   # not downloadable
+        {"kind": "image", "local_path": str(img2), "source": "upload"}])
+    with tmp_db.get_engine().begin() as conn:
+        tmp_db.upsert(conn, tmp_db.verdicts, {
+            "post_id": "weibo:M1", "keep": True, "confidence": 0.9,
+            "reasons": "[]", "celebs_tagged": "[]", "category": "event",
+            "media_focus": "photo", "needs_review": False}, ["post_id"])
+    page = client.get("/review/2026-06/posts").text
+    assert 'id="mmlb"' in page                       # lightbox shipped on page
+    assert "data-gallery='[" in page                 # single-quoted (tojson
+    assert 'class="thumb zoom"' in page              #  keeps double quotes)
+    # gallery JSON carries the ORIGINAL media indexes (0 and 2 — the null
+    # local_path slot is skipped) so the lightbox toggle drives the right box
+    assert '"midx": 0' in page and '"midx": 2' in page
+    assert '"hq": true' in page                      # upload flagged
+
+
 # ── renderer: selected images win ────────────────────────────────────────────
 
 def test_project_visuals_prefer_selected_images(tmp_db, tmp_path):

@@ -14,8 +14,14 @@ Greyed posts were dropped (by the filter or a reviewer) at the time.</p>
 <table class="grid">
   <tr><th style="width:96px"></th><th>Post</th><th style="width:260px">Verdict at archive time</th></tr>
   {% for p in g.posts %}
-  <tr class="{% if not p.effective_keep %}dropped{% endif %}">
-    <td>{% if p.thumb %}<img class="thumb" loading="lazy"
+  {% set gal = namespace(items=[]) %}
+  {% for path in p.images %}
+    {% set _ = gal.items.append({"src": "/media?path=" ~ (path | urlencode)}) %}
+  {% endfor %}
+  <tr class="{% if not p.effective_keep %}dropped{% endif %}"
+      {% if gal.items %}data-gallery='{{ gal.items | tojson }}'{% endif %}>
+    <td>{% if p.thumb %}<img class="thumb zoom" data-gidx="0" loading="lazy"
+          title="Click to preview all images"
           src="/media?path={{ p.thumb | urlencode }}">{% endif %}</td>
     <td>
       <div class="micro">{{ (p.created_at or '')[:16] }} ·

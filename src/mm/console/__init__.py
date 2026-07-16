@@ -313,6 +313,8 @@ def create_app() -> FastAPI:
                 **p, "verdict": v,
                 "thumb": next((m.get("local_path") for m in media
                                if m.get("local_path")), None),
+                "images": [m["local_path"] for m in media
+                           if m.get("local_path")],
                 "effective_keep": keep})
         groups = []
         for bk in sorted(by_brand, key=lambda k: (order.get(k, 99), k)):

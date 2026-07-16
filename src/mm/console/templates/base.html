@@ -83,6 +83,23 @@ form.inline { display:inline; }
 .pbar.indet .fill { width:28%; animation:pbar-sweep 1.6s infinite linear; }
 @keyframes pbar-sweep { from { transform:translateX(-110%); }
                         to   { transform:translateX(460%); } }
+/* image lightbox — click any .zoom thumbnail to inspect at full size */
+img.zoom { cursor:zoom-in; }
+#mmlb { position:fixed; inset:0; background:rgba(12,11,10,.93); z-index:60;
+  display:flex; align-items:center; justify-content:center; }
+#mmlb[hidden] { display:none; }
+#mmlb img { max-width:88vw; max-height:78vh; object-fit:contain;
+  background:#fff; box-shadow:0 0 60px rgba(0,0,0,.5); }
+#mmlb .mmlb-x { position:absolute; top:22px; right:28px; }
+#mmlb .mmlb-prev { position:absolute; left:22px; top:50%; }
+#mmlb .mmlb-next { position:absolute; right:22px; top:50%; }
+#mmlb button { background:transparent; border:1px solid rgba(255,255,255,.45);
+  color:#fff; font-size:13px; letter-spacing:2px; padding:8px 16px;
+  cursor:pointer; }
+#mmlb button:hover { background:#fff; color:#1a1a1a; }
+#mmlb .mmlb-bar { position:absolute; bottom:26px; left:0; right:0;
+  display:flex; gap:18px; align-items:center; justify-content:center; }
+#mmlb .mmlb-bar .micro { color:rgba(255,255,255,.75); }
 </style>
 </head>
 <body>
@@ -107,7 +124,78 @@ form.inline { display:inline; }
     <a href="/learning" {% if active == 'learning' %}class="active"{% endif %}>Learning</a>
   </nav>
 </header>
+<div id="mmlb" hidden>
+  <button class="mmlb-x" title="Close (Esc)">✕</button>
+  <button class="mmlb-prev" title="Previous (←)">‹</button>
+  <img id="mmlb-img" alt="post image preview">
+  <button class="mmlb-next" title="Next (→)">›</button>
+  <div class="mmlb-bar">
+    <span id="mmlb-count" class="micro"></span>
+    <button id="mmlb-toggle" hidden></button>
+  </div>
+</div>
 <script>
+/* lightbox: any img.zoom inside a [data-gallery] holder opens a full-size
+   viewer over the whole gallery; ←/→ navigate, Esc closes, and on review
+   pages the toggle button drives the image's slide checkbox directly */
+let mmlbItems = [], mmlbIdx = 0, mmlbPost = '';
+const mmlbEl = () => document.getElementById('mmlb');
+function mmlbCheckbox() {
+  const it = mmlbItems[mmlbIdx] || {};
+  if (!mmlbPost || it.midx === undefined) return null;
+  return document.querySelector(
+    `input.media-sel[data-post="${CSS.escape(mmlbPost)}"][data-idx="${it.midx}"]`);
+}
+function mmlbRender() {
+  const it = mmlbItems[mmlbIdx];
+  document.getElementById('mmlb-img').src = it.src;
+  document.getElementById('mmlb-count').textContent =
+    `${mmlbIdx + 1} / ${mmlbItems.length}` + (it.hq ? '  ·  HQ upload' : '');
+  const btn = document.getElementById('mmlb-toggle');
+  const cb = mmlbCheckbox();
+  btn.hidden = !cb;
+  if (cb) btn.textContent = cb.checked
+    ? '✓ On the slide — click to remove' : 'Use on the slide';
+  const many = mmlbItems.length > 1;
+  mmlbEl().querySelector('.mmlb-prev').style.visibility = many ? '' : 'hidden';
+  mmlbEl().querySelector('.mmlb-next').style.visibility = many ? '' : 'hidden';
+}
+function mmOpenLightbox(items, idx, post) {
+  if (!items.length) return;
+  mmlbItems = items; mmlbIdx = idx; mmlbPost = post || '';
+  mmlbEl().hidden = false;
+  mmlbRender();
+}
+function mmlbStep(d) {
+  mmlbIdx = (mmlbIdx + d + mmlbItems.length) % mmlbItems.length;
+  mmlbRender();
+}
+document.addEventListener('click', e => {
+  const img = e.target.closest && e.target.closest('img.zoom');
+  if (img) {
+    const holder = img.closest('[data-gallery]');
+    if (holder) {
+      mmOpenLightbox(JSON.parse(holder.dataset.gallery),
+                     +(img.dataset.gidx || 0), holder.dataset.post || '');
+      return;
+    }
+  }
+  const lb = mmlbEl();
+  if (lb.hidden) return;
+  if (e.target === lb || e.target.classList.contains('mmlb-x')) lb.hidden = true;
+  else if (e.target.classList.contains('mmlb-prev')) mmlbStep(-1);
+  else if (e.target.classList.contains('mmlb-next')) mmlbStep(1);
+  else if (e.target.id === 'mmlb-toggle') {
+    const cb = mmlbCheckbox();
+    if (cb) { cb.click(); setTimeout(mmlbRender, 60); }
+  }
+});
+document.addEventListener('keydown', e => {
+  if (mmlbEl().hidden) return;
+  if (e.key === 'Escape') mmlbEl().hidden = true;
+  else if (e.key === 'ArrowLeft') mmlbStep(-1);
+  else if (e.key === 'ArrowRight') mmlbStep(1);
+});
 /* shared: drive a .pbar from a background-task list — determinate when any
    running task's detail contains "n/m", indeterminate sweep otherwise */
 function mmProgress(el, tasks) {
