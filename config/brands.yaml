@@ -9,8 +9,6 @@ labels:
   timezone: Asia/Shanghai
 filters:
   exclude_makeup_skincare: true
-  # owner directive 2026-07: perfume/fragrance is OUT of scope (supersedes
-  # the original Decision Record's fragrance-IN rule)
   exclude_fragrance: true
 brands:
 - key: chanel
@@ -27,18 +25,30 @@ brands:
 
       '
   douyin:
-    status: resolve
+    status: verified
     lookup_query: CHANEL 香奈儿
+    uid: MS4wLjABAAAAcJSLFaPt2bQW8svjjaNBI7r672rHaMmaWwb2ovrBBQTuVmzVLzPXXS3ZCy6qUoTN
+    screen_name: 香奈儿CHANEL
+    verified_date: '2026-07-16'
   xhs:
-    status: resolve
+    status: verified
     lookup_query: CHANEL
+    uid: 5ceca9300000000005001c9c
+    screen_name: 香奈儿CHANEL
+    verified_date: '2026-07-16'
   wechat_mp:
-    status: resolve
+    status: verified
     lookup_query: CHANEL
+    uid: gh_2404574cd433
+    screen_name: 香奈儿CHANEL
+    verified_date: '2026-07-16'
   wechat_channels:
-    status: resolve
+    status: verified
     lookup_query: CHANEL
     note: confirm ID in WeChat app; not web-discoverable
+    uid: v2_060000231003b20faec8c5e78e1bc1d0c905e537b07753e72557d7d061fedf69c14b68684970@finder
+    screen_name: 香奈儿CHANEL
+    verified_date: '2026-07-16'
 - key: lv
   display_name: LOUIS VUITTON
   order: 2
@@ -50,18 +60,30 @@ brands:
     note: Verified 'Louis Vuitton官方微博', ~11.0M followers. Fragrance posts (e.g. The Scent of Color) appear
       here — OUT of scope since the 2026-07 owner directive (exclude_fragrance above).
   douyin:
-    status: resolve
+    status: verified
     lookup_query: 路易威登 Louis Vuitton
+    uid: MS4wLjABAAAAdu91skaFlB6hJDsgyCrW060Tl42KxaeXIbdE1J2tNiQ
+    screen_name: 路易威登
+    verified_date: '2026-07-16'
   xhs:
-    status: resolve
+    status: verified
     lookup_query: Louis Vuitton 路易威登
+    uid: 5b40d11de8ac2b0d7d1b9520
+    screen_name: 路易威登
+    verified_date: '2026-07-16'
   wechat_mp:
-    status: resolve
+    status: verified
     lookup_query: 路易威登
+    uid: gh_2f25e52c1b68
+    screen_name: 路易威登
+    verified_date: '2026-07-16'
   wechat_channels:
-    status: resolve
+    status: verified
     lookup_query: 路易威登
     note: confirm in-app
+    uid: v2_060000231003b20faec8c4e18118c1ddcc0dec33b0777f3052f64767c1de35a75f9ee76c7be4@finder
+    screen_name: 路易威登
+    verified_date: '2026-07-16'
 - key: tiffany
   display_name: TIFFANY & CO.
   order: 3
@@ -72,18 +94,30 @@ brands:
     vanity_url: https://weibo.com/tiffanyandco
     verified_date: '2026-07-15'
   douyin:
-    status: resolve
+    status: verified
     lookup_query: Tiffany 蒂芙尼
+    uid: MS4wLjABAAAAWRJj17heskmXncbZhrhzhmCwERbljdzm30gzNN5YjuU3KIeORY-5vDJYO68x5aQu
+    screen_name: Tiffany蒂芙尼
+    verified_date: '2026-07-16'
   xhs:
-    status: resolve
+    status: verified
     lookup_query: Tiffany 蒂芙尼
+    uid: 5c284605000000000600e8aa
+    screen_name: Tiffany蒂芙尼
+    verified_date: '2026-07-16'
   wechat_mp:
-    status: resolve
+    status: verified
     lookup_query: Tiffany蒂芙尼
+    uid: gh_8b7671b890b6
+    screen_name: Tiffany蒂芙尼
+    verified_date: '2026-07-16'
   wechat_channels:
-    status: resolve
+    status: verified
     lookup_query: 蒂芙尼
     note: confirm in-app
+    uid: v2_060000231003b20faec8cae28c1dc4d3ca0ced36b077bf96148b411641fb24936db2f0351c5e@finder
+    screen_name: Tiffany蒂芙尼
+    verified_date: '2026-07-16'
 - key: gucci
   display_name: GUCCI
   order: 4
@@ -95,18 +129,30 @@ brands:
     note: Exclude GUCCI Beauty if it surfaces as a separate account during resolution.
     verified_date: '2026-07-15'
   douyin:
-    status: resolve
+    status: verified
     lookup_query: GUCCI 古驰
+    uid: MS4wLjABAAAAK8pciuBC--ZDkpRVQS0REoAXiAnq-XUbhyg51WSjw-0u_X-LE2zG-lhInbaAZYkZ
+    screen_name: GUCCI
+    verified_date: '2026-07-16'
   xhs:
-    status: resolve
+    status: verified
     lookup_query: GUCCI
+    uid: 5bec11c3f7266300013670e0
+    screen_name: GUCCI
+    verified_date: '2026-07-16'
   wechat_mp:
-    status: resolve
+    status: verified
     lookup_query: GUCCI
+    uid: gh_aa7d1c22b52d
+    screen_name: GUCCI
+    verified_date: '2026-07-16'
   wechat_channels:
-    status: resolve
+    status: verified
     lookup_query: GUCCI
     note: confirm in-app
+    uid: v2_060000231003b20faec8c7e58e1fc0d3cf02ef30b077821fc1d78f116d1018a47446eee78624@finder
+    screen_name: GUCCI
+    verified_date: '2026-07-16'
 - key: fendi
   display_name: FENDI
   order: 5
@@ -118,15 +164,27 @@ brands:
     lookup_query: FENDI 芬迪
     verified_date: '2026-07-15'
   douyin:
-    status: resolve
+    status: verified
     lookup_query: FENDI 芬迪
+    uid: MS4wLjABAAAAnePyQZzRV-SvqpH7Nku6qYEFDY3ceTiv-Zf8XqFhUOo
+    screen_name: FENDI
+    verified_date: '2026-07-16'
   xhs:
-    status: resolve
+    status: verified
     lookup_query: FENDI
+    uid: 5bfb6e120585550001219e07
+    screen_name: FENDI
+    verified_date: '2026-07-16'
   wechat_mp:
-    status: resolve
+    status: verified
     lookup_query: FENDI
+    uid: gh_ae9d38a3a13a
+    screen_name: FENDI
+    verified_date: '2026-07-16'
   wechat_channels:
-    status: resolve
+    status: verified
     lookup_query: FENDI
     note: confirm in-app
+    uid: v2_060000231003b20faec8c7e68a1ecad2cd02ea31b077cf436cb09158b9750193798aa6ae28b9@finder
+    screen_name: FENDI
+    verified_date: '2026-07-16'

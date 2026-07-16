@@ -11,6 +11,7 @@ wechat_search endpoint is still tried to offer best-effort candidates.
 """
 from __future__ import annotations
 
+import re
 from datetime import datetime
 
 from . import normalize
@@ -38,18 +39,22 @@ def _candidates_weibo(client: TikHubClient, query: str, conn=None) -> list[dict]
 def _candidates_douyin(client: TikHubClient, query: str, conn=None) -> list[dict]:
     data = client.call("douyin_user_search", conn=conn, keyword=query)
     users = normalize.find_post_list(data, {"sec_uid", "unique_id"})
+    if not users:
+        # live shape (2026-07): data.user_list[] with user_id holding the
+        # sec-uid ("MS4wLjAB…") and nick_name/fans_cnt
+        users = normalize.find_post_list(data, {"nick_name", "fans_cnt"})
     out = []
     for u in users[:8]:
         info = u.get("user_info") or u
-        sec = info.get("sec_uid")
+        sec = info.get("sec_uid") or info.get("user_id")
         if not sec:
             continue
         out.append({
             "uid": sec,
-            "name": info.get("nickname"),
-            "followers": info.get("follower_count"),
+            "name": info.get("nickname") or info.get("nick_name"),
+            "followers": info.get("follower_count") or info.get("fans_cnt"),
             "verified_reason": (info.get("custom_verify")
-                                or info.get("enterprise_verify_reason")),
+                                or info.get("enterprise_verify_reason") or ""),
             "profile_url": f"https://www.douyin.com/user/{sec}",
         })
     return out
@@ -74,23 +79,38 @@ def _candidates_xhs(client: TikHubClient, query: str, conn=None) -> list[dict]:
     return out
 
 
+_TAG_RE = re.compile(r"<[^>]+>")     # wechat search highlights terms with <em>
+
 def _candidates_wechat(client: TikHubClient, query: str, business_type: str,
                        conn=None) -> list[dict]:
     data = client.call("wechat_search", conn=conn, keyword=query,
                        business_type=business_type, raw=False)
-    items = normalize.find_post_list(
-        data, {"username", "gh_username", "finder_username", "nickname"})
+    items = (data.get("data") or {}).get("items") \
+        if isinstance(data.get("data"), dict) else None
+    if not items:
+        items = normalize.find_post_list(
+            data, {"username", "gh_username", "finder_username", "nickname"})
     out = []
-    for u in items[:8]:
+    for u in items[:12]:
+        ji = u.get("jumpInfo") or {}
         uid = (u.get("gh_username") or u.get("username")
-               or u.get("finder_username") or "")
+               or u.get("finder_username") or ji.get("userName") or "")
+        acc_type = u.get("accTypeName") or ""
+        if business_type == "account":
+            # real MP accounts only — mini-programs carry gh_…@app usernames
+            if uid.endswith("@app") or \
+                    (acc_type and acc_type not in ("服务号", "公众号", "订阅号")):
+                continue
+        elif business_type == "video" and uid and not uid.endswith("@finder"):
+            continue                   # channels = finder usernames only
         if not uid:
             continue
         out.append({
             "uid": str(uid),
-            "name": u.get("nickname") or u.get("title"),
+            "name": _TAG_RE.sub("", str(u.get("nickname") or u.get("title") or "")),
             "followers": u.get("fans_count"),
-            "verified_reason": u.get("verify_info") or u.get("signature"),
+            "verified_reason": (u.get("authInfo") or u.get("verify_info")
+                                or _TAG_RE.sub("", str(u.get("desc") or ""))[:90]),
             "profile_url": "",
         })
     return out
