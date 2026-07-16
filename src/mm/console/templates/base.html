@@ -1,5 +1,6 @@
 <!doctype html>
-<html lang="{{ 'zh-CN' if request.state.lang == 'zh' else 'en' }}">
+<html lang="{{ 'zh-CN' if request.state.lang == 'zh' else 'en' }}"
+      data-theme="{{ request.state.theme }}">
 <head>
 <meta charset="utf-8">
 <title>{% block title %}MAISON MONITOR{% endblock %}</title>
@@ -7,7 +8,15 @@
 <style>
 :root { --ink:#1a1a1a; --mut:#77726c; --line:#e6e2dc; --paper:#ffffff;
         --soft:#faf9f7; --warn:#9c7c2e; --err:#a2352c; --ok:#3d6b45;
+        --sel:#3d6b45; --banner-info:#6d5a24;
         --serif:"Didot","Bodoni MT","Playfair Display",Georgia,"Times New Roman",serif; }
+/* dark mode — same editorial palette, inverted on warm near-black */
+html[data-theme="dark"] {
+  --ink:#e9e5df; --mut:#96908a; --line:#3a3733; --paper:#151413;
+  --soft:#201e1c; --warn:#c9a75a; --err:#d98a80; --ok:#8fbf97;
+  --sel:#8fbf97; --banner-info:#cbb37a; }
+html[data-theme="dark"] img.thumb,
+html[data-theme="dark"] .hero-strip img { opacity:.92; }
 * { box-sizing:border-box; margin:0; padding:0; }
 body { font-family:-apple-system,"Helvetica Neue",Helvetica,Arial,sans-serif;
        color:var(--ink); background:var(--paper); font-size:14px;
@@ -45,7 +54,7 @@ button, .btn { background:var(--paper); border:1px solid var(--ink);
   text-transform:uppercase; padding:9px 22px; cursor:pointer;
   text-decoration:none; display:inline-block;
   transition:background .18s ease, color .18s ease; }
-button:hover, .btn:hover { background:var(--ink); color:#fff; }
+button:hover, .btn:hover { background:var(--ink); color:var(--paper); }
 button.ghost { border-color:var(--line); color:var(--mut); }
 button.ghost:hover { background:var(--soft); color:var(--ink); }
 input[type=text], input[type=date], select, textarea {
@@ -60,7 +69,7 @@ input:focus, select:focus, textarea:focus { outline:1px solid var(--ink); }
 .pill.err { border-color:var(--err); color:var(--err); }
 .pill.ok { border-color:var(--ok); color:var(--ok); }
 .pill.live-ind { min-width:96px; text-align:center; }
-.pill.live-ind.running { border-color:var(--ink); color:#fff;
+.pill.live-ind.running { border-color:var(--ink); color:var(--paper);
   background:var(--ink); animation:mm-pulse 1.8s ease-in-out infinite; }
 @keyframes mm-pulse { 50% { opacity:.5; } }
 .thumb { width:84px; height:84px; object-fit:cover; background:var(--soft);
@@ -73,7 +82,7 @@ form.inline { display:inline; }
 .banner { border:1px solid var(--err); color:var(--err); padding:14px 18px;
   margin-bottom:26px; font-size:13px; max-width:900px; background:var(--paper); }
 .banner.info { border-color:var(--line); border-left:2px solid var(--warn);
-  color:#6d5a24; background:var(--soft); }
+  color:var(--banner-info); background:var(--soft); }
 .hero-strip img { height:64px; border:1px solid var(--line); margin-right:6px; }
 /* progress bars — determinate when a task reports "n/m", indeterminate sweep
    otherwise; hairline weight to match the house style */
@@ -111,13 +120,23 @@ img.zoom { cursor:zoom-in; }
 </head>
 <body>
 <header>
-  <form method="post" action="/lang" class="lang-switch">
-    <input type="hidden" name="next" value="{{ request.url.path }}">
-    <button name="lang" value="{{ 'en' if request.state.lang == 'zh' else 'zh' }}"
-            class="ghost" style="padding:2px 10px"
-            title="Switch language / 切换语言">
-      {{ 'EN' if request.state.lang == 'zh' else '中文' }}</button>
-  </form>
+  <span class="lang-switch">
+    <form method="post" action="/lang" style="display:inline">
+      <input type="hidden" name="next" value="{{ request.url.path }}">
+      <button name="lang" value="{{ 'en' if request.state.lang == 'zh' else 'zh' }}"
+              class="ghost" style="padding:2px 10px"
+              title="Switch language / 切换语言">
+        {{ 'EN' if request.state.lang == 'zh' else '中文' }}</button>
+    </form>
+    <form method="post" action="/theme" style="display:inline">
+      <input type="hidden" name="next" value="{{ request.url.path }}">
+      <button name="theme"
+              value="{{ 'light' if request.state.theme == 'dark' else 'dark' }}"
+              class="ghost" style="padding:2px 10px; margin-left:6px"
+              title="{{ T('Toggle dark mode') }}">
+        {{ T('Light') if request.state.theme == 'dark' else T('Dark') }}</button>
+    </form>
+  </span>
   <div class="wordmark">Maison&nbsp;Monitor</div>
   {% if request.state.actor and request.state.actor != 'local' %}
   <span class="actor">

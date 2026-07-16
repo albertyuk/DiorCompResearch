@@ -184,6 +184,8 @@ def create_app() -> FastAPI:
     async def auth_and_headers(request: Request, call_next):
         from .i18n import lang_of
         request.state.lang = lang_of(request)   # before auth: login page too
+        theme = request.cookies.get("mm_theme", "light")
+        request.state.theme = theme if theme in ("light", "dark") else "light"
         path = request.url.path
         if auth is not None and path not in PUBLIC_PATHS:
             actor = auth.actor_from_request(request)
@@ -244,6 +246,19 @@ def create_app() -> FastAPI:
             next = "/"                       # never redirect off-site
         resp = RedirectResponse(next, status_code=303)
         resp.set_cookie(LANG_COOKIE, lang, max_age=365 * 24 * 3600,
+                        httponly=True, samesite="lax", path="/")
+        return resp
+
+    @app.post("/theme")
+    def set_theme(theme: str = Form(...), next: str = Form("/")):
+        """Light/dark toggle — cookie-persisted, rendered server-side as a
+        data-theme attribute so pages never flash the wrong mode."""
+        if theme not in ("light", "dark"):
+            theme = "light"
+        if not next.startswith("/") or next.startswith("//"):
+            next = "/"
+        resp = RedirectResponse(next, status_code=303)
+        resp.set_cookie("mm_theme", theme, max_age=365 * 24 * 3600,
                         httponly=True, samesite="lax", path="/")
         return resp
 

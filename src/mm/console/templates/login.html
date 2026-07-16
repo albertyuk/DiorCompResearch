@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="{{ 'zh-CN' if request.state.lang == 'zh' else 'en' }}">
+<html lang="{{ 'zh-CN' if request.state.lang == 'zh' else 'en' }}" data-theme="{{ request.state.theme }}">
 <head>
 <meta charset="utf-8">
 <title>MAISON MONITOR — Sign in</title>
@@ -7,29 +7,32 @@
 <meta name="robots" content="noindex">
 <style>
 * { box-sizing:border-box; margin:0; padding:0; }
+:root { --ink:#1a1a1a; --mut:#77726c; --line:#e6e2dc; --paper:#fff; --err:#a2352c; }
+html[data-theme="dark"] { --ink:#e9e5df; --mut:#96908a; --line:#3a3733;
+  --paper:#151413; --err:#d98a80; }
 body { font-family:-apple-system,"Helvetica Neue",Helvetica,Arial,sans-serif;
-       color:#1a1a1a; background:#fff; display:flex; min-height:100vh;
+       color:var(--ink); background:var(--paper); display:flex; min-height:100vh;
        align-items:center; justify-content:center;
        -webkit-font-smoothing:antialiased; }
 .card { width:380px; text-align:center; }
 .wordmark { font-family:"Didot","Bodoni MT","Playfair Display",Georgia,
             "Times New Roman",serif; font-size:28px; font-weight:400;
             letter-spacing:9px; text-indent:9px; text-transform:uppercase;
-            border-bottom:1px solid #1a1a1a; padding-bottom:22px;
+            border-bottom:1px solid var(--ink); padding-bottom:22px;
             margin-bottom:34px; }
 label { display:block; text-align:left; font-size:9.5px; letter-spacing:2.5px;
-        text-transform:uppercase; color:#77726c; margin:18px 0 6px; }
-input { width:100%; border:1px solid #e6e2dc; padding:10px 12px; font:inherit;
+        text-transform:uppercase; color:var(--mut); margin:18px 0 6px; }
+input { width:100%; border:1px solid var(--line); background:var(--paper); color:var(--ink); padding:10px 12px; font:inherit;
         border-radius:0; }
-input:focus { outline:1px solid #1a1a1a; }
-button { margin-top:28px; width:100%; background:#1a1a1a; color:#fff;
-         border:1px solid #1a1a1a; font-size:10px; letter-spacing:3px;
+input:focus { outline:1px solid var(--ink); }
+button { margin-top:28px; width:100%; background:var(--ink); color:var(--paper);
+         border:1px solid var(--ink); font-size:10px; letter-spacing:3px;
          text-transform:uppercase; padding:13px; cursor:pointer;
          transition:background .18s ease, color .18s ease; }
-button:hover { background:#fff; color:#1a1a1a; }
-.err { border:1px solid #a2352c; color:#a2352c; font-size:12px;
+button:hover { background:var(--paper); color:var(--ink); }
+.err { border:1px solid var(--err); color:var(--err); font-size:12px;
        padding:10px 12px; margin-bottom:14px; text-align:left; }
-.note { font-size:11px; color:#77726c; margin-top:22px; line-height:1.6; }
+.note { font-size:11px; color:var(--mut); margin-top:22px; line-height:1.6; }
 </style>
 </head>
 <body>
@@ -44,12 +47,21 @@ button:hover { background:#fff; color:#1a1a1a; }
   <button type="submit">{{ T("Enter") }}</button>
   <p class="note">{{ T("Review decisions are attributed to the name you enter. The passphrase is shared out-of-band — ask the deck owner.") }}</p>
 </form>
-<form method="post" action="/lang" style="position:fixed; top:16px; left:24px">
+<span style="position:fixed; top:16px; left:24px">
+<form method="post" action="/lang" style="display:inline">
   <input type="hidden" name="next" value="/login">
   <button name="lang" value="{{ 'en' if request.state.lang == 'zh' else 'zh' }}"
-          style="width:auto; margin:0; padding:6px 14px; background:#fff; color:#1a1a1a;
-                 border-color:#e6e2dc" title="Switch language / 切换语言">
+          style="width:auto; margin:0; padding:6px 14px; background:var(--paper); color:var(--ink);
+                 border-color:var(--line)" title="Switch language / 切换语言">
     {{ 'EN' if request.state.lang == 'zh' else '中文' }}</button>
 </form>
+<form method="post" action="/theme" style="display:inline">
+  <input type="hidden" name="next" value="/login">
+  <button name="theme" value="{{ 'light' if request.state.theme == 'dark' else 'dark' }}"
+          style="width:auto; margin:0 0 0 6px; padding:6px 14px; background:var(--paper); color:var(--ink);
+                 border-color:var(--line)" title="{{ T('Toggle dark mode') }}">
+    {{ T('Light') if request.state.theme == 'dark' else T('Dark') }}</button>
+</form>
+</span>
 </body>
 </html>

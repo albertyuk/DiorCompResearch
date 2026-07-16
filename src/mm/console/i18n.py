@@ -27,6 +27,9 @@ ZH: dict[str, str] = {
     "Archives": "归档",
     "Learning": "学习",
     "Sign out": "退出",
+    "Dark": "深色",
+    "Light": "浅色",
+    "Toggle dark mode": "切换深色模式",
     # ── shared bits ──────────────────────────────────────────────────────
     "Save": "保存",
     "Confirm": "确认",

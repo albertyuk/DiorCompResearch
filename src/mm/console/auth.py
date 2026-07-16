@@ -17,7 +17,7 @@ SESSION_MAX_AGE = 30 * 24 * 3600            # ~30 days
 _SALT = "mm-console-session"
 
 # paths that never require a session
-PUBLIC_PATHS = {"/login", "/healthz", "/lang"}
+PUBLIC_PATHS = {"/login", "/healthz", "/lang", "/theme"}
 
 
 class SessionAuth:

@@ -431,6 +431,15 @@ each is easy to revisit.
     rationales/descriptions, and pipeline telemetry in the activity log
     (technical logging). Default language stays English.
 
+64. **Dark mode (owner request)**: a Light/Dark toggle next to the language
+    switch — mm_theme cookie via a public /theme route (same redirect
+    guards as /lang), rendered server-side as html[data-theme] so pages
+    never flash the wrong mode. The dark palette re-maps the same CSS
+    variables the editorial restyle introduced (warm near-black paper,
+    light ink); hardcoded whites were converted to var(--paper)/var(--soft)
+    and hover/selection colors to variables so both modes share one
+    stylesheet. The login page is themed too. Default stays light.
+
 ## Testing
 
 25. The ~15 caption fixtures test the deterministic layers (@-tag extraction,

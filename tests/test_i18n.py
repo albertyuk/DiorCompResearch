@@ -78,6 +78,25 @@ def test_lang_rejects_offsite_redirect_and_bad_codes(client):
     assert "mm_lang=en" in r.headers.get("set-cookie", "")
 
 
+def test_theme_toggle_dark_mode(client, tmp_db):
+    _seed_month(tmp_db)
+    page = client.get("/").text
+    assert 'data-theme="light"' in page and "Dark</button>" in page
+    r = client.post("/theme", data={"theme": "dark", "next": "/decks"},
+                    follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/decks"
+    assert "mm_theme=dark" in r.headers.get("set-cookie", "")
+    page = client.get("/").text
+    assert 'data-theme="dark"' in page and "Light</button>" in page
+    # bad inputs fall back safely
+    r = client.post("/theme", data={"theme": "neon", "next": "https://evil"},
+                    follow_redirects=False)
+    assert r.headers["location"] == "/"
+    assert "mm_theme=light" in r.headers.get("set-cookie", "")
+    # login page is themed too
+    assert 'data-theme=' in client.get("/login").text
+
+
 def test_login_page_translates_too(tmp_db, monkeypatch):
     monkeypatch.setenv("CONSOLE_PASSPHRASE", PASS)
     monkeypatch.setenv("MM_SECRET_KEY", "f" * 64)

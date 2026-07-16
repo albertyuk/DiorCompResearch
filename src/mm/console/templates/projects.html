@@ -163,13 +163,13 @@
           <img class="thumb zoom" loading="lazy" data-gidx="{{ loop.index0 }}"
                title="{{ T('Click to preview') }}" src="{{ gitem.src }}"
                style="width:64px; height:64px;
-               {% if gitem.sel %}outline:3px solid #3d6b45{% endif %}">
+               {% if gitem.sel %}outline:3px solid var(--sel){% endif %}">
           <input type="checkbox" class="media-sel" data-post="{{ mp.post_id }}"
                  data-idx="{{ gitem.midx }}" {% if gitem.sel %}checked{% endif %}
                  title="{{ T('tick = this image goes on the slide') }}"
                  style="position:absolute; top:2px; left:2px; cursor:pointer">
           {% if gitem.hq %}<span class="pill ok"
-             style="position:absolute; bottom:2px; left:2px; background:#fff">HQ</span>{% endif %}
+             style="position:absolute; bottom:2px; left:2px; background:var(--paper)">HQ</span>{% endif %}
         </span>
         {% endfor %}
         <div class="dropzone" data-post="{{ mp.post_id }}"
@@ -273,7 +273,7 @@ document.addEventListener('change', async e => {
     });
     if (!r.ok) throw new Error(await r.text());
     t.parentElement.querySelector('img').style.outline =
-      t.checked ? '3px solid #3d6b45' : '';
+      t.checked ? '3px solid var(--sel)' : '';
   } catch (err) { t.checked = !t.checked; alert({{ T('Could not save selection: ') | tojson }} + err); }
 });
 

@@ -21,7 +21,7 @@
 {% if rules and rules.rules_md %}
 <div class="micro">v{{ rules.id }} · {{ rules.created_at[:16] }} · by {{ rules.created_by }}
   {% if rules.summary %} — {{ rules.summary }}{% endif %}</div>
-<pre style="font-size:12px; background:#fafafa; border:1px solid var(--line);
+<pre style="font-size:12px; background:var(--soft); border:1px solid var(--line);
   padding:12px 16px; max-width:900px; white-space:pre-wrap">{{ rules.rules_md }}</pre>
 {% else %}
 <p class="note">{{ T("None yet — it appears after the first corrections are distilled.") }}</p>
