@@ -26,6 +26,8 @@ from ..tikhub import TikHubClient
 from .auth import PUBLIC_PATHS, SessionAuth
 
 TEMPLATES = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+from .i18n import T as _T                                    # noqa: E402
+TEMPLATES.env.globals["T"] = _T
 
 # background task registry: {(month, phase): {"state": .., "detail": ..}}
 TASKS: dict = {}
@@ -180,6 +182,8 @@ def create_app() -> FastAPI:
 
     @app.middleware("http")
     async def auth_and_headers(request: Request, call_next):
+        from .i18n import lang_of
+        request.state.lang = lang_of(request)   # before auth: login page too
         path = request.url.path
         if auth is not None and path not in PUBLIC_PATHS:
             actor = auth.actor_from_request(request)
@@ -229,6 +233,20 @@ def create_app() -> FastAPI:
         db.audit(db.get_engine(), name, "login")
         return resp
 
+    @app.post("/lang")
+    def set_lang(lang: str = Form(...), next: str = Form("/")):
+        """EN/中文 toggle — the choice rides a cookie; every page renders its
+        chrome through i18n.T. Public so the login page can switch too."""
+        from .i18n import LANG_COOKIE, LANGS
+        if lang not in LANGS:
+            lang = "en"
+        if not next.startswith("/") or next.startswith("//"):
+            next = "/"                       # never redirect off-site
+        resp = RedirectResponse(next, status_code=303)
+        resp.set_cookie(LANG_COOKIE, lang, max_age=365 * 24 * 3600,
+                        httponly=True, samesite="lax", path="/")
+        return resp
+
     @app.post("/logout")
     def logout():
         resp = RedirectResponse("/login", status_code=303)
@@ -244,8 +262,9 @@ def create_app() -> FastAPI:
         months = []
         with engine.connect() as conn:
             for row in conn.execute(select(db.runs).order_by(db.runs.c.month.desc())).mappings():
+                # spend is deliberately NOT shown in the UI (owner request);
+                # `mm costs` remains the place to inspect it
                 months.append({**dict(row), "phases": json.loads(row["phase_status"] or "{}"),
-                               "cost": db.cost_summary(conn, row["month"]),
                                "started_by": db.last_audit(conn, "start_month",
                                                            "month", row["month"]),
                                "archives": db.list_archives(conn, row["month"])})

@@ -418,6 +418,19 @@ each is easy to revisit.
     the console process is the only writer (#CO-01); concurrent CLI writes
     against a live hosted DB remain out of contract.
 
+63. **Costs hidden + EN/中文 toggle (owner request)**: API spend is no longer
+    shown anywhere in the console (tracking continues in api_calls; `mm
+    costs` remains the inspection point). The console chrome is fully
+    bilingual: a header switch sets an mm_lang cookie (public /lang route,
+    off-site redirects rejected), templates render UI strings through
+    i18n.T — a Jinja context function over an English→Chinese dict where a
+    missing key falls through to English, so translations can never blank
+    the UI. JS-injected strings (lightbox, runs poller, confirm dialogs)
+    receive language-resolved values from the server. Deliberately NOT
+    translated: post content (already Chinese), names, LLM-generated
+    rationales/descriptions, and pipeline telemetry in the activity log
+    (technical logging). Default language stays English.
+
 ## Testing
 
 25. The ~15 caption fixtures test the deterministic layers (@-tag extraction,

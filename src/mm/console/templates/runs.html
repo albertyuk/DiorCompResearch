@@ -5,40 +5,35 @@
 {% if msg %}<div class="banner">{{ msg }}</div>{% endif %}
 
 {% if unresolved %}
-<h2>Accounts</h2>
-<p class="note">Accounts marked <span class="pill err">required</span> must be
-confirmed before a run can start (Weibo is the ingestion source). The rest are
-<span class="pill">optional</span> — resolve them to populate the SOCIAL column,
-or skip them. Click <strong>Resolve</strong> to look up candidates via TikHub and
-confirm the match; the ID is written into <code>config/brands.yaml</code>, so this
-is a one-time step — commit that file and teammates never see it.</p>
+<h2>{{ T("Accounts") }}</h2>
+<p class="note">{{ T("Accounts marked required must be confirmed before a run can start (Weibo is the ingestion source). The rest are optional — resolve them to populate the SOCIAL column, or skip them.") }}</p>
 <table class="grid" style="max-width:900px">
-  <tr><th>Brand</th><th>Platform</th><th></th><th>Lookup query</th><th></th></tr>
+  <tr><th>{{ T("Brand") }}</th><th>{{ T("Platform") }}</th><th></th>
+      <th>{{ T("Lookup query") }}</th><th></th></tr>
   {% for u in unresolved %}
   <tr id="row-{{ u.brand }}-{{ u.platform }}">
     <td>{{ u.brand_display }}</td>
     <td class="micro">{{ u.platform }}</td>
-    <td>{% if u.blocking %}<span class="pill err">required</span>
-        {% else %}<span class="pill">optional</span>{% endif %}</td>
+    <td>{% if u.blocking %}<span class="pill err">{{ T("required") }}</span>
+        {% else %}<span class="pill">{{ T("optional") }}</span>{% endif %}</td>
     <td>{{ u.lookup_query }}</td>
-    <td><a class="btn" href="/resolve/{{ u.brand }}/{{ u.platform }}">Resolve</a></td>
+    <td><a class="btn" href="/resolve/{{ u.brand }}/{{ u.platform }}">{{ T("Resolve") }}</a></td>
   </tr>
   {% endfor %}
 </table>
 <hr class="rule">
 {% endif %}
 
-<h2>Start a month</h2>
+<h2>{{ T("Start a month") }}</h2>
 <form method="post" id="start-form" class="row-flex" onsubmit="this.action='/runs/'+document.getElementById('m').value+'/start'">
   <input type="text" id="m" name="month" value="{{ default_month }}"
          pattern="\d{4}-\d{2}" style="width:130px">
-  <button type="submit">Start month</button>
-  <span class="note">Runs ingest (Weibo) then the LLM relevance filter, then
-  pauses at Review · Posts.</span>
+  <button type="submit">{{ T("Start month") }}</button>
+  <span class="note">{{ T("Runs ingest (Weibo) then the LLM relevance filter, then pauses at Review · Posts.") }}</span>
 </form>
 
-<h2>Months</h2>
-{% if not months %}<p class="note">No runs yet.</p>{% endif %}
+<h2>{{ T("Months") }}</h2>
+{% if not months %}<p class="note">{{ T("No runs yet.") }}</p>{% endif %}
 {% for m in months %}
 <div style="margin-bottom:26px" data-month="{{ m.month }}">
   <div class="row-flex" style="align-items:baseline">
@@ -47,32 +42,36 @@ is a one-time step — commit that file and teammates never see it.</p>
     {% for phase in ['ingest','filter','review_posts','crosscheck','enrich','review_projects','render'] %}
       {% set st = m.phases.get(phase, '—') %}
       <span class="pill {% if st=='done' or st=='confirmed' %}on{% elif st=='waiting' or st.startswith('stopped') %}warn{% elif st and st.startswith('error') %}err{% endif %}">
-        {{ phase }} · {{ st }}</span>
+        {{ T(phase) }} · {{ T(st) }}</span>
     {% endfor %}
-    <span class="micro">tikhub+llm cost ≈ ${{ '%.2f'|format(m.cost.total_usd) }}</span>
-    <a class="btn" href="/review/{{ m.month }}/posts">Open review</a>
+    <a class="btn" href="/review/{{ m.month }}/posts">{{ T("Open review") }}</a>
     <form method="post" action="/runs/{{ m.month }}/stop" class="inline"
           id="stop-{{ m.month }}" style="display:none"
-          onsubmit="return confirm('Pause the {{ m.month }} run at its next safe point?')">
-      <button type="submit">Stop</button>
+          onsubmit="return confirm('{{ T("Pause the {m} run at its next safe point?") | replace("{m}", m.month) }}')">
+      <button type="submit">{{ T("Stop") }}</button>
     </form>
     <form method="post" action="/runs/{{ m.month }}/archive" class="inline"
           id="archive-{{ m.month }}"
-          onsubmit="return confirm('Archive {{ m.month }}? All posts, decisions and projects move to the archive (kept in the database, listed below) and the next Start month searches completely from scratch.')">
-      <button type="submit" class="ghost">Archive &amp; reset</button>
+          onsubmit="return confirm('{{ T("Archive {m}? All posts, decisions and projects move to the archive (kept in the database, listed below) and the next Start month searches completely from scratch.") | replace("{m}", m.month) }}')">
+      <button type="submit" class="ghost">{{ T("Archive & reset") }}</button>
     </form>
   </div>
   {% if m.started_by %}
-  <div class="micro">last started {{ m.started_by.at[:16] }} by {{ m.started_by.actor_name }}</div>
+  <div class="micro">{{ T("last started {t} by {who}")
+    | replace("{t}", m.started_by.at[:16])
+    | replace("{who}", m.started_by.actor_name) }}</div>
   {% endif %}
   {% for a in m.archives %}
-  <div class="micro">⌸ archive #{{ a.id }} · {{ a.archived_at[:16] }} by {{ a.archived_by }}
-    · {{ a.counts.get('posts', 0) }} posts · {{ a.counts.get('projects', 0) }} projects</div>
+  <div class="micro">⌸ {{ T("archive #{id} · {t} by {who} · {p} posts · {pr} projects")
+    | replace("{id}", a.id | string) | replace("{t}", a.archived_at[:16])
+    | replace("{who}", a.archived_by)
+    | replace("{p}", a.counts.get('posts', 0) | string)
+    | replace("{pr}", a.counts.get('projects', 0) | string) }}</div>
   {% endfor %}
   <div class="pbar" id="pbar-{{ m.month }}"><div class="fill"></div></div>
   <div class="micro" id="task-{{ m.month }}"></div>
   <details id="actwrap-{{ m.month }}" style="margin-top:6px">
-    <summary class="micro" style="cursor:pointer">activity log</summary>
+    <summary class="micro" style="cursor:pointer">{{ T("activity log") }}</summary>
     <pre id="act-{{ m.month }}" style="font-size:11px; color:var(--mut);
       max-height:220px; overflow-y:auto; background:#fafafa;
       border:1px solid var(--line); padding:8px 12px; margin-top:4px"></pre>
@@ -83,6 +82,16 @@ is a one-time step — commit that file and teammates never see it.</p>
 
 {% block scripts %}
 <script>
+const RUNS_T = {
+  running: {{ T("RUNNING") | tojson }},
+  interrupted: {{ T("INTERRUPTED") | tojson }},
+  idle: {{ T("idle") | tojson }},
+  background: {{ T("background — ") | tojson }},
+  posts: {{ T("posts") | tojson }},
+  projects: {{ T("projects") | tojson }},
+  stalled: {{ T("was interrupted (server restart) — press Start month (or re-confirm the last checkpoint) to resume; everything already fetched and every paid LLM verdict is kept.") | tojson }},
+  noActivity: {{ T("(no activity yet)") | tojson }},
+};
 async function poll() {
   for (const el of document.querySelectorAll('[data-month]')) {
     const m = el.dataset.month;
@@ -98,24 +107,22 @@ async function poll() {
           if (v.state === 'error') return `${label} — ${(v.detail || '').slice(0, 200)}`;
           return label;
         }).join('  ·  ');
-      let line = t ? `background — ${t} · posts ${j.posts} · projects ${j.projects}` : '';
+      let line = t ? `${RUNS_T.background}${t} · ${RUNS_T.posts} ${j.posts} · ${RUNS_T.projects} ${j.projects}` : '';
       if ((j.stalled || []).length) {
-        line = `⚠ ${j.stalled.join(' + ')} was interrupted (server restart) — ` +
-               `press Start month (or re-confirm the last checkpoint) to resume; ` +
-               `everything already fetched and every paid LLM verdict is kept. ` + line;
+        line = `⚠ ${j.stalled.join(' + ')} ${RUNS_T.stalled} ` + line;
       }
       document.getElementById(`task-${m}`).textContent = line;
 
       // unmissable live indicator + Stop button
       const ind = document.getElementById(`live-${m}`);
       if (running) {
-        ind.textContent = '● RUNNING';
+        ind.textContent = '● ' + RUNS_T.running;
         ind.className = 'pill live-ind running';
       } else if ((j.stalled || []).length) {
-        ind.textContent = '◌ INTERRUPTED';
+        ind.textContent = '◌ ' + RUNS_T.interrupted;
         ind.className = 'pill live-ind err';
       } else {
-        ind.textContent = '○ idle';
+        ind.textContent = '○ ' + RUNS_T.idle;
         ind.className = 'pill live-ind';
       }
       document.getElementById(`stop-${m}`).style.display = running ? '' : 'none';
@@ -126,7 +133,7 @@ async function poll() {
       const act = document.getElementById(`act-${m}`);
       if (act && j.activity) {
         const atBottom = act.scrollHeight - act.scrollTop - act.clientHeight < 30;
-        act.textContent = j.activity.join('\n') || '(no activity yet)';
+        act.textContent = j.activity.join('\n') || RUNS_T.noActivity;
         if (atBottom) act.scrollTop = act.scrollHeight;
         const wrap = document.getElementById(`actwrap-${m}`);
         if (running && !wrap.dataset.autoOpened) {

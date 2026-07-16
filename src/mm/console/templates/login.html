@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="{{ 'zh-CN' if request.state.lang == 'zh' else 'en' }}">
 <head>
 <meta charset="utf-8">
 <title>MAISON MONITOR — Sign in</title>
@@ -36,14 +36,20 @@ button:hover { background:#fff; color:#1a1a1a; }
 <form class="card" method="post" action="/login">
   <div class="wordmark">Maison&nbsp;Monitor</div>
   {% if error %}<div class="err">{{ error }}</div>{% endif %}
-  <label for="name">Your name</label>
+  <label for="name">{{ T("Your name") }}</label>
   <input id="name" name="name" autocomplete="name" autofocus maxlength="80" required>
-  <label for="passphrase">Team passphrase</label>
+  <label for="passphrase">{{ T("Team passphrase") }}</label>
   <input id="passphrase" name="passphrase" type="password"
          autocomplete="current-password" required>
-  <button type="submit">Enter</button>
-  <p class="note">Review decisions are attributed to the name you enter.
-  The passphrase is shared out-of-band — ask the deck owner.</p>
+  <button type="submit">{{ T("Enter") }}</button>
+  <p class="note">{{ T("Review decisions are attributed to the name you enter. The passphrase is shared out-of-band — ask the deck owner.") }}</p>
+</form>
+<form method="post" action="/lang" style="position:fixed; top:16px; left:24px">
+  <input type="hidden" name="next" value="/login">
+  <button name="lang" value="{{ 'en' if request.state.lang == 'zh' else 'zh' }}"
+          style="width:auto; margin:0; padding:6px 14px; background:#fff; color:#1a1a1a;
+                 border-color:#e6e2dc" title="Switch language / 切换语言">
+    {{ 'EN' if request.state.lang == 'zh' else '中文' }}</button>
 </form>
 </body>
 </html>

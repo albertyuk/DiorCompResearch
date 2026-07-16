@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="{{ 'zh-CN' if request.state.lang == 'zh' else 'en' }}">
 <head>
 <meta charset="utf-8">
 <title>{% block title %}MAISON MONITOR{% endblock %}</title>
@@ -19,6 +19,7 @@ header .wordmark { font-family:var(--serif); font-size:30px; font-weight:400;
   letter-spacing:10px; text-transform:uppercase; text-indent:10px; }
 header .actor { position:absolute; top:16px; right:24px; font-size:9px;
   letter-spacing:2px; text-transform:uppercase; color:var(--mut); }
+.lang-switch { position:absolute; top:16px; left:24px; }
 nav { display:flex; justify-content:center; gap:34px; padding:20px 0 16px;
       flex-wrap:wrap; }
 nav a { text-decoration:none; font-size:10px; letter-spacing:3px;
@@ -110,38 +111,51 @@ img.zoom { cursor:zoom-in; }
 </head>
 <body>
 <header>
+  <form method="post" action="/lang" class="lang-switch">
+    <input type="hidden" name="next" value="{{ request.url.path }}">
+    <button name="lang" value="{{ 'en' if request.state.lang == 'zh' else 'zh' }}"
+            class="ghost" style="padding:2px 10px"
+            title="Switch language / 切换语言">
+      {{ 'EN' if request.state.lang == 'zh' else '中文' }}</button>
+  </form>
   <div class="wordmark">Maison&nbsp;Monitor</div>
   {% if request.state.actor and request.state.actor != 'local' %}
   <span class="actor">
     {{ request.state.actor }}
     <form method="post" action="/logout" style="display:inline">
-      <button class="ghost" style="padding:2px 8px; margin-left:8px">Sign out</button>
+      <button class="ghost" style="padding:2px 8px; margin-left:8px">{{ T("Sign out") }}</button>
     </form>
   </span>
   {% endif %}
   <nav>
-    <a href="/" {% if active == 'runs' %}class="active"{% endif %}>Runs</a>
+    <a href="/" {% if active == 'runs' %}class="active"{% endif %}>{{ T("Runs") }}</a>
     {% if month is defined and month %}
-    <a href="/review/{{ month }}/posts" {% if active == 'posts' %}class="active"{% endif %}>Review · Posts</a>
-    <a href="/review/{{ month }}/projects" {% if active == 'projects' %}class="active"{% endif %}>Review · Projects</a>
+    <a href="/review/{{ month }}/posts" {% if active == 'posts' %}class="active"{% endif %}>{{ T("Review · Posts") }}</a>
+    <a href="/review/{{ month }}/projects" {% if active == 'projects' %}class="active"{% endif %}>{{ T("Review · Projects") }}</a>
     {% endif %}
-    <a href="/decks" {% if active == 'decks' %}class="active"{% endif %}>Decks</a>
-    <a href="/celebs" {% if active == 'celebs' %}class="active"{% endif %}>Celebs</a>
-    <a href="/archives" {% if active == 'archives' %}class="active"{% endif %}>Archives</a>
-    <a href="/learning" {% if active == 'learning' %}class="active"{% endif %}>Learning</a>
+    <a href="/decks" {% if active == 'decks' %}class="active"{% endif %}>{{ T("Decks") }}</a>
+    <a href="/celebs" {% if active == 'celebs' %}class="active"{% endif %}>{{ T("Celebs") }}</a>
+    <a href="/archives" {% if active == 'archives' %}class="active"{% endif %}>{{ T("Archives") }}</a>
+    <a href="/learning" {% if active == 'learning' %}class="active"{% endif %}>{{ T("Learning") }}</a>
   </nav>
 </header>
 <div id="mmlb" hidden>
-  <button class="mmlb-x" title="Close (Esc)">✕</button>
-  <button class="mmlb-prev" title="Previous (←)">‹</button>
+  <button class="mmlb-x" title="{{ T('Close (Esc)') }}">✕</button>
+  <button class="mmlb-prev" title="{{ T('Previous (←)') }}">‹</button>
   <img id="mmlb-img" alt="post image preview">
-  <button class="mmlb-next" title="Next (→)">›</button>
+  <button class="mmlb-next" title="{{ T('Next (→)') }}">›</button>
   <div class="mmlb-bar">
     <span id="mmlb-count" class="micro"></span>
     <button id="mmlb-toggle" hidden></button>
   </div>
 </div>
 <script>
+/* UI strings the shared JS needs, already language-resolved server-side */
+const MM_T = {
+  use: {{ T("Use on the slide") | tojson }},
+  onSlide: {{ T("✓ On the slide — click to remove") | tojson }},
+  hq: {{ T("HQ upload") | tojson }},
+};
 /* lightbox: any img.zoom inside a [data-gallery] holder opens a full-size
    viewer over the whole gallery; ←/→ navigate, Esc closes, and on review
    pages the toggle button drives the image's slide checkbox directly */
@@ -157,12 +171,11 @@ function mmlbRender() {
   const it = mmlbItems[mmlbIdx];
   document.getElementById('mmlb-img').src = it.src;
   document.getElementById('mmlb-count').textContent =
-    `${mmlbIdx + 1} / ${mmlbItems.length}` + (it.hq ? '  ·  HQ upload' : '');
+    `${mmlbIdx + 1} / ${mmlbItems.length}` + (it.hq ? `  ·  ${MM_T.hq}` : '');
   const btn = document.getElementById('mmlb-toggle');
   const cb = mmlbCheckbox();
   btn.hidden = !cb;
-  if (cb) btn.textContent = cb.checked
-    ? '✓ On the slide — click to remove' : 'Use on the slide';
+  if (cb) btn.textContent = cb.checked ? MM_T.onSlide : MM_T.use;
   const many = mmlbItems.length > 1;
   mmlbEl().querySelector('.mmlb-prev').style.visibility = many ? '' : 'hidden';
   mmlbEl().querySelector('.mmlb-next').style.visibility = many ? '' : 'hidden';

@@ -3,34 +3,29 @@
 {% block title %}Review · Posts · {{ month }}{% endblock %}
 {% block content %}
 {% if busy %}
-<div class="banner info" id="busy-banner">A run is working on {{ month }}
-  right now{% if started_by %} (started {{ started_by.at[:16] }} by
-  {{ started_by.actor_name }}){% endif %} — <span id="busy-detail"></span><br>
-  This page shows the <strong>last completed</strong> state; freshly ingested
-  posts appear here after the filter step. It refreshes itself when the run
-  pauses.
+<div class="banner info" id="busy-banner">{{ T("A run is working on {m} right now") | replace("{m}", month) }}{% if started_by %} ({{ T("started {t} by {who}") | replace("{t}", started_by.at[:16]) | replace("{who}", started_by.actor_name) }}){% endif %} — <span id="busy-detail"></span><br>
+  {{ T("This page shows the last completed state; freshly ingested posts appear here after the filter step. It refreshes itself when the run pauses.") }}
   <div class="pbar" id="busy-pbar"><div class="fill"></div></div>
 </div>
 {% endif %}
 <div class="row-flex" style="justify-content:space-between">
   <div>
-    <h2 style="margin-top:0">Review checkpoint #1 — posts · {{ month }}</h2>
-    <p class="note">Confirm locks these decisions and starts cross-platform
-    verification + enrichment. <em>Needs review</em> posts are listed first.</p>
+    <h2 style="margin-top:0">{{ T("Review checkpoint #1 — posts") }} · {{ month }}</h2>
+    <p class="note">{{ T("Confirm locks these decisions and starts cross-platform verification + enrichment. Needs review posts are listed first.") }}</p>
   </div>
   <form method="post" action="/review/{{ month }}/posts/confirm"
-        onsubmit="return confirm('Lock post decisions and start cross-check + enrichment?')">
-    <button type="submit">Confirm &amp; continue →</button>
+        onsubmit="return confirm('{{ T("Lock post decisions and start cross-check + enrichment?") }}')">
+    <button type="submit">{{ T("Confirm & continue →") }}</button>
   </form>
 </div>
 <hr class="rule">
 
 {% for g in groups %}
-<h2>{{ g.brand.display_name }} <span class="micro">— {{ g.posts|length }} weibo posts</span></h2>
-{% if not g.posts %}<p class="note">Nothing ingested.</p>{% endif %}
+<h2>{{ g.brand.display_name }} <span class="micro">— {{ g.posts|length }} {{ T("weibo posts") }}</span></h2>
+{% if not g.posts %}<p class="note">{{ T("Nothing ingested.") }}</p>{% endif %}
 <table class="grid">
-  <tr><th style="width:96px"></th><th>Post</th><th style="width:210px">Filter verdict</th>
-      <th style="width:150px">Decision</th></tr>
+  <tr><th style="width:96px"></th><th>{{ T("Post") }}</th><th style="width:210px">{{ T("Filter verdict") }}</th>
+      <th style="width:150px">{{ T("Decision") }}</th></tr>
   {% for p in g.posts %}
   {% set gal = namespace(items=[]) %}
   {% for m in p.media_list %}{% if m.local_path %}
@@ -42,13 +37,13 @@
   <tr class="{% if not p.effective_keep %}dropped{% endif %}"
       {% if gal.items %}data-gallery='{{ gal.items | tojson }}'{% endif %}>
     <td>{% if p.thumb %}<img class="thumb zoom" data-gidx="0" loading="lazy"
-          title="Click to preview all images"
+          title="{{ T('Click to preview all images') }}"
           src="/media?path={{ p.thumb | urlencode }}">{% endif %}</td>
     <td>
       <div class="micro">{{ (p.created_at or '')[:16] }} ·
-        <a href="{{ p.url }}" target="_blank">post ↗</a>
-        {% if p.repost_ambiguous %} · <span class="pill warn">repost w/ commentary</span>{% endif %}
-        {% if p.needs_review %} <span class="pill warn">needs review</span>{% endif %}
+        <a href="{{ p.url }}" target="_blank">{{ T('post ↗') }}</a>
+        {% if p.repost_ambiguous %} · <span class="pill warn">{{ T("repost w/ commentary") }}</span>{% endif %}
+        {% if p.needs_review %} <span class="pill warn">{{ T("needs review") }}</span>{% endif %}
       </div>
       <div class="caption-cn">{{ (p.caption or '')[:400] }}</div>
       {% if p.celebs_list %}<div class="micro" style="margin-top:4px">
@@ -60,43 +55,42 @@
         {% for gitem in gal.items %}
         <span style="position:relative; display:inline-block">
           <img class="thumb zoom" loading="lazy" data-gidx="{{ loop.index0 }}"
-               title="Click to preview" src="{{ gitem.src }}"
+               title="{{ T('Click to preview') }}" src="{{ gitem.src }}"
                style="width:64px; height:64px">
           {% if gitem.hq %}<span class="pill ok"
              style="position:absolute; bottom:2px; left:2px; background:#fff">HQ</span>{% endif %}
         </span>
         {% endfor %}
-        <span class="note" style="max-width:220px; font-size:10.5px">Slide
-          images are chosen at Review · Projects, after consolidation.</span>
+        <span class="note" style="max-width:220px; font-size:10.5px">{{ T("Slide images are chosen at Review · Projects, after consolidation.") }}</span>
       </div>
       {% endif %}
     </td>
     <td>
       <span class="pill {% if p.keep %}ok{% else %}err{% endif %}">
-        {{ 'KEEP' if p.keep else 'DROP' }} · {{ '%.2f'|format(p.confidence or 0) }}</span>
+        {{ T('KEEP') if p.keep else T('DROP') }} · {{ '%.2f'|format(p.confidence or 0) }}</span>
       <div class="micro" style="margin-top:4px">{{ p.reasons_list | join(' · ') }}</div>
       <div class="micro">{{ p.category }} · {{ p.media_focus }}</div>
       {% if p.rationale %}
       <details style="margin-top:4px">
-        <summary class="micro" style="cursor:pointer">why?</summary>
+        <summary class="micro" style="cursor:pointer">{{ T("why?") }}</summary>
         <div class="note" style="font-size:11px; max-width:260px">{{ p.rationale }}</div>
       </details>
       {% endif %}
     </td>
     <td>
       {% if p.human_decision %}
-        <div class="micro">human: {{ p.human_decision }}{% if p.decided_by and p.decided_by != 'local' %} · by {{ p.decided_by }}{% endif %}</div>
+        <div class="micro">{{ T("human: ") }}{{ T(p.human_decision) }}{% if p.decided_by and p.decided_by != 'local' %} · by {{ p.decided_by }}{% endif %}</div>
         <form class="inline" method="post"
               action="/review/{{ month }}/posts/{{ p.post_id }}/decision">
           <input type="hidden" name="decision" value="restore">
-          <button class="ghost" type="submit">Restore</button>
+          <button class="ghost" type="submit">{{ T("Restore") }}</button>
         </form>
       {% else %}
         <form class="inline" method="post"
               action="/review/{{ month }}/posts/{{ p.post_id }}/decision">
           <input type="hidden" name="decision" value="{{ 'drop' if p.effective_keep else 'keep' }}">
           <button class="{% if p.effective_keep %}ghost{% endif %}" type="submit">
-            {{ 'Delete' if p.effective_keep else 'Keep' }}</button>
+            {{ T('Delete') if p.effective_keep else T('Keep') }}</button>
         </form>
       {% endif %}
     </td>
@@ -118,7 +112,7 @@ async function watchRun() {
     if (!live.length) { location.reload(); return; }
     const d = live.map(([, v]) => v.detail).filter(Boolean).join(' · ');
     document.getElementById('busy-detail').textContent =
-      d || 'working…';
+      d || {{ T('working…') | tojson }};
     mmProgress(document.getElementById('busy-pbar'), j.tasks);
   } catch (e) {}
   setTimeout(watchRun, 4000);

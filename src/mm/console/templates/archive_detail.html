@@ -2,17 +2,16 @@
 {% set active = 'archives' %}
 {% block title %}Archive #{{ meta.id }} · {{ meta.month }}{% endblock %}
 {% block content %}
-<h2 style="margin-top:0">Archive #{{ meta.id }} — {{ meta.month }}
-  <span class="micro">archived {{ meta.archived_at[:16] }} by {{ meta.archived_by }}</span></h2>
-<p class="note">Read-only snapshot of the search as it was when archived.
-Greyed posts were dropped (by the filter or a reviewer) at the time.</p>
-<a class="btn" href="/archives">← All archives</a>
+<h2 style="margin-top:0">{{ T("Archive #{id} — {m}") | replace("{id}", meta.id | string) | replace("{m}", meta.month) }}
+  <span class="micro">{{ T("archived {t} by {who}") | replace("{t}", meta.archived_at[:16]) | replace("{who}", meta.archived_by) }}</span></h2>
+<p class="note">{{ T("Read-only snapshot of the search as it was when archived. Greyed posts were dropped (by the filter or a reviewer) at the time.") }}</p>
+<a class="btn" href="/archives">{{ T("← All archives") }}</a>
 <hr class="rule">
 
 {% for g in groups %}
-<h2>{{ g.display }} <span class="micro">— {{ g.posts|length }} posts</span></h2>
+<h2>{{ g.display }} <span class="micro">— {{ g.posts|length }} {{ T("posts") }}</span></h2>
 <table class="grid">
-  <tr><th style="width:96px"></th><th>Post</th><th style="width:260px">Verdict at archive time</th></tr>
+  <tr><th style="width:96px"></th><th>{{ T("Post") }}</th><th style="width:260px">{{ T("Verdict at archive time") }}</th></tr>
   {% for p in g.posts %}
   {% set gal = namespace(items=[]) %}
   {% for path in p.images %}
@@ -21,27 +20,27 @@ Greyed posts were dropped (by the filter or a reviewer) at the time.</p>
   <tr class="{% if not p.effective_keep %}dropped{% endif %}"
       {% if gal.items %}data-gallery='{{ gal.items | tojson }}'{% endif %}>
     <td>{% if p.thumb %}<img class="thumb zoom" data-gidx="0" loading="lazy"
-          title="Click to preview all images"
+          title="{{ T('Click to preview all images') }}"
           src="/media?path={{ p.thumb | urlencode }}">{% endif %}</td>
     <td>
       <div class="micro">{{ (p.created_at or '')[:16] }} ·
-        <a href="{{ p.url }}" target="_blank">post ↗</a></div>
+        <a href="{{ p.url }}" target="_blank">{{ T("post ↗") }}</a></div>
       <div class="caption-cn">{{ (p.caption or '')[:400] }}</div>
     </td>
     <td>
       {% set v = p.verdict %}
       {% if v %}
       <span class="pill {% if v.keep %}ok{% else %}err{% endif %}">
-        llm: {{ 'keep' if v.keep else 'drop' }}</span>
+        {{ T('llm: ') }}{{ T('keep') if v.keep else T('drop') }}</span>
       {% if v.human_decision %}
-      <span class="pill on">human: {{ v.human_decision }}
+      <span class="pill on">{{ T("human: ") }}{{ T(v.human_decision) }}
         {% if v.decided_by %}({{ v.decided_by }}){% endif %}</span>
       {% endif %}
       {% if v.rationale %}
-      <details><summary class="micro" style="cursor:pointer">rationale</summary>
+      <details><summary class="micro" style="cursor:pointer">{{ T("rationale") }}</summary>
         <div class="note" style="font-size:11px">{{ v.rationale }}</div></details>
       {% endif %}
-      {% else %}<span class="micro">no verdict</span>{% endif %}
+      {% else %}<span class="micro">{{ T("no verdict") }}</span>{% endif %}
     </td>
   </tr>
   {% endfor %}
@@ -49,9 +48,9 @@ Greyed posts were dropped (by the filter or a reviewer) at the time.</p>
 {% endfor %}
 
 {% if projects %}
-<h2>Projects at archive time <span class="micro">— {{ projects|length }}</span></h2>
+<h2>{{ T("Projects at archive time") }} <span class="micro">— {{ projects|length }}</span></h2>
 <table class="grid" style="max-width:1100px">
-  <tr><th>Brand</th><th>Title</th><th>Dates</th><th>Status</th><th>Description</th></tr>
+  <tr><th>{{ T("Brand") }}</th><th>{{ T("Title") }}</th><th>{{ T("Dates") }}</th><th>{{ T("Status") }}</th><th>{{ T("Description") }}</th></tr>
   {% for p in projects %}
   <tr>
     <td class="micro">{{ p.brand }}</td>

@@ -2,16 +2,13 @@
 {% set active = 'archives' %}
 {% block title %}Archives{% endblock %}
 {% block content %}
-<h2 style="margin-top:0">Archived searches</h2>
-<p class="note">Each <strong>Archive &amp; reset</strong> snapshots a month's
-entire search — posts, filter verdicts, human decisions, projects — and clears
-the live tables so the next Start month searches from scratch. Nothing is
-deleted: browse any archive below.</p>
-{% if not items %}<p class="note">No archives yet.</p>{% endif %}
+<h2 style="margin-top:0">{{ T("Archived searches") }}</h2>
+<p class="note">{{ T("Each Archive & reset snapshots a month's entire search — posts, filter verdicts, human decisions, projects — and clears the live tables so the next Start month searches from scratch. Nothing is deleted: browse any archive below.") }}</p>
+{% if not items %}<p class="note">{{ T("No archives yet.") }}</p>{% endif %}
 {% if items %}
 <table class="grid" style="max-width:900px">
-  <tr><th>#</th><th>Month</th><th>Archived</th><th>By</th>
-      <th>Posts</th><th>Projects</th><th></th></tr>
+  <tr><th>#</th><th>{{ T("Month") }}</th><th>{{ T("Archived") }}</th><th>{{ T("By") }}</th>
+      <th>{{ T("Posts") }}</th><th>{{ T("Projects") }}</th><th></th></tr>
   {% for a in items %}
   <tr>
     <td>{{ a.id }}</td>
@@ -20,7 +17,7 @@ deleted: browse any archive below.</p>
     <td>{{ a.archived_by }}</td>
     <td>{{ a.counts.get('posts', 0) }}</td>
     <td>{{ a.counts.get('projects', 0) }}</td>
-    <td><a class="btn" href="/archives/{{ a.id }}">Browse</a></td>
+    <td><a class="btn" href="/archives/{{ a.id }}">{{ T("Browse") }}</a></td>
   </tr>
   {% endfor %}
 </table>

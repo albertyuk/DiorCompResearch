@@ -3,68 +3,62 @@
 {% block title %}Review · Projects · {{ month }}{% endblock %}
 {% block content %}
 {% if busy %}
-<div class="banner info" id="busy-banner">⏳ A run is working on {{ month }}
-  right now — <span id="busy-detail"></span><br>
-  Projects below are the <strong>last completed</strong> state; the list
-  refreshes itself when cross-check / enrichment / render finishes.</div>
+<div class="banner info" id="busy-banner">⏳ {{ T("A run is working on {m} right now") | replace("{m}", month) }} — <span id="busy-detail"></span><br>
+  {{ T("Projects below are the last completed state; the list refreshes itself when cross-check / enrichment / render finishes.") }}</div>
 {% endif %}
 <div class="row-flex" style="justify-content:space-between">
   <div>
-    <h2 style="margin-top:0">Review checkpoint #2 — projects · {{ month }}</h2>
-    <p class="note">Each project lists the posts consolidated into it —
-    tick the images that should render on the slide (or drop an HQ original).
-    Drag the ⠿ handle of a project onto another project to merge them;
-    drag a post's ⠿ handle to move just that post. Celeb names, relations
-    and photo libraries live on the <a href="/celebs">Celebs page</a>.</p>
+    <h2 style="margin-top:0">{{ T("Review checkpoint #2 — projects") }} · {{ month }}</h2>
+    <p class="note">{{ T("Each project lists the posts consolidated into it — tick the images that should render on the slide (or drop an HQ original). Drag the ⠿ handle of a project onto another project to merge them; drag a post's ⠿ handle to move just that post. Celeb names, relations and photo libraries live on the") }} <a href="/celebs">{{ T("Celebs page") }}</a>.</p>
   </div>
   <form method="post" action="/review/{{ month }}/render"
-        onsubmit="return confirm('Confirm projects and render the deck?')">
+        onsubmit="return confirm('{{ T("Confirm projects and render the deck?") }}')">
     <select name="visuals" style="width:auto; display:inline-block">
-      <option value="live" {% if default_visuals == 'live' %}selected{% endif %}>visuals: live screenshots (weibo) + cards</option>
-      <option value="card" {% if default_visuals == 'card' %}selected{% endif %}>visuals: cards only</option>
+      <option value="live" {% if default_visuals == 'live' %}selected{% endif %}>{{ T("visuals: live screenshots (weibo) + cards") }}</option>
+      <option value="card" {% if default_visuals == 'card' %}selected{% endif %}>{{ T("visuals: cards only") }}</option>
     </select>
-    <button type="submit">Confirm &amp; render →</button>
+    <button type="submit">{{ T("Confirm & render →") }}</button>
   </form>
 </div>
 <div class="micro">
-  {% if confirmed_by %}posts confirmed by {{ confirmed_by.actor_name }} · {{ confirmed_by.at[:16] }}{% endif %}
-  {% if rendered_by %} — last render by {{ rendered_by.actor_name }} · {{ rendered_by.at[:16] }}{% endif %}
+  {% if confirmed_by %}{{ T("posts confirmed by {who} · {t}") | replace("{who}", confirmed_by.actor_name) | replace("{t}", confirmed_by.at[:16]) }}{% endif %}
+  {% if rendered_by %} — {{ T("last render by {who} · {t}") | replace("{who}", rendered_by.actor_name) | replace("{t}", rendered_by.at[:16]) }}{% endif %}
 </div>
 <div class="pbar" id="task-pbar"><div class="fill"></div></div>
 <div class="micro" id="task-line"></div>
 <hr class="rule">
 
 {% for g in groups %}
-<h2>{{ g.brand.display_name }} <span class="micro">— {{ g.projects|length }} projects</span></h2>
+<h2>{{ g.brand.display_name }} <span class="micro">— {{ g.projects|length }} {{ T("projects") }}</span></h2>
 {% for p in g.projects %}
 <div class="proj-card {% if p.status == 'dropped' %}dropped{% endif %}"
      data-proj="{{ p.id }}" data-brand="{{ g.brand.key }}">
   <div class="row-flex" style="justify-content:space-between; align-items:baseline">
     <span class="drag-handle" draggable="true" data-proj="{{ p.id }}"
           data-brand="{{ g.brand.key }}"
-          title="Drag onto another {{ g.brand.display_name }} project to merge">
+          title="{{ T('Drag onto another project to merge') }}">
       ⠿&nbsp;{{ p.title }}{% if p.phase_suffix %} — {{ p.phase_suffix }}{% endif %}</span>
-    <span class="micro">status: {{ p.status }}</span>
+    <span class="micro">{{ T("status: ") }}{{ T(p.status) }}</span>
   </div>
   {% if p.rationale %}
   <div class="note" style="margin:8px 0 4px; border-left:2px solid var(--line); padding-left:10px">
-    <span class="micro">Why these posts are grouped</span><br>{{ p.rationale }}</div>
+    <span class="micro">{{ T("Why these posts are grouped") }}</span><br>{{ p.rationale }}</div>
   {% endif %}
   <form method="post" action="/review/{{ month }}/projects/{{ p.id }}/update"
         style="margin-top:10px">
     <input type="hidden" name="_platforms_submitted" value="1">
     <div class="row-flex">
       <div style="flex:2; min-width:340px">
-        <div class="micro">Title / phase</div>
+        <div class="micro">{{ T("Title / phase") }}</div>
         <div class="row-flex" style="gap:6px">
           <input type="text" name="title" value="{{ p.title }}" style="flex:3">
           <input type="text" name="phase_suffix" value="{{ p.phase_suffix or '' }}"
                  placeholder="TEASER / CELEBS / …" style="flex:1">
         </div>
-        <div class="micro" style="margin-top:8px">Project line (table cell)</div>
+        <div class="micro" style="margin-top:8px">{{ T("Project line (table cell)") }}</div>
         <input type="text" name="description" value="{{ p.description or '' }}" maxlength="90">
-        <div class="micro" style="margin-top:8px">Celebs on this project
-          <span style="text-transform:none">(name as shown on the slide · relation label)</span></div>
+        <div class="micro" style="margin-top:8px">{{ T("Celebs on this project") }}
+          <span style="text-transform:none">{{ T("(name as shown on the slide · relation label)") }}</span></div>
         {% for c in p.celebs_list %}
         <div class="row-flex" style="gap:6px; margin-top:4px; align-items:center; flex-wrap:nowrap">
           <input type="hidden" name="celeb_{{ loop.index0 }}_name_cn" value="{{ c.name_cn or '' }}">
@@ -77,31 +71,31 @@
                  value="{{ c.relation_display or '' }}" style="flex:1"
                  placeholder="BRAND AMBASSADOR / ACTRESS ? / …">
           <label class="micro" style="white-space:nowrap">
-            <input type="checkbox" name="celeb_{{ loop.index0 }}_remove"> remove</label>
+            <input type="checkbox" name="celeb_{{ loop.index0 }}_remove"> {{ T("remove") }}</label>
         </div>
         {% endfor %}
         <div class="row-flex" style="gap:6px; margin-top:4px; flex-wrap:nowrap">
-          <input type="text" name="celeb_new_display" placeholder="+ add celeb (slide name)" style="flex:1">
-          <input type="text" name="celeb_new_relation" placeholder="relation label" style="flex:1">
+          <input type="text" name="celeb_new_display" placeholder="{{ T('+ add celeb (slide name)') }}" style="flex:1">
+          <input type="text" name="celeb_new_relation" placeholder="{{ T('relation label') }}" style="flex:1">
           <input type="text" name="celeb_new_name_cn" placeholder="中文名（关联注册表）" style="flex:1">
         </div>
       </div>
       <div style="flex:1; min-width:230px">
-        <div class="micro">Dates</div>
+        <div class="micro">{{ T("Dates") }}</div>
         <div class="row-flex" style="gap:6px">
           <input type="date" name="date_start" value="{{ p.date_start }}" style="flex:1">
           <input type="date" name="date_end" value="{{ p.date_end or '' }}" style="flex:1">
         </div>
         <label class="micro" style="display:block; margin-top:6px">
           <input type="checkbox" name="ongoing" {% if p.ongoing %}checked{% endif %}>
-          ongoing (— TBD)</label>
-        <div class="micro" style="margin-top:8px">Assets</div>
+          {{ T("ongoing (— TBD)") }}</label>
+        <div class="micro" style="margin-top:8px">{{ T("Assets") }}</div>
         <select name="assets">
           {% for a in ['PHOTO', 'VIDEO', 'PHOTO VIDEO'] %}
           <option {% if p.assets == a %}selected{% endif %}>{{ a }}</option>
           {% endfor %}
         </select>
-        <div class="micro" style="margin-top:8px">Platforms (SOCIAL column)</div>
+        <div class="micro" style="margin-top:8px">{{ T("Platforms (SOCIAL column)") }}</div>
         {% for plat in ['weibo', 'xhs', 'wechat_mp', 'wechat_channels', 'douyin'] %}
         {% set pm = p.platforms.get(plat) %}
         <label class="micro" style="display:block">
@@ -110,7 +104,7 @@
           {{ plat }}
           {% if pm and pm.matched_url %}
             · <a href="{{ pm.matched_url }}" target="_blank"
-                 title="matched {{ (pm.matched_date or '')[:10] }}">evidence ↗</a>
+                 title="{{ T('matched') }} {{ (pm.matched_date or '')[:10] }}">{{ T("evidence ↗") }}</a>
           {% endif %}
           {% if pm and pm.confidence is not none %}
             · conf {{ '%.2f'|format(pm.confidence) }}
@@ -119,25 +113,22 @@
         {% endfor %}
       </div>
       <div style="flex:1; min-width:200px">
-        <div class="micro">Hero media</div>
+        <div class="micro">{{ T("Hero media") }}</div>
         <div class="hero-strip">
           {% for h in p.hero_list[:3] %}
           <img src="/media?path={{ h | urlencode }}" loading="lazy">
           {% endfor %}
         </div>
         <div class="row-flex" style="margin-top:10px">
-          <button type="submit">Save</button>
+          <button type="submit">{{ T("Save") }}</button>
         </div>
       </div>
     </div>
   </form>
 
   <div style="margin-top:14px; border-top:1px solid var(--line); padding-top:10px">
-    <div class="micro">Consolidated posts — {{ p.member_posts|length }}
-      <span style="text-transform:none; letter-spacing:0">· tick an image to
-      put it on the slide · drop an HQ original on the drop zone · drag ⠿ to
-      move a post to another project · ✕ remove takes one post out, the rest
-      stay grouped</span></div>
+    <div class="micro">{{ T("Consolidated posts — {n}") | replace("{n}", p.member_posts|length|string) }}
+      <span style="text-transform:none; letter-spacing:0">{{ T("· tick an image to put it on the slide · drop an HQ original on the drop zone · drag ⠿ to move a post to another project · ✕ remove takes one post out, the rest stay grouped") }}</span></div>
     {% for mp in p.member_posts %}
     {% set mgal = namespace(items=[]) %}
     {% for m in mp.media_list %}{% if m.local_path %}
@@ -151,18 +142,18 @@
          style="gap:10px; margin-top:8px; align-items:flex-start">
       <span class="drag-handle" draggable="true" data-post="{{ mp.post_id }}"
             data-from="{{ p.id }}" data-brand="{{ g.brand.key }}"
-            title="Drag onto another project to move this post">⠿</span>
+            title="{{ T('Drag onto another project to move this post') }}">⠿</span>
       <div style="min-width:130px">
-        <span class="pill {% if mp.role == 'match' %}warn{% endif %}">{{ mp.platform }}{% if mp.role == 'match' %} · matched{% endif %}</span>
+        <span class="pill {% if mp.role == 'match' %}warn{% endif %}">{{ mp.platform }}{% if mp.role == 'match' %} · {{ T("matched") }}{% endif %}</span>
         <div class="micro" style="margin-top:3px">{{ (mp.created_at or '')[:10] }} ·
-          <a href="{{ mp.url }}" target="_blank">post ↗</a></div>
+          <a href="{{ mp.url }}" target="_blank">{{ T("post ↗") }}</a></div>
         <form class="inline" method="post"
               action="/review/{{ month }}/projects/{{ p.id }}/eject"
-              onsubmit="return confirm('{% if mp.role == 'match' %}Detach this matched {{ mp.platform }} post from the group? It returns to the orphan list.{% else %}Remove just this post from the group? It becomes its own project.{% endif %}')">
+              onsubmit="return confirm('{% if mp.role == 'match' %}{{ T("Detach this matched {p} post from the group? It returns to the orphan list.") | replace("{p}", mp.platform) }}{% else %}{{ T("Remove just this post from the group? It becomes its own project.") }}{% endif %}')">
           <input type="hidden" name="post_id" value="{{ mp.post_id }}">
           <button class="ghost" type="submit" style="padding:2px 8px; margin-top:4px"
-                  title="Remove only this post from the group — the rest stay together">
-            ✕ remove</button>
+                  title="{{ T('Remove only this post from the group — the rest stay together') }}">
+            {{ T("✕ remove") }}</button>
         </form>
       </div>
       <div class="caption-cn" style="flex:1; max-width:420px; font-size:12px">{{ (mp.caption or '')[:200] }}</div>
@@ -170,12 +161,12 @@
         {% for gitem in mgal.items %}
         <span style="position:relative; display:inline-block">
           <img class="thumb zoom" loading="lazy" data-gidx="{{ loop.index0 }}"
-               title="Click to preview" src="{{ gitem.src }}"
+               title="{{ T('Click to preview') }}" src="{{ gitem.src }}"
                style="width:64px; height:64px;
                {% if gitem.sel %}outline:3px solid #3d6b45{% endif %}">
           <input type="checkbox" class="media-sel" data-post="{{ mp.post_id }}"
                  data-idx="{{ gitem.midx }}" {% if gitem.sel %}checked{% endif %}
-                 title="tick = this image goes on the slide"
+                 title="{{ T('tick = this image goes on the slide') }}"
                  style="position:absolute; top:2px; left:2px; cursor:pointer">
           {% if gitem.hq %}<span class="pill ok"
              style="position:absolute; bottom:2px; left:2px; background:#fff">HQ</span>{% endif %}
@@ -185,13 +176,12 @@
              style="width:64px; height:64px; border:1px dashed var(--mut);
                     display:flex; align-items:center; justify-content:center;
                     text-align:center; font-size:9px; color:var(--mut);
-                    cursor:pointer">drop HQ<br>image</div>
+                    cursor:pointer">{{ T("drop HQ<br>image") | safe }}</div>
       </div>
     </div>
     {% endfor %}
     {% if not p.member_posts %}
-    <p class="note">No posts attached — drag posts here from another project,
-    or drop the project.</p>
+    <p class="note">{{ T("No posts attached — drag posts here from another project, or drop the project.") }}</p>
     {% endif %}
   </div>
 </div>
@@ -200,13 +190,13 @@
     <input type="hidden" name="value"
            value="{{ 'draft' if p.status == 'dropped' else 'dropped' }}">
     <button class="ghost" type="submit">
-      {{ 'Restore project' if p.status == 'dropped' else 'Drop project' }}</button>
+      {{ T('Restore project') if p.status == 'dropped' else T('Drop project') }}</button>
   </form>
   {% set weibo_members = p.member_posts | selectattr('platform', 'equalto', 'weibo') | list %}
   {% if weibo_members | length > 1 %}
   <form class="inline" method="post" action="/review/{{ month }}/projects/{{ p.id }}/ungroup"
-        onsubmit="return confirm('Split this project into {{ weibo_members | length }} single-post projects? Matched cross-platform posts return to the orphan list.')">
-    <button class="ghost" type="submit">Ungroup ({{ weibo_members | length }} posts)</button>
+        onsubmit="return confirm('{{ T("Split this project into {n} single-post projects? Matched cross-platform posts return to the orphan list.") | replace("{n}", weibo_members | length | string) }}')">
+    <button class="ghost" type="submit">{{ T("Ungroup ({n} posts)") | replace("{n}", weibo_members | length | string) }}</button>
   </form>
   {% endif %}
 </div>
@@ -215,14 +205,11 @@
 
 {% if orphans %}
 <hr class="rule">
-<h2>Orphans <span class="micro">— cross-platform posts matching no kept Weibo post,
-  sifted by the same filter as review #1</span></h2>
-<p class="note">Keeps surface first; greyed rows were dropped by the filter
-(open the rationale to see why). Drag an orphan's ⠿ handle onto a project to
-attach it there, or promote it to its own project.</p>
+<h2>{{ T("Orphans") }} <span class="micro">{{ T("— cross-platform posts matching no kept Weibo post, sifted by the same filter as review #1") }}</span></h2>
+<p class="note">{{ T("Keeps surface first; greyed rows were dropped by the filter (open the rationale to see why). Drag an orphan's ⠿ handle onto a project to attach it there, or promote it to its own project.") }}</p>
 <table class="grid">
-  <tr><th style="width:24px"></th><th style="width:96px"></th><th>Post</th>
-      <th style="width:230px">Filter verdict</th><th style="width:220px"></th></tr>
+  <tr><th style="width:24px"></th><th style="width:96px"></th><th>{{ T("Post") }}</th>
+      <th style="width:230px">{{ T("Filter verdict") }}</th><th style="width:220px"></th></tr>
   {% for o in orphans %}
   {% set ogal = namespace(items=[]) %}
   {% for m in o.media_list %}{% if m.local_path %}
@@ -232,37 +219,37 @@ attach it there, or promote it to its own project.</p>
       {% if ogal.items %}data-gallery='{{ ogal.items | tojson }}'{% endif %}>
     <td><span class="drag-handle" draggable="true" data-post="{{ o.post_id }}"
           data-from="orphans" data-brand="{{ o.brand }}"
-          title="Drag onto a project to attach">⠿</span></td>
+          title="{{ T('Drag onto a project to attach') }}">⠿</span></td>
     <td>{% if o.thumb %}<img class="thumb zoom" data-gidx="0"
-          title="Click to preview all images"
+          title="{{ T('Click to preview all images') }}"
           src="/media?path={{ o.thumb | urlencode }}">{% endif %}</td>
     <td>
       <div class="micro">{{ o.platform }} · {{ (o.created_at or '')[:10] }} ·
-        <a href="{{ o.url }}" target="_blank">post ↗</a></div>
+        <a href="{{ o.url }}" target="_blank">{{ T("post ↗") }}</a></div>
       <div class="caption-cn">{{ (o.caption or '')[:280] }}</div>
     </td>
     <td>
       {% if o.keep is not none %}
       <span class="pill {% if o.keep %}ok{% else %}err{% endif %}">
-        {{ 'KEEP' if o.keep else 'DROP' }} · {{ '%.2f'|format(o.confidence or 0) }}</span>
+        {{ T('KEEP') if o.keep else T('DROP') }} · {{ '%.2f'|format(o.confidence or 0) }}</span>
       {% if o.rationale %}
       <details style="margin-top:4px">
-        <summary class="micro" style="cursor:pointer">why?</summary>
+        <summary class="micro" style="cursor:pointer">{{ T("why?") }}</summary>
         <div class="note" style="font-size:11px; max-width:260px">{{ o.rationale }}</div>
       </details>
       {% endif %}
-      {% else %}<span class="micro">not filtered yet</span>{% endif %}
+      {% else %}<span class="micro">{{ T("not filtered yet") }}</span>{% endif %}
     </td>
     <td>
       <form class="inline" method="post"
             action="/review/{{ month }}/orphans/{{ o.post_id | urlencode }}/resolve">
         <input type="hidden" name="action" value="promote">
-        <button type="submit">Promote to project</button>
+        <button type="submit">{{ T("Promote to project") }}</button>
       </form>
       <form class="inline" method="post"
             action="/review/{{ month }}/orphans/{{ o.post_id | urlencode }}/resolve">
         <input type="hidden" name="action" value="ignore">
-        <button class="ghost" type="submit">Ignore</button>
+        <button class="ghost" type="submit">{{ T("Ignore") }}</button>
       </form>
     </td>
   </tr>
@@ -287,7 +274,7 @@ document.addEventListener('change', async e => {
     if (!r.ok) throw new Error(await r.text());
     t.parentElement.querySelector('img').style.outline =
       t.checked ? '3px solid #3d6b45' : '';
-  } catch (err) { t.checked = !t.checked; alert('Could not save selection: ' + err); }
+  } catch (err) { t.checked = !t.checked; alert({{ T('Could not save selection: ') | tojson }} + err); }
 });
 
 // HQ drop zone: drag an original image (downloaded from the post) or click
@@ -300,7 +287,7 @@ function uploadTo(postId, fileList) {
       if (!r.ok) throw new Error((await r.json()).error || r.status);
       location.reload();
     })
-    .catch(err => alert('Upload failed: ' + err.message));
+    .catch(err => alert({{ T('Upload failed: ') | tojson }} + err.message));
 }
 document.querySelectorAll('.dropzone').forEach(dz => {
   dz.addEventListener('click', () => {
@@ -348,7 +335,7 @@ document.querySelectorAll('.proj-card').forEach(card => {
     const d = mmDrag; mmDrag = null;
     let url, body;
     if (d.proj) {
-      if (!confirm('Merge the dragged project into this one? Its posts, celebs and platform evidence move here.')) return;
+      if (!confirm({{ T('Merge the dragged project into this one? Its posts, celebs and platform evidence move here.') | tojson }})) return;
       url = `/review/{{ month }}/projects/${d.proj}/merge`;
       body = `target_id=${card.dataset.proj}`;
     } else {
@@ -360,7 +347,7 @@ document.querySelectorAll('.proj-card').forEach(card => {
         headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body});
       if (!r.ok) throw new Error((await r.json()).error || r.status);
       location.reload();
-    } catch (err) { alert('Move failed: ' + err.message); }
+    } catch (err) { alert({{ T('Move failed: ') | tojson }} + err.message); }
   });
 });
 
