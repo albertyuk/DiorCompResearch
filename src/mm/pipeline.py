@@ -370,7 +370,7 @@ def _project_visuals(conn, factory, brand_key: str, project: dict,
 
 def run_render(month: str, *, visuals_mode: str | None = None,
                include_drafts: bool = False, qa_pngs: bool = True,
-               progress=None) -> dict:
+               progress=None, should_stop=None) -> dict:
     from .config import DEFAULT_VISUALS
     visuals_mode = visuals_mode or DEFAULT_VISUALS   # local→live, hosted→card
     from .render.deck import BrandSpec, DeckBuilder, ProjectSpec, Visual
@@ -404,6 +404,15 @@ def run_render(month: str, *, visuals_mode: str | None = None,
         for brand, rows in brand_rows:
             projects = []
             for p in rows:
+                # cooperative stop: finished visuals are cached on disk per
+                # post, so a stopped render re-runs quickly
+                if should_stop and should_stop():
+                    note("render · stopped — nothing written; "
+                         "Confirm & render restarts")
+                    _set_phase(engine, month, "render",
+                               "stopped — Confirm & render restarts")
+                    return {"stopped": True, "visuals_done": done,
+                            "visuals_total": total}
                 # the slow part is per-project visual assembly (screenshots /
                 # card composition) — narrate before, count after
                 note(f"render · visuals {done}/{total} · "
@@ -428,6 +437,11 @@ def run_render(month: str, *, visuals_mode: str | None = None,
                 brands_spec.append(BrandSpec(key=brand.key,
                                              display_name=brand.display_name,
                                              projects=projects))
+    if should_stop and should_stop():
+        note("render · stopped — nothing written; Confirm & render restarts")
+        _set_phase(engine, month, "render",
+                   "stopped — Confirm & render restarts")
+        return {"stopped": True, "visuals_done": done, "visuals_total": total}
     year, mm_ = month.split("-")
     name = f"_CREATIVE_{year}_{deck_month_token(month)}_PR_COMPETITOR_REPORT_FASHION.pptx"
     out_pptx = OUTPUT_DIR / name

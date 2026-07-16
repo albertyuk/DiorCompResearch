@@ -328,6 +328,18 @@ each is easy to revisit.
     The Console passes the render task's note into the spawn; `mm run` /
     `mm render` print the same lines to the terminal.
 
+56. **Render is stoppable + hosted "live" mode is the slow path**: the Stop
+    button now also halts a render (checked per project and before deck
+    composition; a stopped render writes no PPTX/XLSX and leaves projects
+    confirmed — per-post visuals already captured are cached on disk, so the
+    restart is fast). Diagnosed from a 20-minute hosted render: "live
+    screenshots" mode on the Fly box attempts a 20s m.weibo.cn navigation +
+    2.5s settle PER weibo post before falling back to a card — from a
+    datacenter IP that's ~22s of timeout per post (~20 min for a typical
+    month). On hosted, choose "cards only"; pushed laptop screenshots always
+    win in any mode, so nothing is lost. The LibreOffice QA raster is capped
+    at 600s and cannot hang a render indefinitely.
+
 ## Testing
 
 25. The ~15 caption fixtures test the deterministic layers (@-tag extraction,

@@ -112,6 +112,14 @@ def _crosscheck_and_enrich(month):
     return {"crosscheck": r1, "enrich": r2}
 
 
+def _render_task(month, visuals_mode):
+    # note/stop resolve inside the worker: _spawn has registered the task
+    # and its stop event by the time this runs
+    return pipeline.run_render(month, visuals_mode=visuals_mode,
+                               progress=_task_note(month, "render"),
+                               should_stop=_stop_flag(month, "render"))
+
+
 def create_app() -> FastAPI:
     app = FastAPI(title="Maison Monitor Console")
     auth_cfg = console_auth_config()
@@ -907,9 +915,7 @@ def create_app() -> FastAPI:
         if TASKS.get(f"{month}:render", {}).get("state") == "running":
             return RedirectResponse(f"/review/{month}/projects", status_code=303)
         pipeline.confirm_projects_review(month)
-        if _spawn(month, "render", pipeline.run_render, month,
-                  visuals_mode=visuals,
-                  progress=_task_note(month, "render")):
+        if _spawn(month, "render", _render_task, month, visuals):
             db.audit(db.get_engine(), _actor(request), "render", "month", month)
         return RedirectResponse(f"/review/{month}/projects", status_code=303)
 

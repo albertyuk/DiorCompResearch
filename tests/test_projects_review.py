@@ -499,6 +499,46 @@ def test_run_render_reports_progress(tmp_db, monkeypatch, tmp_path):
     assert status == "rendered" and phases["render"] == "done"
 
 
+def test_run_render_cooperative_stop(tmp_db, monkeypatch, tmp_path):
+    from mm import pipeline
+    import mm.render.deck as deck_mod
+    import mm.render.visuals as vis_mod
+    img = tmp_path / "s.jpg"
+    img.write_bytes(b"\xff\xd8\xff")
+    _post(tmp_db, "weibo:R2", keep=True,
+          media=[{"kind": "image", "local_path": str(img), "selected": True}])
+    pid = _project(tmp_db, "SHOW", post_ids=("weibo:R2",))
+    with tmp_db.get_engine().begin() as conn:
+        conn.execute(tmp_db.projects.update()
+                     .where(tmp_db.projects.c.id == pid)
+                     .values(status="confirmed"))
+
+    class FakeFactory:
+        def __init__(self, month, mode=None):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    class NeverBuilder:
+        def build(self, spec, out):
+            raise AssertionError("a stopped render must not compose a deck")
+
+    monkeypatch.setattr(vis_mod, "VisualFactory", FakeFactory)
+    monkeypatch.setattr(deck_mod, "DeckBuilder", lambda: NeverBuilder())
+    res = pipeline.run_render("2026-06", visuals_mode="card",
+                              should_stop=lambda: True)
+    assert res["stopped"] is True
+    with tmp_db.get_engine().connect() as conn:
+        status = conn.execute(select(tmp_db.projects.c.status)).scalar()
+        phases = tmp_db.get_run(conn, "2026-06")["phases"]
+    assert status == "confirmed"                # not flipped to rendered
+    assert phases["render"] == "stopped — Confirm & render restarts"
+
+
 # ── enrichment: rationale stored, matches become members ─────────────────────
 
 def test_enrich_stores_rationale_and_match_membership(tmp_db, monkeypatch):
