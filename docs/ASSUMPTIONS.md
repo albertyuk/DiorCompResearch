@@ -368,6 +368,19 @@ each is easy to revisit.
     refused (drop the project instead). Ungroup and remove share one
     spin-off implementation (_spinoff_project).
 
+59. **"Stuck" render diagnosed (owner report: 10 min on visuals 9/16 · fendi
+    FENDI BAGUETTE)**: not a hang — _project_visuals iterates up to
+    GRID_CAP×2 = 28 member posts per project, and hosted "live" mode paid a
+    ~20s m.weibo.cn timeout per weibo post (failures are not cached), so the
+    month's biggest seeding project alone costs ~10 minutes per render.
+    Fixes: (a) hosted renders never attempt server-side live capture — a
+    datacenter IP can't reach m.weibo.cn; pushed laptop screenshots still
+    win in any mode, and MM_LIVE_CAPTURE=1 re-enables attempts for owners
+    on a suitable network; (b) the progress line now counts posts INSIDE a
+    project ("… · fendi FENDI BAGUETTE · post 7/28") so a slow project is
+    visibly moving; (c) Stop is honored between posts, not just between
+    projects.
+
 ## Testing
 
 25. The ~15 caption fixtures test the deterministic layers (@-tag extraction,

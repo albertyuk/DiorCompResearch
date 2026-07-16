@@ -339,7 +339,7 @@ def confirm_projects_review(month: str) -> None:
 # -- render (Phase 6) -------------------------------------------------------------
 
 def _project_visuals(conn, factory, brand_key: str, project: dict,
-                     celebs: list[dict]) -> list[dict]:
+                     celebs: list[dict], note=None, should_stop=None) -> list[dict]:
     from .render.deck import GRID_CAP
     rows = list(conn.execute(
         select(db.posts)
@@ -349,7 +349,14 @@ def _project_visuals(conn, factory, brand_key: str, project: dict,
     is_video = project["assets"] == "VIDEO"
     visuals = []
     labeled_names: set[str] = set()
-    for row in rows[: GRID_CAP * 2]:
+    batch = rows[: GRID_CAP * 2]
+    for idx, row in enumerate(batch, 1):
+        # a seeding project can hold dozens of posts — narrate movement
+        # inside it and honor Stop between posts, not just between projects
+        if should_stop and should_stop():
+            return visuals
+        if note and len(batch) > 1:
+            note(f"post {idx}/{len(batch)}")
         post = dict(row)
         label_top = label_name = None
         caption = (post.get("caption") or "")
@@ -451,14 +458,18 @@ def run_render(month: str, *, visuals_mode: str | None = None,
                             "visuals_total": total}
                 # the slow part is per-project visual assembly (screenshots /
                 # card composition) — narrate before, count after
-                note(f"render · visuals {done}/{total} · "
-                     f"{brand.key} {p['title'][:44]}")
+                head = (f"render · visuals {done}/{total} · "
+                        f"{brand.key} {p['title'][:44]}")
+                note(head)
                 celebs = json.loads(p["celebs"] or "[]")
                 plats = [r["platform"] for r in conn.execute(
                     select(db.platform_matches)
                     .where(db.platform_matches.c.project_id == p["id"],
                            db.platform_matches.c.present.is_(True))).mappings()]
-                vis = _project_visuals(conn, factory, brand.key, p, celebs)
+                vis = _project_visuals(conn, factory, brand.key, p, celebs,
+                                       note=(lambda msg, h=head:
+                                             note(f"{h} · {msg}")),
+                                       should_stop=should_stop)
                 done += 1
                 note(f"render · visuals {done}/{total} projects")
                 projects.append(ProjectSpec(

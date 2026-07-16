@@ -511,6 +511,61 @@ def test_visuals_use_celeb_library_and_skip_unticked_platform_posts(tmp_db, tmp_
     assert lib["label_top"] == "BRAND AMBASSADOR"
 
 
+# ── hosted live capture is skipped (20s-per-post timeout trap) ───────────────
+
+def test_hosted_live_mode_skips_server_side_capture(tmp_db, monkeypatch):
+    import mm.config as cfg_mod
+    import mm.render.visuals as vis_mod
+    calls = []
+
+    def probe(hosted, env, mode):
+        monkeypatch.setattr(cfg_mod, "IS_HOSTED", hosted)
+        if env:
+            monkeypatch.setenv("MM_LIVE_CAPTURE", env)
+        else:
+            monkeypatch.delenv("MM_LIVE_CAPTURE", raising=False)
+        f = vis_mod.VisualFactory("2026-06", mode=mode)
+        monkeypatch.setattr(f, "live_screenshot",
+                            lambda b, p: calls.append("live") or None)
+        monkeypatch.setattr(f, "render_card",
+                            lambda b, p: calls.append("card") or None)
+        calls.clear()
+        f.visual_for_post("lv", {"post_id": "weibo:X", "platform": "weibo",
+                                 "url": "https://weibo.com/1/X"})
+        return list(calls)
+
+    assert probe(hosted=True, env=None, mode="live") == ["card"]     # skipped
+    assert probe(hosted=True, env="1", mode="live") == ["live", "card"]
+    assert probe(hosted=False, env=None, mode="live") == ["live", "card"]
+    assert probe(hosted=False, env=None, mode="card") == ["card"]
+
+
+def test_project_visuals_note_and_stop_per_post(tmp_db, tmp_path):
+    from mm.pipeline import _project_visuals
+    img = tmp_path / "i.jpg"
+    img.write_bytes(b"\xff\xd8\xff")
+    media = [{"kind": "image", "local_path": str(img), "selected": True}]
+    for i in range(3):
+        _post(tmp_db, f"weibo:N{i}", keep=True, media=media,
+              created=f"2026-06-0{i + 1}T10:00:00+08:00")
+    pid = _project(tmp_db, "SEEDING",
+                   post_ids=tuple(f"weibo:N{i}" for i in range(3)))
+    notes = []
+    with tmp_db.get_engine().connect() as conn:
+        vis = _project_visuals(conn, None, "lv",
+                               {"id": pid, "assets": "PHOTO"}, [],
+                               note=notes.append)
+    assert len(vis) == 3
+    assert notes == ["post 1/3", "post 2/3", "post 3/3"]
+    # stop between posts: bail with what's collected so far
+    hits = iter([False, True])
+    with tmp_db.get_engine().connect() as conn:
+        vis = _project_visuals(conn, None, "lv",
+                               {"id": pid, "assets": "PHOTO"}, [],
+                               should_stop=lambda: next(hits))
+    assert len(vis) == 1
+
+
 # ── render progress: narrated i/N + step notes ───────────────────────────────
 
 def test_run_render_reports_progress(tmp_db, monkeypatch, tmp_path):

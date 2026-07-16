@@ -61,6 +61,8 @@ def _data_uri(path: str | None) -> str | None:
 
 class VisualFactory:
     def __init__(self, month: str, mode: str = "live", headless: bool = True):
+        import os
+        from ..config import IS_HOSTED
         self.month = month
         self.mode = mode
         self.store = MediaStore(month)
@@ -68,6 +70,14 @@ class VisualFactory:
         self._browser = None
         self._page = None
         self.headless = headless
+        # server-side live capture is a 20s-per-post timeout trap: m.weibo.cn
+        # never answers a datacenter IP and failures are not cached, so every
+        # hosted "live" render repaid ~20s × post. Pushed laptop screenshots
+        # still win in ANY mode (checked first); MM_LIVE_CAPTURE=1 forces
+        # attempts for owners rendering through a suitable network.
+        self.live_capture = (mode == "live" and
+                             (not IS_HOSTED
+                              or os.environ.get("MM_LIVE_CAPTURE") == "1"))
 
     def __enter__(self):
         from playwright.sync_api import sync_playwright
@@ -203,7 +213,7 @@ class VisualFactory:
         pushed = self.store.visuals_dir(brand) / f"live_{pid}.png"
         if pushed.exists():
             return pushed
-        if post.get("platform") == "weibo" and self.mode == "live":
+        if post.get("platform") == "weibo" and self.live_capture:
             shot = self.live_screenshot(brand, post)
             if shot:
                 return shot
