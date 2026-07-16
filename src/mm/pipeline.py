@@ -419,11 +419,12 @@ def _project_visuals(conn, factory, brand_key: str, project: dict,
 
 
 def run_render(month: str, *, visuals_mode: str | None = None,
-               include_drafts: bool = False, qa_pngs: bool = True,
+               include_drafts: bool = False, qa_pngs: bool | None = None,
                progress=None, should_stop=None) -> dict:
-    from .config import DEFAULT_VISUALS
+    from .config import DEFAULT_VISUALS, IS_HOSTED
     visuals_mode = visuals_mode or DEFAULT_VISUALS   # local→live, hosted→card
     from .render.deck import BrandSpec, DeckBuilder, ProjectSpec, Visual
+    from .render.imgprep import slide_ready
     from .render.qa import run_qa
     from .render.visuals import VisualFactory
     from .render.xlsx import write_projects_xlsx
@@ -494,6 +495,12 @@ def run_render(month: str, *, visuals_mode: str | None = None,
                                    note=(lambda msg, h=head:
                                          note(f"{h} · {msg}")),
                                    should_stop=should_stop)
+        # slides embed a shrunk copy of oversized originals (30MB HQ uploads
+        # would bloat the PPTX and multiply the QA raster time); the shrink
+        # itself runs here so the pool parallelizes it too
+        for v in vis:
+            v["image"] = slide_ready(v["image"],
+                                     OUTPUT_DIR / "deck_img_cache")
         with lock:
             state["done"] += 1
             done_now = state["done"]
@@ -542,8 +549,17 @@ def run_render(month: str, *, visuals_mode: str | None = None,
     note("render · writing the spreadsheet (XLSX)…")
     out_xlsx = OUTPUT_DIR / f"{month}_projects.xlsx"
     write_projects_xlsx(brands_spec, out_xlsx)
+    # the QA slide raster (LibreOffice → PDF → PNGs) is minutes of work whose
+    # output nothing on the hosted box ever displays — hosted skips it by
+    # default (MM_QA_PNGS=1 re-enables); the cheap package/placeholder/
+    # geometry checks always run and alone decide report["ok"]
+    if qa_pngs is None:
+        qa_pngs = os.environ.get("MM_QA_PNGS",
+                                 "0" if IS_HOSTED else "1") == "1"
     qa_dir = OUTPUT_DIR / f"{month}_qa" if qa_pngs else None
-    note("render · QA raster via LibreOffice (the slowest step)…")
+    note("render · QA raster via LibreOffice (the slowest step)…" if qa_pngs
+         else "render · QA checks (raster skipped on hosted; MM_QA_PNGS=1 "
+              "enables)…")
     report = run_qa(out_pptx, qa_dir)
     with db.get_engine().begin() as conn:
         db.set_phase(conn, month, "render", "done" if report["ok"] else "error")

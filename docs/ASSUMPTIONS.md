@@ -392,6 +392,21 @@ each is easy to revisit.
     rendering deliberately sequential" clause of #52. Deck composition,
     XLSX, and the QA raster remain single-threaded (fast or subprocess).
 
+61. **Render optimization pass (owner request)**: (a) slides embed a
+    slide-ready copy of oversized images — ingest keeps ORIGINALS (largest
+    weibo variant, HQ uploads ≤30MB) for the review UI, but a deck grid cell
+    shows ~2in, so files >900KB are downscaled to 1600px long edge and
+    recompressed (JPEG q88; alpha keeps PNG) into a content-addressed cache
+    under OUTPUT_DIR/deck_img_cache (originals untouched, failures fall back
+    to the original, prep runs inside the parallel workers). This shrinks
+    the PPTX itself and everything that scales with embedded bytes: save,
+    download, and the LibreOffice raster. (b) The QA slide raster is skipped
+    by default on hosted (nothing there ever displays the PNGs; it was "the
+    slowest step") — MM_QA_PNGS=1 re-enables; the cheap package/placeholder/
+    geometry checks always run and alone decide report.ok, locally the
+    raster still runs by default. (c) run_qa parses the deck once instead of
+    three times.
+
 ## Testing
 
 25. The ~15 caption fixtures test the deterministic layers (@-tag extraction,

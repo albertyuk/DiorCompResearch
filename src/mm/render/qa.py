@@ -19,8 +19,8 @@ PLACEHOLDER_RE = re.compile(r"lorem|TODO|\[insert|XXX|PLACEHOLDER", re.I)
 CANVAS_W, CANVAS_H = 13.333, 7.5
 
 
-def validate_package(path: Path) -> dict:
-    prs = Presentation(str(path))
+def validate_package(path: Path, prs: Presentation | None = None) -> dict:
+    prs = prs or Presentation(str(path))
     return {"slides": len(prs.slides),
             "width_in": round(Emu(prs.slide_width).inches, 3),
             "height_in": round(Emu(prs.slide_height).inches, 3)}
@@ -41,8 +41,8 @@ def _iter_text(prs):
         yield from walk(slide.shapes)
 
 
-def find_placeholders(path: Path) -> list[tuple[int, str]]:
-    prs = Presentation(str(path))
+def find_placeholders(path: Path, prs: Presentation | None = None) -> list[tuple[int, str]]:
+    prs = prs or Presentation(str(path))
     hits = []
     for slide_no, text in _iter_text(prs):
         if text and PLACEHOLDER_RE.search(text):
@@ -50,8 +50,8 @@ def find_placeholders(path: Path) -> list[tuple[int, str]]:
     return hits
 
 
-def lint_geometry(path: Path) -> list[str]:
-    prs = Presentation(str(path))
+def lint_geometry(path: Path, prs: Presentation | None = None) -> list[str]:
+    prs = prs or Presentation(str(path))
     problems = []
     for i, slide in enumerate(prs.slides, 1):
         for sh in slide.shapes:
@@ -91,9 +91,10 @@ def render_pngs(path: Path, out_dir: Path, dpi: int = 100) -> list[Path]:
 
 
 def run_qa(path: Path, png_dir: Path | None = None) -> dict:
-    report = {"package": validate_package(path),
-              "placeholders": find_placeholders(path),
-              "geometry": lint_geometry(path),
+    prs = Presentation(str(path))          # parse once, share across checks
+    report = {"package": validate_package(path, prs),
+              "placeholders": find_placeholders(path, prs),
+              "geometry": lint_geometry(path, prs),
               "pngs": []}
     if png_dir is not None:
         try:

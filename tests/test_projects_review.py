@@ -511,6 +511,95 @@ def test_visuals_use_celeb_library_and_skip_unticked_platform_posts(tmp_db, tmp_
     assert lib["label_top"] == "BRAND AMBASSADOR"
 
 
+# ── slide-ready image prep: shrink oversized originals for embedding ─────────
+
+def test_slide_ready_shrinks_and_caches(tmp_path):
+    from PIL import Image
+    from mm.render.imgprep import MAX_EDGE, slide_ready
+    cache = tmp_path / "cache"
+    big = tmp_path / "big.jpg"
+    Image.effect_noise((3200, 2400), 60).convert("RGB").save(big, quality=98)
+    assert big.stat().st_size > 900_000
+    out = slide_ready(str(big), cache)
+    assert out != str(big) and out.endswith(".jpg")
+    with Image.open(out) as im:
+        assert max(im.size) == MAX_EDGE
+    assert (tmp_path / "big.jpg").stat().st_size > (
+        tmp_path / "cache" / out.rsplit("/", 1)[1]).stat().st_size
+    assert slide_ready(str(big), cache) == out          # cached second time
+    # small files embed as-is; transparency keeps PNG; junk falls back
+    small = tmp_path / "small.jpg"
+    Image.new("RGB", (400, 400)).save(small)
+    assert slide_ready(str(small), cache) == str(small)
+    rgba = tmp_path / "shot.png"
+    Image.effect_noise((2600, 2600), 60).convert("RGBA").save(rgba)
+    if rgba.stat().st_size > 900_000:
+        out2 = slide_ready(str(rgba), cache)
+        assert out2.endswith(".png")
+        with Image.open(out2) as im:
+            assert im.mode == "RGBA" and max(im.size) == MAX_EDGE
+    broken = tmp_path / "broken.jpg"
+    broken.write_bytes(b"\xff\xd8\xff" + b"x" * 1_000_001)
+    assert slide_ready(str(broken), cache) == str(broken)
+
+
+def test_render_embeds_prepared_images_and_skips_qa_raster_on_hosted(
+        tmp_db, monkeypatch, tmp_path):
+    from pathlib import Path
+    from PIL import Image
+    import mm.config as cfg_mod
+    import mm.render.deck as deck_mod
+    import mm.render.qa as qa_mod
+    import mm.render.visuals as vis_mod
+    import mm.render.xlsx as xlsx_mod
+    from mm import pipeline
+    big = tmp_path / "hq.jpg"
+    Image.effect_noise((3200, 2400), 60).convert("RGB").save(big, quality=98)
+    _post(tmp_db, "weibo:HQ", keep=True,
+          media=[{"kind": "image", "local_path": str(big), "selected": True}])
+    pid = _project(tmp_db, "SHOW", post_ids=("weibo:HQ",))
+    with tmp_db.get_engine().begin() as conn:
+        conn.execute(tmp_db.projects.update()
+                     .where(tmp_db.projects.c.id == pid)
+                     .values(status="confirmed"))
+
+    class FakeFactory:
+        def __init__(self, month, mode=None):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    captured = {}
+
+    class SpyBuilder:
+        def build(self, spec, out):
+            captured["images"] = [v.image for b in spec
+                                  for p in b.projects for v in p.visuals]
+            Path(out).write_bytes(b"pptx")
+
+    monkeypatch.setattr(vis_mod, "VisualFactory", FakeFactory)
+    monkeypatch.setattr(deck_mod, "DeckBuilder", lambda: SpyBuilder())
+    monkeypatch.setattr(xlsx_mod, "write_projects_xlsx", lambda spec, out: out)
+    monkeypatch.setattr(qa_mod, "run_qa",
+                        lambda p, d: {"ok": True, "qa_dir": d})
+    monkeypatch.setattr(pipeline, "OUTPUT_DIR", tmp_path)
+    monkeypatch.setattr(cfg_mod, "IS_HOSTED", True)
+    monkeypatch.delenv("MM_QA_PNGS", raising=False)
+    res = pipeline.run_render("2026-06", visuals_mode="card")
+    # the deck embedded the shrunk cached copy, not the 1MB+ original
+    assert captured["images"] != [str(big)]
+    assert "deck_img_cache" in captured["images"][0]
+    # hosted default: no LibreOffice raster dir
+    assert res["qa"]["qa_dir"] is None
+    monkeypatch.setenv("MM_QA_PNGS", "1")
+    res = pipeline.run_render("2026-06", visuals_mode="card")
+    assert res["qa"]["qa_dir"] is not None              # opt-in re-enables
+
+
 # ── hosted live capture is skipped (20s-per-post timeout trap) ───────────────
 
 def test_hosted_live_mode_skips_server_side_capture(tmp_db, monkeypatch):
