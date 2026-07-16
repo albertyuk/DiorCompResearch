@@ -75,7 +75,7 @@ def run(month: str = typer.Option(None, help="YYYY-MM; default = previous month"
                    f"the Console:\n    {console_url}/review/{month}/projects")
         raise typer.Exit(0)
     typer.echo(f"[{month}] render…")
-    _echo(pipeline.run_render(month))
+    _echo(pipeline.run_render(month, progress=typer.echo))
     typer.echo(f"[{month}] cost summary:")
     costs(month)
 
@@ -135,7 +135,8 @@ def render(month: str = typer.Option(None),
         _echo(run_qa(out, OUTPUT_DIR / f"{m}_qa"))
         return
     month = _month_opt(month)
-    _echo(pipeline.run_render(month, visuals_mode=visuals, include_drafts=drafts))
+    _echo(pipeline.run_render(month, visuals_mode=visuals,
+                              include_drafts=drafts, progress=typer.echo))
 
 
 @app.command()

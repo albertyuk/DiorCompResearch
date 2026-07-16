@@ -441,6 +441,64 @@ def test_visuals_use_celeb_library_and_skip_unticked_platform_posts(tmp_db, tmp_
     assert lib["label_top"] == "BRAND AMBASSADOR"
 
 
+# ── render progress: narrated i/N + step notes ───────────────────────────────
+
+def test_run_render_reports_progress(tmp_db, monkeypatch, tmp_path):
+    from pathlib import Path
+    import mm.render.deck as deck_mod
+    import mm.render.qa as qa_mod
+    import mm.render.visuals as vis_mod
+    import mm.render.xlsx as xlsx_mod
+    from mm import pipeline
+    img = tmp_path / "s.jpg"
+    img.write_bytes(b"\xff\xd8\xff")
+    _post(tmp_db, "weibo:R1", keep=True,
+          media=[{"kind": "image", "local_path": str(img), "selected": True}])
+    pid = _project(tmp_db, "SHOW", post_ids=("weibo:R1",))
+    with tmp_db.get_engine().begin() as conn:
+        conn.execute(tmp_db.projects.update()
+                     .where(tmp_db.projects.c.id == pid)
+                     .values(status="confirmed"))
+
+    class FakeFactory:
+        def __init__(self, month, mode=None):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def visual_for_post(self, brand, post):
+            return None
+
+    class FakeBuilder:
+        def build(self, spec, out):
+            Path(out).write_bytes(b"pptx")
+
+    monkeypatch.setattr(vis_mod, "VisualFactory", FakeFactory)
+    monkeypatch.setattr(deck_mod, "DeckBuilder", lambda: FakeBuilder())
+    monkeypatch.setattr(xlsx_mod, "write_projects_xlsx", lambda spec, out: out)
+    monkeypatch.setattr(qa_mod, "run_qa", lambda p, d: {"ok": True})
+    monkeypatch.setattr(pipeline, "OUTPUT_DIR", tmp_path)
+    notes = []
+    res = pipeline.run_render("2026-06", visuals_mode="card",
+                              progress=notes.append)
+    assert res["qa"]["ok"] is True
+    # countable progress (drives the determinate bar) plus step narration
+    assert any("visuals 0/1" in n for n in notes)
+    assert any("visuals 1/1" in n for n in notes)
+    assert any("PPTX" in n for n in notes)
+    assert any("XLSX" in n for n in notes)
+    assert any("LibreOffice" in n for n in notes)
+    assert notes[-1] == "render · done"
+    with tmp_db.get_engine().connect() as conn:
+        status = conn.execute(select(tmp_db.projects.c.status)).scalar()
+        phases = tmp_db.get_run(conn, "2026-06")["phases"]
+    assert status == "rendered" and phases["render"] == "done"
+
+
 # ── enrichment: rationale stored, matches become members ─────────────────────
 
 def test_enrich_stores_rationale_and_match_membership(tmp_db, monkeypatch):

@@ -369,7 +369,8 @@ def _project_visuals(conn, factory, brand_key: str, project: dict,
 
 
 def run_render(month: str, *, visuals_mode: str | None = None,
-               include_drafts: bool = False, qa_pngs: bool = True) -> dict:
+               include_drafts: bool = False, qa_pngs: bool = True,
+               progress=None) -> dict:
     from .config import DEFAULT_VISUALS
     visuals_mode = visuals_mode or DEFAULT_VISUALS   # local→live, hosted→card
     from .render.deck import BrandSpec, DeckBuilder, ProjectSpec, Visual
@@ -377,28 +378,44 @@ def run_render(month: str, *, visuals_mode: str | None = None,
     from .render.visuals import VisualFactory
     from .render.xlsx import write_projects_xlsx
 
+    def note(msg: str) -> None:
+        if progress:
+            progress(msg)
+
     cfg = BrandsConfig.load()
     engine = db.get_engine()
     _set_phase(engine, month, "render", "running")
     brands_spec: list[BrandSpec] = []
     with engine.connect() as conn, \
             VisualFactory(month, mode=visuals_mode) as factory:
+        # collect first so progress can report a real i/N over all projects
+        brand_rows = []
         for brand in cfg.brands:
             q = select(db.projects).where(db.projects.c.month == month,
                                           db.projects.c.brand == brand.key,
                                           db.projects.c.status != "dropped")
             if not include_drafts:
                 q = q.where(db.projects.c.status != "draft")
-            rows = [dict(r) for r in conn.execute(
-                q.order_by(db.projects.c.date_start)).mappings()]
+            brand_rows.append((brand, [dict(r) for r in conn.execute(
+                q.order_by(db.projects.c.date_start)).mappings()]))
+        total = sum(len(rows) for _, rows in brand_rows)
+        done = 0
+        note(f"render · visuals 0/{total} projects ({visuals_mode} mode)")
+        for brand, rows in brand_rows:
             projects = []
             for p in rows:
+                # the slow part is per-project visual assembly (screenshots /
+                # card composition) — narrate before, count after
+                note(f"render · visuals {done}/{total} · "
+                     f"{brand.key} {p['title'][:44]}")
                 celebs = json.loads(p["celebs"] or "[]")
                 plats = [r["platform"] for r in conn.execute(
                     select(db.platform_matches)
                     .where(db.platform_matches.c.project_id == p["id"],
                            db.platform_matches.c.present.is_(True))).mappings()]
                 vis = _project_visuals(conn, factory, brand.key, p, celebs)
+                done += 1
+                note(f"render · visuals {done}/{total} projects")
                 projects.append(ProjectSpec(
                     title=p["title"], phase_suffix=p["phase_suffix"],
                     date_start=p["date_start"] or f"{month}-01",
@@ -414,10 +431,13 @@ def run_render(month: str, *, visuals_mode: str | None = None,
     year, mm_ = month.split("-")
     name = f"_CREATIVE_{year}_{deck_month_token(month)}_PR_COMPETITOR_REPORT_FASHION.pptx"
     out_pptx = OUTPUT_DIR / name
+    note("render · composing the deck (PPTX)…")
     DeckBuilder().build(brands_spec, out_pptx)
+    note("render · writing the spreadsheet (XLSX)…")
     out_xlsx = OUTPUT_DIR / f"{month}_projects.xlsx"
     write_projects_xlsx(brands_spec, out_xlsx)
     qa_dir = OUTPUT_DIR / f"{month}_qa" if qa_pngs else None
+    note("render · QA raster via LibreOffice (the slowest step)…")
     report = run_qa(out_pptx, qa_dir)
     with db.get_engine().begin() as conn:
         db.set_phase(conn, month, "render", "done" if report["ok"] else "error")
@@ -425,6 +445,7 @@ def run_render(month: str, *, visuals_mode: str | None = None,
                      .where(db.projects.c.month == month,
                             db.projects.c.status == "confirmed")
                      .values(status="rendered"))
+    note("render · done" if report["ok"] else "render · QA flagged issues")
     return {"pptx": str(out_pptx), "xlsx": str(out_xlsx), "qa": report}
 
 

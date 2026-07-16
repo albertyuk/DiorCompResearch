@@ -908,7 +908,8 @@ def create_app() -> FastAPI:
             return RedirectResponse(f"/review/{month}/projects", status_code=303)
         pipeline.confirm_projects_review(month)
         if _spawn(month, "render", pipeline.run_render, month,
-                  visuals_mode=visuals):
+                  visuals_mode=visuals,
+                  progress=_task_note(month, "render")):
             db.audit(db.get_engine(), _actor(request), "render", "month", month)
         return RedirectResponse(f"/review/{month}/projects", status_code=303)
 

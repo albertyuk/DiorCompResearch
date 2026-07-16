@@ -321,6 +321,13 @@ each is easy to revisit.
     per-project `rationale` (stored on projects, shown as "Why these posts
     are grouped"); merges/ungroups/promotions append their own provenance.
 
+55. **Render progress (owner request)**: run_render narrates each step
+    through the standard progress callback — per-project visual assembly as
+    a countable `i/N` (drives the determinate hairline bar on the projects
+    page), then deck/XLSX/LibreOffice-QA step notes (indeterminate sweep).
+    The Console passes the render task's note into the spawn; `mm run` /
+    `mm render` print the same lines to the terminal.
+
 ## Testing
 
 25. The ~15 caption fixtures test the deterministic layers (@-tag extraction,
