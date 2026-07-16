@@ -2,6 +2,9 @@
 from __future__ import annotations
 
 import json
+import os
+import threading
+from concurrent.futures import ThreadPoolExecutor
 
 from sqlalchemy import select
 
@@ -10,16 +13,20 @@ from .config import BrandsConfig
 from .llm import LLM
 
 CONFIDENCE_REVIEW_THRESHOLD = 0.65   # bias to recall
+DEFAULT_FILTER_WORKERS = 4           # concurrent LLM calls (MM_FILTER_WORKERS)
 
 
 def filter_month(engine, llm: LLM, cfg: BrandsConfig, month: str,
                  brand_key: str | None = None, progress=None,
-                 should_stop=None) -> dict:
-    """One LLM call per unfiltered post; each verdict commits in its own short
-    transaction, so a mid-run crash loses nothing already paid for and the
-    console stays writable while this runs. `should_stop()` is checked between
-    posts — a stop pauses cleanly and the next run picks up the rest."""
+                 should_stop=None, max_workers: int | None = None) -> dict:
+    """One LLM call per unfiltered post, MM_FILTER_WORKERS of them in flight
+    at once (posts are independent; the Anthropic client is thread-safe).
+    Each verdict commits in its own short transaction, so a mid-run crash
+    loses nothing already paid for and the console stays writable while this
+    runs. `should_stop()` is checked before each post is dispatched — a stop
+    lets in-flight calls finish, and the next run picks up the rest."""
     from .learn import learned_rules_block
+    from .naming import cosmetics_signal
     q = (select(db.posts)
          .where(db.posts.c.month == month, db.posts.c.platform == "weibo"))
     if brand_key:
@@ -29,15 +36,16 @@ def filter_month(engine, llm: LLM, cfg: BrandsConfig, month: str,
         done = {r["post_id"]
                 for r in conn.execute(select(db.verdicts.c.post_id)).mappings()}
         learned = learned_rules_block(conn)
+    pending = [row for row in rows if row["post_id"] not in done]
     stats = {"total": len(rows), "filtered": 0, "kept": 0, "needs_review": 0,
-             "errors": 0, "stopped": False,
-             "pending": sum(1 for r in rows if r["post_id"] not in done)}
-    for row in rows:
+             "errors": 0, "stopped": False, "pending": len(pending)}
+    lock = threading.Lock()
+
+    def one(row):
         if should_stop and should_stop():
-            stats["stopped"] = True
-            break
-        if row["post_id"] in done:
-            continue
+            with lock:
+                stats["stopped"] = True
+            return
         brand = cfg.brand(row["brand"])
         media = json.loads(row["media"] or "[]")
         media_summary = (f"{sum(1 for m in media if m['kind'] == 'image')} image(s), "
@@ -57,13 +65,13 @@ def filter_month(engine, llm: LLM, cfg: BrandsConfig, month: str,
         except Exception:
             # transient API failure: record nothing — the post stays
             # unfiltered and the next `mm filter` run picks it up cheaply
-            stats["errors"] += 1
-            if progress:
-                progress(stats)   # failures must move the progress line too
-            continue
+            with lock:
+                stats["errors"] += 1
+                if progress:
+                    progress(stats)   # failures must move the progress line too
+            return
         keep = bool(verdict.get("keep"))
         conf = float(verdict.get("confidence") or 0)
-        from .naming import cosmetics_signal
         signal = cosmetics_signal(row["caption"] or "")
         # ambiguous reposts always surface for human review
         needs_review = conf < CONFIDENCE_REVIEW_THRESHOLD or bool(row["repost_ambiguous"])
@@ -92,11 +100,22 @@ def filter_month(engine, llm: LLM, cfg: BrandsConfig, month: str,
                 "media_focus": verdict.get("media_focus") or "photo",
                 "needs_review": needs_review,
             }, ["post_id"])
-        stats["filtered"] += 1
-        stats["kept"] += int(keep)
-        stats["needs_review"] += int(needs_review)
-        if progress:
-            progress(stats)
+        with lock:
+            stats["filtered"] += 1
+            stats["kept"] += int(keep)
+            stats["needs_review"] += int(needs_review)
+            if progress:
+                progress(stats)
+
+    if pending:
+        if max_workers is None:
+            max_workers = int(os.environ.get("MM_FILTER_WORKERS",
+                                             DEFAULT_FILTER_WORKERS))
+        with ThreadPoolExecutor(
+                max_workers=max(1, min(max_workers, len(pending)))) as ex:
+            list(ex.map(one, pending))
+    if should_stop and should_stop():
+        stats["stopped"] = True
     return stats
 
 

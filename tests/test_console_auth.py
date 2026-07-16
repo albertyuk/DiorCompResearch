@@ -329,9 +329,11 @@ def test_filter_month_cooperative_stop(tmp_db):
                     "celebs_tagged": [], "category": "event",
                     "media_focus": "photo"}
 
+    # max_workers=1 → deterministic "stop after the current post" semantics
     stats = filtering.filter_month(tmp_db.get_engine(), OneCallLLM(),
                                    BrandsConfig.load(), "2026-06",
-                                   should_stop=lambda: len(calls) >= 1)
+                                   should_stop=lambda: len(calls) >= 1,
+                                   max_workers=1)
     assert stats["stopped"] is True
     assert stats["filtered"] == 1 and len(calls) == 1   # paused, not lost
 

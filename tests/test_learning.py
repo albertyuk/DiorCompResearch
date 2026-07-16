@@ -251,6 +251,36 @@ def test_perfume_keep_gets_flagged_for_review(tmp_db):
     assert "perfume terms present — policy is DROP" in row["reasons"]
 
 
+def test_filter_llm_calls_run_in_parallel(tmp_db):
+    import threading
+    from mm import filtering
+    from mm.config import BrandsConfig
+    for i in range(3):
+        with tmp_db.get_engine().begin() as conn:
+            tmp_db.upsert(conn, tmp_db.posts, {
+                "post_id": f"weibo:P{i}", "month": "2026-06", "brand": "lv",
+                "platform": "weibo", "url": "u",
+                "created_at": "2026-06-05T12:00:00+08:00", "caption": "上海快闪",
+                "at_tags": "[]", "hashtags": "[]", "media": "[]",
+                "is_repost": False, "repost_ambiguous": False}, ["post_id"])
+
+    barrier = threading.Barrier(3, timeout=8)   # deadlocks unless concurrent
+
+    class BarrierLLM:
+        def call_json(self, *a, **k):
+            barrier.wait()
+            return {"keep": True, "confidence": 0.9, "rationale": "x",
+                    "reasons": [], "celebs_tagged": [], "category": "event",
+                    "media_focus": "photo"}
+
+    stats = filtering.filter_month(tmp_db.get_engine(), BarrierLLM(),
+                                   BrandsConfig.load(), "2026-06",
+                                   max_workers=3)
+    assert stats["filtered"] == 3 and stats["errors"] == 0
+    with tmp_db.get_engine().connect() as conn:
+        assert len(conn.execute(select(tmp_db.verdicts)).all()) == 3
+
+
 def test_recall_flip_never_resurrects_beauty_drops(tmp_db):
     from mm import filtering
     from mm.config import BrandsConfig

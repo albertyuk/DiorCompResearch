@@ -250,6 +250,14 @@ each is easy to revisit.
     name labels under slide visuals are Calibre 9 (link lines keep their
     original size).
 
+50. **The filter runs its LLM calls in parallel** (default 4 in flight,
+    `MM_FILTER_WORKERS` to tune): posts are independent, the Anthropic client
+    is thread-safe, verdicts still commit per post in short transactions, and
+    the stats/progress line updates under a lock. Stop semantics with workers:
+    no NEW posts are dispatched once Stop is pressed; the handful already in
+    flight complete and are saved. 4 workers stays comfortably inside
+    standard-tier Anthropic rate limits.
+
 ## Testing
 
 25. The ~15 caption fixtures test the deterministic layers (@-tag extraction,
