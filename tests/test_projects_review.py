@@ -251,6 +251,76 @@ def test_adopt_moves_post_and_resolves_orphans(client, tmp_db):
     assert pm["matched_post_id"] == "douyin:C3" and pm["present"] is True
 
 
+def test_eject_single_weibo_post_keeps_rest_grouped(client, tmp_db):
+    _post(tmp_db, "weibo:G1", keep=True, caption="快闪店 开幕")
+    _post(tmp_db, "weibo:G2", keep=True, caption="独立活动 王一博",
+          created="2026-06-08T10:00:00+08:00")
+    _post(tmp_db, "weibo:G3", keep=True, caption="快闪店 闭幕",
+          created="2026-06-09T10:00:00+08:00")
+    pid = _project(tmp_db, "POP UP", post_ids=("weibo:G1", "weibo:G2", "weibo:G3"),
+                   celebs=json.dumps([{"name_cn": "王一博", "display": "WANG YIBO",
+                                       "relation_display": "BRAND AMBASSADOR"}]))
+    r = client.post(f"/review/2026-06/projects/{pid}/eject",
+                    data={"post_id": "weibo:G2"}, follow_redirects=False)
+    assert r.status_code == 303
+    with tmp_db.get_engine().connect() as conn:
+        remaining = {r["post_id"] for r in conn.execute(
+            select(tmp_db.project_posts.c.post_id).where(
+                tmp_db.project_posts.c.project_id == pid)).mappings()}
+        projs = [dict(p) for p in conn.execute(
+            select(tmp_db.projects)).mappings()]
+        audit = tmp_db.last_audit(conn, "project_eject", "project",
+                                  f"weibo:G2<-{pid}")
+    # the group survives minus the chosen post
+    assert remaining == {"weibo:G1", "weibo:G3"}
+    assert any(p["id"] == pid for p in projs)
+    solo = [p for p in projs if p["id"] != pid][0]
+    assert "Removed from 'POP UP'" in solo["rationale"]
+    # the ejected post's celeb followed it
+    assert json.loads(solo["celebs"])[0]["name_cn"] == "王一博"
+    assert audit["actor_name"] == "Alice"
+
+
+def test_eject_matched_post_returns_to_orphans(client, tmp_db):
+    _post(tmp_db, "weibo:H1", keep=True)
+    _post(tmp_db, "douyin:H2", platform="douyin")
+    pid = _project(tmp_db, "SHOW", post_ids=("weibo:H1", "douyin:H2"),
+                   roles={"douyin:H2": "match"},
+                   matches=[{"platform": "douyin", "present": True,
+                             "matched_url": "https://x/douyin:H2",
+                             "matched_post_id": "douyin:H2",
+                             "confidence": 0.8}])
+    r = client.post(f"/review/2026-06/projects/{pid}/eject",
+                    data={"post_id": "douyin:H2"}, follow_redirects=False)
+    assert r.status_code == 303
+    with tmp_db.get_engine().connect() as conn:
+        remaining = [r["post_id"] for r in conn.execute(
+            select(tmp_db.project_posts.c.post_id).where(
+                tmp_db.project_posts.c.project_id == pid)).mappings()]
+        orphan = conn.execute(select(tmp_db.orphans).where(
+            tmp_db.orphans.c.post_id == "douyin:H2")).mappings().first()
+        pm = conn.execute(select(tmp_db.platform_matches).where(
+            tmp_db.platform_matches.c.project_id == pid,
+            tmp_db.platform_matches.c.platform == "douyin")).mappings().first()
+        n_projects = len(conn.execute(select(tmp_db.projects)).all())
+    assert remaining == ["weibo:H1"]              # group intact
+    assert orphan["resolution"] == "pending"      # back in the pool
+    assert pm is None                             # evidence row cleared
+    assert n_projects == 1                        # no spin-off for matches
+
+
+def test_eject_guards_last_weibo_post_and_non_members(client, tmp_db):
+    _post(tmp_db, "weibo:L1", keep=True)
+    _post(tmp_db, "weibo:L2", keep=True)
+    pid = _project(tmp_db, "SOLO", post_ids=("weibo:L1",))
+    assert client.post(f"/review/2026-06/projects/{pid}/eject",
+                       data={"post_id": "weibo:L1"}).status_code == 400
+    assert client.post(f"/review/2026-06/projects/{pid}/eject",
+                       data={"post_id": "weibo:L2"}).status_code == 404
+    page = client.get("/review/2026-06/projects").text
+    assert "✕ remove" in page and f"/projects/{pid}/eject" in page
+
+
 # ── orphans: filtered like review #1 ─────────────────────────────────────────
 
 def test_filter_orphans_uses_same_rubric(tmp_db):

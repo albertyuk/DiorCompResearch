@@ -120,6 +120,49 @@ def _render_task(month, visuals_mode):
                                should_stop=_stop_flag(month, "render"))
 
 
+def _spinoff_project(conn, month: str, proj, post, rationale: str,
+                     taken: set) -> int:
+    """A single-post draft project for a weibo post leaving `proj` (used by
+    Ungroup and per-post Remove). `taken` = (title, phase_suffix) pairs
+    already used this month·brand; the new title is deduped into it."""
+    import re as _re
+    from .. import naming as _naming
+    caption = _re.sub(r"\s+", " ", (post["caption"] or "")).strip()
+    base = (caption[:60].upper() or proj["title"])
+    title, n = base, 2
+    while (title, None) in taken:
+        title, n = f"{base[:54]} ({n})", n + 1
+    taken.add((title, None))
+    media = json.loads(post["media"] or "[]")
+    has_video = any(x.get("kind") == "video_cover" for x in media)
+    has_photo = any(x.get("kind") == "image" for x in media)
+    celebs = json.loads(proj["celebs"] or "[]")
+    res = conn.execute(db.projects.insert().values(
+        month=month, brand=proj["brand"], title=title, phase_suffix=None,
+        date_start=(post["created_at"] or f"{month}-01")[:10],
+        date_end=(post["created_at"] or f"{month}-01")[:10],
+        ongoing=False,
+        assets=_naming.assets_label(has_photo or not has_video, has_video),
+        description=caption[:90].upper() or title,
+        celebs=json.dumps([c for c in celebs if c.get("name_cn")
+                           and c["name_cn"] in (post["caption"] or "")],
+                          ensure_ascii=False),
+        hero_media=json.dumps([x["local_path"] for x in media
+                               if x.get("local_path")][:3],
+                              ensure_ascii=False),
+        status="draft", rationale=rationale))
+    pid = res.inserted_primary_key[0]
+    db.upsert(conn, db.project_posts,
+              {"project_id": pid, "post_id": post["post_id"],
+               "role": "member"}, ["project_id", "post_id"])
+    db.upsert(conn, db.platform_matches,
+              {"project_id": pid, "platform": "weibo", "present": True,
+               "matched_url": post["url"], "matched_date": post["created_at"],
+               "matched_post_id": post["post_id"], "confidence": 1.0},
+              ["project_id", "platform"])
+    return pid
+
+
 def create_app() -> FastAPI:
     app = FastAPI(title="Maison Monitor Console")
     auth_cfg = console_auth_config()
@@ -760,7 +803,6 @@ def create_app() -> FastAPI:
     def project_ungroup(request: Request, month: str, project_id: int):
         """Split a project back into one project per Weibo post; matched
         cross-platform posts return to the orphan list."""
-        import re as _re
         engine = db.get_engine()
         with engine.begin() as conn:
             proj = conn.execute(select(db.projects).where(
@@ -779,7 +821,6 @@ def create_app() -> FastAPI:
                     {"error": "nothing to ungroup — the project has a single post"},
                     status_code=400)
             proj_title = naming.format_title(proj["title"], proj["phase_suffix"])
-            celebs = json.loads(proj["celebs"] or "[]")
             taken = {(r["title"], r["phase_suffix"]) for r in conn.execute(
                 select(db.projects.c.title, db.projects.c.phase_suffix)
                 .where(db.projects.c.month == month,
@@ -791,43 +832,10 @@ def create_app() -> FastAPI:
             conn.execute(db.projects.delete().where(
                 db.projects.c.id == project_id))
             for m in weibo:
-                caption = _re.sub(r"\s+", " ", (m["caption"] or "")).strip()
-                base = (caption[:60].upper() or proj["title"])
-                title, n = base, 2
-                while (title, None) in taken:
-                    title, n = f"{base[:54]} ({n})", n + 1
-                taken.add((title, None))
-                media = json.loads(m["media"] or "[]")
-                has_video = any(x.get("kind") == "video_cover" for x in media)
-                has_photo = any(x.get("kind") == "image" for x in media)
-                res = conn.execute(db.projects.insert().values(
-                    month=month, brand=proj["brand"], title=title,
-                    phase_suffix=None,
-                    date_start=(m["created_at"] or f"{month}-01")[:10],
-                    date_end=(m["created_at"] or f"{month}-01")[:10],
-                    ongoing=False,
-                    assets=naming.assets_label(has_photo or not has_video,
-                                               has_video),
-                    description=caption[:90].upper() or title,
-                    celebs=json.dumps(
-                        [c for c in celebs if c.get("name_cn")
-                         and c["name_cn"] in (m["caption"] or "")],
-                        ensure_ascii=False),
-                    hero_media=json.dumps(
-                        [x["local_path"] for x in media
-                         if x.get("local_path")][:3], ensure_ascii=False),
-                    status="draft",
-                    rationale=f"Ungrouped from '{proj_title}' by {_actor(request)}."))
-                pid = res.inserted_primary_key[0]
-                db.upsert(conn, db.project_posts,
-                          {"project_id": pid, "post_id": m["post_id"],
-                           "role": "member"}, ["project_id", "post_id"])
-                db.upsert(conn, db.platform_matches,
-                          {"project_id": pid, "platform": "weibo",
-                           "present": True, "matched_url": m["url"],
-                           "matched_date": m["created_at"],
-                           "matched_post_id": m["post_id"],
-                           "confidence": 1.0}, ["project_id", "platform"])
+                _spinoff_project(
+                    conn, month, proj, m,
+                    f"Ungrouped from '{proj_title}' by {_actor(request)}.",
+                    taken)
             # cross-platform members go back to the orphan pool
             for m in members:
                 if m["platform"] != "weibo":
@@ -836,6 +844,65 @@ def create_app() -> FastAPI:
                                "resolution": "pending"}, ["post_id"])
             db.audit(conn, _actor(request), "project_ungroup", "project",
                      f"{project_id} -> {len(weibo)} projects")
+        return RedirectResponse(f"/review/{month}/projects", status_code=303)
+
+    @app.post("/review/{month}/projects/{project_id}/eject")
+    def project_eject(request: Request, month: str, project_id: int,
+                      post_id: str = Form(...)):
+        """Remove ONE chosen post from a group, leaving the rest intact:
+        a weibo member becomes its own single-post project; a matched
+        cross-platform post returns to the orphan list."""
+        engine = db.get_engine()
+        with engine.begin() as conn:
+            proj = conn.execute(select(db.projects).where(
+                db.projects.c.id == project_id)).mappings().first()
+            member = conn.execute(select(db.project_posts).where(
+                db.project_posts.c.project_id == project_id,
+                db.project_posts.c.post_id == post_id)).mappings().first()
+            post = conn.execute(select(db.posts).where(
+                db.posts.c.post_id == post_id)).mappings().first()
+            if proj is None or member is None or post is None:
+                return JSONResponse({"error": "post is not in this project"},
+                                    status_code=404)
+            proj_title = naming.format_title(proj["title"], proj["phase_suffix"])
+            if post["platform"] == "weibo":
+                n_weibo = conn.execute(
+                    select(func.count()).select_from(
+                        db.project_posts.join(
+                            db.posts,
+                            db.posts.c.post_id == db.project_posts.c.post_id))
+                    .where(db.project_posts.c.project_id == project_id,
+                           db.posts.c.platform == "weibo")).scalar() or 0
+                if n_weibo <= 1:
+                    return JSONResponse(
+                        {"error": "this is the project's last weibo post — "
+                                  "drop the whole project instead"},
+                        status_code=400)
+                taken = {(r["title"], r["phase_suffix"]) for r in conn.execute(
+                    select(db.projects.c.title, db.projects.c.phase_suffix)
+                    .where(db.projects.c.month == month,
+                           db.projects.c.brand == proj["brand"])).mappings()}
+                conn.execute(db.project_posts.delete().where(
+                    db.project_posts.c.project_id == project_id,
+                    db.project_posts.c.post_id == post_id))
+                _spinoff_project(
+                    conn, month, proj, post,
+                    f"Removed from '{proj_title}' by {_actor(request)}.",
+                    taken)
+            else:
+                conn.execute(db.project_posts.delete().where(
+                    db.project_posts.c.project_id == project_id,
+                    db.project_posts.c.post_id == post_id))
+                # drop the evidence row only when it points at this very post
+                conn.execute(db.platform_matches.delete().where(
+                    db.platform_matches.c.project_id == project_id,
+                    db.platform_matches.c.platform == post["platform"],
+                    db.platform_matches.c.matched_post_id == post_id))
+                db.upsert(conn, db.orphans,
+                          {"post_id": post_id, "month": month,
+                           "resolution": "pending"}, ["post_id"])
+            db.audit(conn, _actor(request), "project_eject", "project",
+                     f"{post_id}<-{project_id}")
         return RedirectResponse(f"/review/{month}/projects", status_code=303)
 
     @app.post("/review/{month}/projects/{project_id}/adopt")

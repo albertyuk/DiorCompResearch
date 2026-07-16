@@ -357,6 +357,17 @@ each is easy to revisit.
     enrich re-run. Existing months self-heal on the next cross-check run
     (re-Confirm posts).
 
+58. **Per-post removal from a group (owner request)**: Ungroup splits the
+    whole project, which was the only option — now every consolidated post
+    also has "✕ remove", which takes just that post out and leaves the rest
+    grouped: a weibo member spins off into its own single-post draft project
+    (rationale records "Removed from '<TITLE>' by <actor>", celebs whose
+    name appears in its caption follow it); a matched cross-platform post
+    returns to the orphan pool and its evidence row is cleared only when it
+    pointed at that very post. Removing a project's LAST weibo post is
+    refused (drop the project instead). Ungroup and remove share one
+    spin-off implementation (_spinoff_project).
+
 ## Testing
 
 25. The ~15 caption fixtures test the deterministic layers (@-tag extraction,

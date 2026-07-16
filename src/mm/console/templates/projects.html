@@ -136,7 +136,8 @@
     <div class="micro">Consolidated posts — {{ p.member_posts|length }}
       <span style="text-transform:none; letter-spacing:0">· tick an image to
       put it on the slide · drop an HQ original on the drop zone · drag ⠿ to
-      move a post to another project</span></div>
+      move a post to another project · ✕ remove takes one post out, the rest
+      stay grouped</span></div>
     {% for mp in p.member_posts %}
     {% set mgal = namespace(items=[]) %}
     {% for m in mp.media_list %}{% if m.local_path %}
@@ -155,6 +156,14 @@
         <span class="pill {% if mp.role == 'match' %}warn{% endif %}">{{ mp.platform }}{% if mp.role == 'match' %} · matched{% endif %}</span>
         <div class="micro" style="margin-top:3px">{{ (mp.created_at or '')[:10] }} ·
           <a href="{{ mp.url }}" target="_blank">post ↗</a></div>
+        <form class="inline" method="post"
+              action="/review/{{ month }}/projects/{{ p.id }}/eject"
+              onsubmit="return confirm('{% if mp.role == 'match' %}Detach this matched {{ mp.platform }} post from the group? It returns to the orphan list.{% else %}Remove just this post from the group? It becomes its own project.{% endif %}')">
+          <input type="hidden" name="post_id" value="{{ mp.post_id }}">
+          <button class="ghost" type="submit" style="padding:2px 8px; margin-top:4px"
+                  title="Remove only this post from the group — the rest stay together">
+            ✕ remove</button>
+        </form>
       </div>
       <div class="caption-cn" style="flex:1; max-width:420px; font-size:12px">{{ (mp.caption or '')[:200] }}</div>
       <div class="row-flex" style="gap:6px; align-items:center">
