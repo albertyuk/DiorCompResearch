@@ -216,31 +216,54 @@ def run_crosscheck(month: str, brand_keys: list[str] | None = None,
 
 def run_enrich(month: str, brand_keys: list[str] | None = None,
                progress=None, should_stop=None) -> dict:
+    """Brands enrich in parallel (one worker each); inside a brand the
+    relation.md and describe.md calls run in their own small pools. Registry
+    writes are serialized by a lock in enrich.py, so concurrent brands can't
+    clobber a shared celeb's relations."""
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
     cfg = BrandsConfig.load()
     llm = LLM()
     engine = db.get_engine()
     results = {}
-    stopped = False
     _set_phase(engine, month, "enrich", "running")
-    for brand in cfg.brands:
-        if brand_keys and brand.key not in brand_keys:
-            continue
+
+    brand_state: dict[str, str] = {}
+    note_lock = threading.Lock()
+
+    def note(bk, msg):
+        if not progress:
+            return
+        with note_lock:
+            brand_state[bk] = msg
+            line = "  ".join(f"{k} {v}" for k, v in brand_state.items())
+        progress(f"enrich · {line}")
+
+    def one(brand):
         if should_stop and should_stop():
-            stopped = True
-            break
-        if progress:
-            progress(f"enrich {brand.key} · consolidating…")
+            return brand.key, None
+        note(brand.key, "consolidating…")
         matches = {}
         mp = _matches_path(month, brand.key)
         if mp.exists():
             matches = json.loads(mp.read_text())
         try:
-            results[brand.key] = enrich_mod.enrich_brand(
-                engine, llm, cfg, month, brand.key, matches)
+            res = enrich_mod.enrich_brand(engine, llm, cfg, month,
+                                          brand.key, matches)
+            note(brand.key, "done")
+            return brand.key, res
         except Exception as e:
-            results[brand.key] = {"error": str(e)}
+            note(brand.key, "error")
+            return brand.key, {"error": str(e)}
+
+    wanted = [b for b in cfg.brands if not brand_keys or b.key in brand_keys]
+    with ThreadPoolExecutor(max_workers=max(1, len(wanted))) as ex:
+        for key, res in ex.map(one, wanted):
+            if res is not None:
+                results[key] = res
     errs = {k: r["error"] for k, r in results.items() if "error" in r}
-    if stopped:
+    if should_stop and should_stop():
         _set_phase(engine, month, "enrich", "stopped — Confirm posts resumes")
     else:
         _set_phase(engine, month, "enrich",

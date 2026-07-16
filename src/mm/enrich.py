@@ -15,6 +15,8 @@ from __future__ import annotations
 import json
 import os
 import re
+import threading
+from concurrent.futures import ThreadPoolExecutor
 
 from sqlalchemy import delete, select
 
@@ -25,9 +27,17 @@ from .filtering import kept_posts
 from .llm import LLM, parse_json_loose
 
 
+RELATION_WORKERS = 4      # concurrent relation.md calls per brand
+DESCRIBE_WORKERS = 4      # concurrent describe.md calls per brand
+
 # -- registry -----------------------------------------------------------------
 
 _CN_RE = re.compile(r"[一-鿿]{2,}")
+
+# registry_update is a read-modify-write on relations_json; with brands
+# enriching in parallel, two brands touching the same celeb must serialize
+# or one brand's relation is silently lost
+_REG_LOCK = threading.Lock()
 
 
 def norm_name_cn(raw: str) -> str:
@@ -53,6 +63,18 @@ def registry_update(conn, name_cn: str, *, name_en: str | None = None,
                     relation: str | None = None, raw_cn_title: str | None = None,
                     verified: bool = False, source_url: str | None = None,
                     date: str | None = None) -> None:
+    with _REG_LOCK:
+        _registry_update_locked(conn, name_cn, name_en=name_en,
+                                occupation=occupation, brand_key=brand_key,
+                                relation=relation, raw_cn_title=raw_cn_title,
+                                verified=verified, source_url=source_url,
+                                date=date)
+
+
+def _registry_update_locked(conn, name_cn: str, *, name_en=None,
+                            occupation=None, brand_key=None, relation=None,
+                            raw_cn_title=None, verified=False,
+                            source_url=None, date=None) -> None:
     row = registry_get(conn, name_cn)
     relations = json.loads(row["relations_json"]) if row else {}
     if brand_key and relation:
@@ -116,19 +138,35 @@ def extract_caption_relations(conn, llm: LLM, cfg: BrandsConfig, month: str,
     updates the registry with caption-stated titles."""
     brand = cfg.brand(brand_key)
     celebs: dict[str, dict] = {}
+    tagged_rows = []
     for row in posts:
         at_tags = json.loads(row["at_tags"] or "[]")
         tagged = json.loads(row["celebs_tagged"] or "[]") if "celebs_tagged" in row else []
-        if not at_tags and not tagged:
-            continue
+        if at_tags or tagged:
+            tagged_rows.append((row, at_tags, tagged))
+
+    # relation.md calls are independent per post — run them in a pool and
+    # merge the verdicts sequentially afterwards (registry order preserved)
+    def call(item):
+        row, at_tags, tagged = item
         try:
-            j = llm.call_json("relation", {
+            return llm.call_json("relation", {
                 "brand_display": brand.display_name,
                 "caption": (row["caption"] or "")[:2000],
                 "at_tags": at_tags,
             }, conn=conn, brand=brand_key, month=month)
         except Exception:
-            continue
+            return None
+
+    verdicts = []
+    if tagged_rows:
+        with ThreadPoolExecutor(
+                max_workers=min(RELATION_WORKERS, len(tagged_rows))) as ex:
+            verdicts = list(ex.map(call, tagged_rows))
+
+    for (row, at_tags, tagged), j in zip(tagged_rows, verdicts):
+        if j is None:
+            continue          # transient failure: skip this post, as before
         guesses = {norm_name_cn(c.get("name_cn") or ""): c for c in tagged}
         for c in j.get("celebs") or []:
             name_cn = norm_name_cn(c.get("name_cn") or "")
@@ -316,34 +354,51 @@ def enrich_brand(engine, llm: LLM, cfg: BrandsConfig, month: str, brand_key: str
         assets = naming.assets_label(has_photo or not has_video, has_video)
 
         title, suffix = cluster["_title"], cluster["_suffix"]
-        try:
-            desc = llm.call_json("describe", {
-                "brand_display": brand.display_name,
-                "title": title, "phase_suffix": suffix or "",
-                "category": cluster.get("category") or "other",
-                "celebs": [{ "name": c["display"], "relation": c["relation_display"]}
-                           for c in proj_celebs],
-                "captions": "\n---\n".join((m["caption"] or "")[:300] for m in members[:5]),
-            }, conn=engine, brand=brand_key, month=month)
-            description = naming.format_title(desc.get("description") or title, None)
-            if len(description) > 90:
-                description = naming.format_title(title, suffix)
-        except Exception:
-            description = naming.format_title(title, suffix)
-
         prepared.append({
             "values": dict(
                 month=month, brand=brand_key, title=title.upper(),
                 phase_suffix=suffix, date_start=date_start.isoformat(),
                 date_end=date_end.isoformat(), ongoing=ongoing, assets=assets,
-                description=description,
+                description=naming.format_title(title, suffix),  # fallback
                 celebs=json.dumps(proj_celebs, ensure_ascii=False),
                 hero_media=json.dumps(_hero_media(members), ensure_ascii=False),
                 status="draft"),
             "member_ids": member_ids,
             "first_member": members[0],
             "matches": matches,
+            "_describe": {
+                "brand_display": brand.display_name,
+                "title": title, "phase_suffix": suffix or "",
+                "category": cluster.get("category") or "other",
+                "celebs": [{"name": c["display"], "relation": c["relation_display"]}
+                           for c in proj_celebs],
+                "captions": "\n---\n".join((m["caption"] or "")[:300]
+                                           for m in members[:5]),
+            },
+            "_title": title, "_suffix": suffix,
         })
+
+    # describe.md calls are independent per project — fill them in a pool;
+    # a failed call keeps the formatted-title fallback (as before)
+    def describe(item):
+        try:
+            desc = llm.call_json("describe", item.pop("_describe"),
+                                 conn=engine, brand=brand_key, month=month)
+            title, suffix = item.pop("_title"), item.pop("_suffix")
+            description = naming.format_title(
+                desc.get("description") or title, None)
+            if len(description) > 90:
+                description = naming.format_title(title, suffix)
+            item["values"]["description"] = description
+        except Exception:
+            item.pop("_describe", None)
+            item.pop("_title", None)
+            item.pop("_suffix", None)
+
+    if prepared:
+        with ThreadPoolExecutor(
+                max_workers=min(DESCRIBE_WORKERS, len(prepared))) as ex:
+            list(ex.map(describe, prepared))
 
     # single short write transaction: replace previous draft/dropped projects
     # (confirmed ones were guarded against above) and insert the new set

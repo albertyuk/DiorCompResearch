@@ -26,32 +26,41 @@ def _archive_raw(store: MediaStore, brand_key: str, name: str, payload) -> str:
     return str(path)
 
 
-def _download_post_media(store: MediaStore, brand_key: str, post: dict,
-                         referer: str) -> None:
-    # downloads dominate ingest wall-clock — fetch a post's files concurrently,
-    # deduped by (url, kind) so no two threads ever share a target file
+def _download_batch_media(store: MediaStore, brand_key: str, posts: list[dict],
+                          referer: str, max_workers: int = 12) -> None:
+    """Downloads dominate ingest wall-clock — fetch a whole page's files in
+    one pool, deduped by (url, kind) across posts so shared files (the brand
+    avatar repeats on every post) download once and no two threads ever share
+    a target file."""
     jobs: dict[tuple[str, str], object] = {}
-    for m in post["media"]:
-        if m.get("url"):
-            jobs[(m["url"], "img")] = None
-        else:
-            m["local_path"] = None
-    avatar = post.get("author_avatar")
-    if avatar:
-        jobs[(avatar, "avatar")] = None
+    for post in posts:
+        for m in post["media"]:
+            if m.get("url"):
+                jobs[(m["url"], "img")] = None
+            else:
+                m["local_path"] = None
+        if post.get("author_avatar"):
+            jobs[(post["author_avatar"], "avatar")] = None
     if jobs:
-        with ThreadPoolExecutor(max_workers=min(8, len(jobs))) as ex:
+        with ThreadPoolExecutor(max_workers=min(max_workers, len(jobs))) as ex:
             futs = {key: ex.submit(store.download, brand_key, key[0],
                                    kind=key[1], referer=referer)
                     for key in jobs}
             for key, fut in futs.items():
                 jobs[key] = fut.result()
-    for m in post["media"]:
-        if m.get("url"):
-            local = jobs[(m["url"], "img")]
-            m["local_path"] = str(local) if local else None
-    got = jobs.get((avatar, "avatar")) if avatar else None
-    post["author_avatar_path"] = str(got) if got else None
+    for post in posts:
+        for m in post["media"]:
+            if m.get("url"):
+                local = jobs[(m["url"], "img")]
+                m["local_path"] = str(local) if local else None
+        avatar = post.get("author_avatar")
+        got = jobs.get((avatar, "avatar")) if avatar else None
+        post["author_avatar_path"] = str(got) if got else None
+
+
+def _download_post_media(store: MediaStore, brand_key: str, post: dict,
+                         referer: str) -> None:
+    _download_batch_media(store, brand_key, [post], referer)
 
 
 def _store_posts(engine, month: str, brand_key: str, posts: list[dict],
@@ -149,8 +158,8 @@ def ingest_weibo(engine, client: TikHubClient, cfg: BrandsConfig, month: str,
             if post["is_repost"]:
                 n_reposts += 1
                 continue              # pure repost without commentary
-            _download_post_media(store, brand_key, post, "https://weibo.com/")
             batch.append(post)
+        _download_batch_media(store, brand_key, batch, "https://weibo.com/")
         _store_posts(engine, month, brand_key, batch, raw_path)
         n_new += len(batch)
         if progress:
@@ -251,8 +260,8 @@ def pull_platform(engine, client: TikHubClient, cfg: BrandsConfig, month: str,
             if dt < start:
                 older_seen += 1       # pinned posts can't be detected on all
                 continue              # platforms — stop only on a fully-old page
-            _download_post_media(store, brand_key, post, referer)
             batch.append(post)
+        _download_batch_media(store, brand_key, batch, referer)
         _store_posts(engine, month, brand_key, batch, raw_path)
         n += len(batch)
         if (considered and older_seen >= considered) or not has_more or not items:

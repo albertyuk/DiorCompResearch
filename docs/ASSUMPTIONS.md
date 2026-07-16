@@ -270,6 +270,22 @@ each is easy to revisit.
     platform, every above-threshold candidate counts as matched for orphan
     purposes). Stop is honored at brand start and before each LLM escalation.
 
+52. **Full-pipeline parallelism audit (owner request)**: enrichment now runs
+    brands concurrently with per-brand pools for relation.md (4) and
+    describe.md (4) — registry writes serialize behind a module lock because
+    relations_json is a read-modify-write shared across brands. Ingest media
+    downloads pool across the whole page batch (deduped by url+kind, so the
+    per-post avatar downloads once per brand instead of once per post).
+    Cross-check precomputes candidate keyword features once per brand instead
+    of once per kept-post pair. Deliberately left sequential: Weibo/platform
+    page fetches (cursor pagination is inherently serial), the consolidate
+    call (one per brand, needs all posts together), live/card visual
+    rendering (sync Playwright is single-threaded; HQ uploads, selected
+    images, and pushed screenshots bypass it entirely), and the LibreOffice
+    QA raster (single subprocess). Peak LLM concurrency by phase: filter 12,
+    cross-check ≤20 (5 brands × 4), enrich ≤20 — inside standard-tier limits
+    with SDK backoff absorbing bursts.
+
 ## Testing
 
 25. The ~15 caption fixtures test the deterministic layers (@-tag extraction,

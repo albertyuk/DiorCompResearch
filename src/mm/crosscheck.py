@@ -104,6 +104,11 @@ def crosscheck_brand(engine, llm: LLM, cfg: BrandsConfig, month: str,
                           "confidence": confidence, "why": why}
         matched_other_ids.add(cand["post_id"])
 
+    # candidate features computed once, not once per kept post
+    cand_feats = [(cand, _keywords(cand["caption"]),
+                   (cand["caption"] or "").lower(),
+                   parse_iso(cand["created_at"])) for cand in others]
+
     # pass 1 — cheap heuristics inline; ambiguous pairs queue for the LLM
     escalations = []          # (kept row, ref_celebs, candidate)
     for row in kept:
@@ -111,12 +116,10 @@ def crosscheck_brand(engine, llm: LLM, cfg: BrandsConfig, month: str,
         ref_kw = _keywords(row["caption"])
         ref_celebs = _celeb_names(row)
         hits = {}
-        for cand in others:
-            cdate = parse_iso(cand["created_at"])
+        for cand, ckw, cand_text, cdate in cand_feats:
             if ref_date and cdate and abs((cdate - ref_date).days) > WINDOW_DAYS:
                 continue
-            overlap_kw = ref_kw & _keywords(cand["caption"])
-            cand_text = (cand["caption"] or "").lower()
+            overlap_kw = ref_kw & ckw
             overlap_celeb = {n for n in ref_celebs if n and n in cand_text}
             if overlap_celeb:
                 record_hit(hits, cand, 0.85,
