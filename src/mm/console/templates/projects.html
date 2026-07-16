@@ -29,6 +29,7 @@
   {% if confirmed_by %}posts confirmed by {{ confirmed_by.actor_name }} · {{ confirmed_by.at[:16] }}{% endif %}
   {% if rendered_by %} — last render by {{ rendered_by.actor_name }} · {{ rendered_by.at[:16] }}{% endif %}
 </div>
+<div class="pbar" id="task-pbar"><div class="fill"></div></div>
 <div class="micro" id="task-line"></div>
 <hr class="rule">
 
@@ -148,6 +149,7 @@ async function poll() {
       `${k.split(':')[1]}: ${v.state}` +
       (v.state === 'running' && v.detail ? ` — ${v.detail}` : '')).join('  ·  ');
     document.getElementById('task-line').textContent = t ? `background — ${t}` : '';
+    mmProgress(document.getElementById('task-pbar'), j.tasks);
     const bd = document.getElementById('busy-detail');
     if (bd && live.length) {
       bd.textContent = live.map(([, v]) => v.detail).filter(Boolean).join(' · ') || 'working…';

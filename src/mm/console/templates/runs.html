@@ -69,6 +69,7 @@ is a one-time step — commit that file and teammates never see it.</p>
   <div class="micro">⌸ archive #{{ a.id }} · {{ a.archived_at[:16] }} by {{ a.archived_by }}
     · {{ a.counts.get('posts', 0) }} posts · {{ a.counts.get('projects', 0) }} projects</div>
   {% endfor %}
+  <div class="pbar" id="pbar-{{ m.month }}"><div class="fill"></div></div>
   <div class="micro" id="task-{{ m.month }}"></div>
   <details id="actwrap-{{ m.month }}" style="margin-top:6px">
     <summary class="micro" style="cursor:pointer">activity log</summary>
@@ -119,6 +120,7 @@ async function poll() {
       }
       document.getElementById(`stop-${m}`).style.display = running ? '' : 'none';
       document.getElementById(`archive-${m}`).style.display = running ? 'none' : '';
+      mmProgress(document.getElementById(`pbar-${m}`), j.tasks);
 
       // activity feed (auto-open while running)
       const act = document.getElementById(`act-${m}`);

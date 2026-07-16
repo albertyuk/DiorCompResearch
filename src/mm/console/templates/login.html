@@ -8,27 +8,33 @@
 <style>
 * { box-sizing:border-box; margin:0; padding:0; }
 body { font-family:-apple-system,"Helvetica Neue",Helvetica,Arial,sans-serif;
-       color:#111; background:#fff; display:flex; min-height:100vh;
-       align-items:center; justify-content:center; }
-.card { width:360px; }
-.wordmark { font-size:19px; letter-spacing:4px; font-weight:600;
-            border-bottom:1px solid #111; padding-bottom:14px; margin-bottom:26px; }
-label { display:block; font-size:10px; letter-spacing:2px; text-transform:uppercase;
-        color:#8a8a8a; margin:16px 0 5px; }
-input { width:100%; border:1px solid #e3e3e3; padding:9px 10px; font:inherit; }
-input:focus { outline:1px solid #111; }
-button { margin-top:22px; width:100%; background:#111; color:#fff; border:1px solid #111;
-         font-size:11px; letter-spacing:2px; text-transform:uppercase; padding:11px;
-         cursor:pointer; }
-button:hover { background:#fff; color:#111; }
-.err { border:1px solid #b3261e; color:#b3261e; font-size:12px; padding:10px 12px;
-       margin-bottom:14px; }
-.note { font-size:11px; color:#8a8a8a; margin-top:18px; line-height:1.5; }
+       color:#1a1a1a; background:#fff; display:flex; min-height:100vh;
+       align-items:center; justify-content:center;
+       -webkit-font-smoothing:antialiased; }
+.card { width:380px; text-align:center; }
+.wordmark { font-family:"Didot","Bodoni MT","Playfair Display",Georgia,
+            "Times New Roman",serif; font-size:28px; font-weight:400;
+            letter-spacing:9px; text-indent:9px; text-transform:uppercase;
+            border-bottom:1px solid #1a1a1a; padding-bottom:22px;
+            margin-bottom:34px; }
+label { display:block; text-align:left; font-size:9.5px; letter-spacing:2.5px;
+        text-transform:uppercase; color:#77726c; margin:18px 0 6px; }
+input { width:100%; border:1px solid #e6e2dc; padding:10px 12px; font:inherit;
+        border-radius:0; }
+input:focus { outline:1px solid #1a1a1a; }
+button { margin-top:28px; width:100%; background:#1a1a1a; color:#fff;
+         border:1px solid #1a1a1a; font-size:10px; letter-spacing:3px;
+         text-transform:uppercase; padding:13px; cursor:pointer;
+         transition:background .18s ease, color .18s ease; }
+button:hover { background:#fff; color:#1a1a1a; }
+.err { border:1px solid #a2352c; color:#a2352c; font-size:12px;
+       padding:10px 12px; margin-bottom:14px; text-align:left; }
+.note { font-size:11px; color:#77726c; margin-top:22px; line-height:1.6; }
 </style>
 </head>
 <body>
 <form class="card" method="post" action="/login">
-  <div class="wordmark">MAISON&nbsp;MONITOR</div>
+  <div class="wordmark">Maison&nbsp;Monitor</div>
   {% if error %}<div class="err">{{ error }}</div>{% endif %}
   <label for="name">Your name</label>
   <input id="name" name="name" autocomplete="name" autofocus maxlength="80" required>

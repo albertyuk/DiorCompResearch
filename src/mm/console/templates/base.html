@@ -5,68 +5,91 @@
 <title>{% block title %}MAISON MONITOR{% endblock %}</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-:root { --ink:#111; --mut:#8a8a8a; --line:#e3e3e3; --accent:#111; }
+:root { --ink:#1a1a1a; --mut:#77726c; --line:#e6e2dc; --paper:#ffffff;
+        --soft:#faf9f7; --warn:#9c7c2e; --err:#a2352c; --ok:#3d6b45;
+        --serif:"Didot","Bodoni MT","Playfair Display",Georgia,"Times New Roman",serif; }
 * { box-sizing:border-box; margin:0; padding:0; }
 body { font-family:-apple-system,"Helvetica Neue",Helvetica,Arial,sans-serif;
-       color:var(--ink); background:#fff; font-size:14px; line-height:1.5; }
+       color:var(--ink); background:var(--paper); font-size:14px;
+       line-height:1.6; -webkit-font-smoothing:antialiased; }
 a { color:inherit; }
-header { display:flex; align-items:baseline; gap:32px; padding:26px 40px 18px;
+header { position:relative; text-align:center; padding:38px 40px 0;
          border-bottom:1px solid var(--ink); }
-header .wordmark { font-size:19px; letter-spacing:4px; font-weight:600; }
-nav { display:flex; gap:22px; }
-nav a { text-decoration:none; font-size:11px; letter-spacing:2px; color:var(--mut);
-        text-transform:uppercase; padding-bottom:2px; }
-nav a.active, nav a:hover { color:var(--ink); border-bottom:1px solid var(--ink); }
-main { padding:30px 40px 80px; max-width:1500px; }
-h2 { font-size:12px; letter-spacing:3px; text-transform:uppercase; font-weight:600;
-     margin:34px 0 14px; }
+header .wordmark { font-family:var(--serif); font-size:30px; font-weight:400;
+  letter-spacing:10px; text-transform:uppercase; text-indent:10px; }
+header .actor { position:absolute; top:16px; right:24px; font-size:9px;
+  letter-spacing:2px; text-transform:uppercase; color:var(--mut); }
+nav { display:flex; justify-content:center; gap:34px; padding:20px 0 16px;
+      flex-wrap:wrap; }
+nav a { text-decoration:none; font-size:10px; letter-spacing:3px;
+        color:var(--ink); text-transform:uppercase; padding-bottom:3px;
+        border-bottom:1px solid transparent; }
+nav a.active, nav a:hover { border-bottom-color:var(--ink); }
+main { padding:44px 56px 100px; max-width:1500px; margin:0 auto; }
+h2 { font-family:var(--serif); font-size:17px; letter-spacing:3px;
+     text-transform:uppercase; font-weight:400; margin:44px 0 16px; }
 h2:first-child { margin-top:0; }
-.micro { font-size:10px; letter-spacing:2px; text-transform:uppercase; color:var(--mut); }
-.rule { border:0; border-top:1px solid var(--line); margin:20px 0; }
+h2 .micro { font-family:-apple-system,"Helvetica Neue",sans-serif; }
+.micro { font-size:9.5px; letter-spacing:2px; text-transform:uppercase;
+         color:var(--mut); }
+.rule { border:0; border-top:1px solid var(--line); margin:28px 0; }
 table.grid { width:100%; border-collapse:collapse; }
-table.grid th { text-align:left; font-size:10px; letter-spacing:2px;
+table.grid th { text-align:left; font-size:9.5px; letter-spacing:2.5px;
   text-transform:uppercase; color:var(--mut); font-weight:500;
-  border-bottom:1px solid var(--ink); padding:6px 10px 8px; }
-table.grid td { border-bottom:1px solid var(--line); padding:10px; vertical-align:top; }
-button, .btn { background:#fff; border:1px solid var(--ink); color:var(--ink);
-  font-size:10px; letter-spacing:2px; text-transform:uppercase; padding:7px 16px;
-  cursor:pointer; text-decoration:none; display:inline-block; }
+  border-bottom:1px solid var(--ink); padding:8px 12px 10px; }
+table.grid td { border-bottom:1px solid var(--line); padding:14px 12px;
+  vertical-align:top; }
+button, .btn { background:var(--paper); border:1px solid var(--ink);
+  color:var(--ink); font-size:10px; letter-spacing:2.5px;
+  text-transform:uppercase; padding:9px 22px; cursor:pointer;
+  text-decoration:none; display:inline-block;
+  transition:background .18s ease, color .18s ease; }
 button:hover, .btn:hover { background:var(--ink); color:#fff; }
 button.ghost { border-color:var(--line); color:var(--mut); }
-button.ghost:hover { background:#f4f4f4; color:var(--ink); }
+button.ghost:hover { background:var(--soft); color:var(--ink); }
 input[type=text], input[type=date], select, textarea {
-  border:1px solid var(--line); padding:6px 8px; font:inherit; width:100%;
-  background:#fff; }
+  border:1px solid var(--line); padding:8px 10px; font:inherit; width:100%;
+  background:var(--paper); border-radius:0; }
 input:focus, select:focus, textarea:focus { outline:1px solid var(--ink); }
-.pill { display:inline-block; font-size:9px; letter-spacing:1.5px;
-  text-transform:uppercase; border:1px solid var(--line); border-radius:999px;
-  padding:2px 9px; color:var(--mut); margin-right:4px; }
+.pill { display:inline-block; font-size:8.5px; letter-spacing:1.8px;
+  text-transform:uppercase; border:1px solid var(--line); border-radius:0;
+  padding:3px 10px; color:var(--mut); margin-right:4px; background:var(--paper); }
 .pill.on { border-color:var(--ink); color:var(--ink); }
-.pill.warn { border-color:#c99700; color:#a37b00; }
-.pill.err { border-color:#b3261e; color:#b3261e; }
-.pill.ok { border-color:#2e7d32; color:#2e7d32; }
-.pill.live-ind { min-width:92px; text-align:center; }
-.pill.live-ind.running { border-color:#2e7d32; color:#fff; background:#2e7d32;
-  animation:mm-pulse 1.6s ease-in-out infinite; }
-@keyframes mm-pulse { 50% { opacity:.55; } }
-.banner.info { border-color:#c99700; color:#7a5c00; background:#fffbef; }
-.thumb { width:84px; height:84px; object-fit:cover; background:#f2f2f2;
+.pill.warn { border-color:var(--warn); color:var(--warn); }
+.pill.err { border-color:var(--err); color:var(--err); }
+.pill.ok { border-color:var(--ok); color:var(--ok); }
+.pill.live-ind { min-width:96px; text-align:center; }
+.pill.live-ind.running { border-color:var(--ink); color:#fff;
+  background:var(--ink); animation:mm-pulse 1.8s ease-in-out infinite; }
+@keyframes mm-pulse { 50% { opacity:.5; } }
+.thumb { width:84px; height:84px; object-fit:cover; background:var(--soft);
   border:1px solid var(--line); }
 .caption-cn { white-space:pre-wrap; max-width:520px; }
-.dropped { opacity:.38; }
+.dropped { opacity:.35; }
 .row-flex { display:flex; gap:14px; align-items:flex-start; flex-wrap:wrap; }
 form.inline { display:inline; }
 .note { font-size:12px; color:var(--mut); max-width:760px; }
-.banner { border:1px solid #b3261e; color:#b3261e; padding:12px 16px;
-  margin-bottom:22px; font-size:13px; max-width:900px; }
+.banner { border:1px solid var(--err); color:var(--err); padding:14px 18px;
+  margin-bottom:26px; font-size:13px; max-width:900px; background:var(--paper); }
+.banner.info { border-color:var(--line); border-left:2px solid var(--warn);
+  color:#6d5a24; background:var(--soft); }
 .hero-strip img { height:64px; border:1px solid var(--line); margin-right:6px; }
+/* progress bars — determinate when a task reports "n/m", indeterminate sweep
+   otherwise; hairline weight to match the house style */
+.pbar { height:2px; background:var(--line); overflow:hidden; margin-top:10px;
+  max-width:720px; display:none; }
+.pbar .fill { height:100%; background:var(--ink); width:0%;
+  transition:width .6s ease; }
+.pbar.indet .fill { width:28%; animation:pbar-sweep 1.6s infinite linear; }
+@keyframes pbar-sweep { from { transform:translateX(-110%); }
+                        to   { transform:translateX(460%); } }
 </style>
 </head>
 <body>
 <header>
-  <div class="wordmark">MAISON&nbsp;MONITOR</div>
+  <div class="wordmark">Maison&nbsp;Monitor</div>
   {% if request.state.actor and request.state.actor != 'local' %}
-  <span class="micro" style="margin-left:auto; order:9">
+  <span class="actor">
     {{ request.state.actor }}
     <form method="post" action="/logout" style="display:inline">
       <button class="ghost" style="padding:2px 8px; margin-left:8px">Sign out</button>
@@ -84,6 +107,29 @@ form.inline { display:inline; }
     <a href="/learning" {% if active == 'learning' %}class="active"{% endif %}>Learning</a>
   </nav>
 </header>
+<script>
+/* shared: drive a .pbar from a background-task list — determinate when any
+   running task's detail contains "n/m", indeterminate sweep otherwise */
+function mmProgress(el, tasks) {
+  if (!el) return;
+  const running = Object.values(tasks || {}).filter(t => t.state === 'running');
+  if (!running.length) { el.style.display = 'none'; return; }
+  el.style.display = 'block';
+  const fill = el.firstElementChild;
+  let frac = null;
+  for (const t of running) {
+    const m = /(\d+)\s*\/\s*(\d+)/.exec(t.detail || '');
+    if (m && +m[2] > 0) { frac = Math.min(1, +m[1] / +m[2]); break; }
+  }
+  if (frac !== null) {
+    el.classList.remove('indet');
+    fill.style.width = (frac * 100).toFixed(1) + '%';
+  } else {
+    el.classList.add('indet');
+    fill.style.width = '';
+  }
+}
+</script>
 <main>
 {% block content %}{% endblock %}
 </main>

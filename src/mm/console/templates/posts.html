@@ -3,12 +3,14 @@
 {% block title %}Review · Posts · {{ month }}{% endblock %}
 {% block content %}
 {% if busy %}
-<div class="banner info" id="busy-banner">⏳ A run is working on {{ month }}
+<div class="banner info" id="busy-banner">A run is working on {{ month }}
   right now{% if started_by %} (started {{ started_by.at[:16] }} by
   {{ started_by.actor_name }}){% endif %} — <span id="busy-detail"></span><br>
   This page shows the <strong>last completed</strong> state; freshly ingested
   posts appear here after the filter step. It refreshes itself when the run
-  pauses.</div>
+  pauses.
+  <div class="pbar" id="busy-pbar"><div class="fill"></div></div>
+</div>
 {% endif %}
 <div class="row-flex" style="justify-content:space-between">
   <div>
@@ -64,8 +66,9 @@
                     display:flex; align-items:center; justify-content:center;
                     text-align:center; font-size:9px; color:var(--mut);
                     cursor:pointer">drop HQ<br>image</div>
-        <span class="micro" style="max-width:120px">ticked images render on the
-          slide; none ticked → auto card</span>
+        <span class="note" style="max-width:200px; font-size:10.5px">Ticked
+          images render on the slide — none ticked means the automatic
+          post-card is used.</span>
       </div>
       {% endif %}
     </td>
@@ -163,6 +166,7 @@ async function watchRun() {
     const d = live.map(([, v]) => v.detail).filter(Boolean).join(' · ');
     document.getElementById('busy-detail').textContent =
       d || 'working…';
+    mmProgress(document.getElementById('busy-pbar'), j.tasks);
   } catch (e) {}
   setTimeout(watchRun, 4000);
 }
