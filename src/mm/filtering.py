@@ -23,14 +23,7 @@ DEFAULT_FILTER_WORKERS = 12
 def filter_month(engine, llm: LLM, cfg: BrandsConfig, month: str,
                  brand_key: str | None = None, progress=None,
                  should_stop=None, max_workers: int | None = None) -> dict:
-    """One LLM call per unfiltered post, MM_FILTER_WORKERS of them in flight
-    at once (posts are independent; the Anthropic client is thread-safe).
-    Each verdict commits in its own short transaction, so a mid-run crash
-    loses nothing already paid for and the console stays writable while this
-    runs. `should_stop()` is checked before each post is dispatched — a stop
-    lets in-flight calls finish, and the next run picks up the rest."""
-    from .learn import learned_rules_block
-    from .naming import cosmetics_signal
+    """One LLM call per unfiltered Weibo post — see _filter_rows."""
     q = (select(db.posts)
          .where(db.posts.c.month == month, db.posts.c.platform == "weibo"))
     if brand_key:
@@ -39,9 +32,48 @@ def filter_month(engine, llm: LLM, cfg: BrandsConfig, month: str,
         rows = list(conn.execute(q).mappings())
         done = {r["post_id"]
                 for r in conn.execute(select(db.verdicts.c.post_id)).mappings()}
-        learned = learned_rules_block(conn)
     pending = [row for row in rows if row["post_id"] not in done]
-    stats = {"total": len(rows), "filtered": 0, "kept": 0, "needs_review": 0,
+    return _filter_rows(engine, llm, cfg, month, pending, total=len(rows),
+                        progress=progress, should_stop=should_stop,
+                        max_workers=max_workers)
+
+
+def filter_orphans(engine, llm: LLM, cfg: BrandsConfig, month: str,
+                   brand_key: str | None = None, progress=None,
+                   should_stop=None, max_workers: int | None = None) -> dict:
+    """Run the SAME relevance rubric over pending cross-platform orphans, so
+    review #2's orphan list arrives pre-sifted exactly like review #1's posts
+    (verdict + rationale per orphan; drops grey out, keeps surface first)."""
+    q = (select(db.posts)
+         .join(db.orphans, db.orphans.c.post_id == db.posts.c.post_id)
+         .where(db.orphans.c.month == month,
+                db.orphans.c.resolution == "pending"))
+    if brand_key:
+        q = q.where(db.posts.c.brand == brand_key)
+    with engine.connect() as conn:
+        rows = list(conn.execute(q).mappings())
+        done = {r["post_id"]
+                for r in conn.execute(select(db.verdicts.c.post_id)).mappings()}
+    pending = [row for row in rows if row["post_id"] not in done]
+    return _filter_rows(engine, llm, cfg, month, pending, total=len(rows),
+                        progress=progress, should_stop=should_stop,
+                        max_workers=max_workers)
+
+
+def _filter_rows(engine, llm: LLM, cfg: BrandsConfig, month: str,
+                 pending: list, total: int, progress=None,
+                 should_stop=None, max_workers: int | None = None) -> dict:
+    """One LLM call per post, MM_FILTER_WORKERS of them in flight at once
+    (posts are independent; the Anthropic client is thread-safe). Each verdict
+    commits in its own short transaction, so a mid-run crash loses nothing
+    already paid for and the console stays writable while this runs.
+    `should_stop()` is checked before each post is dispatched — a stop lets
+    in-flight calls finish, and the next run picks up the rest."""
+    from .learn import learned_rules_block
+    from .naming import cosmetics_signal
+    with engine.connect() as conn:
+        learned = learned_rules_block(conn)
+    stats = {"total": total, "filtered": 0, "kept": 0, "needs_review": 0,
              "errors": 0, "stopped": False, "pending": len(pending)}
     lock = threading.Lock()
 
@@ -54,11 +86,11 @@ def filter_month(engine, llm: LLM, cfg: BrandsConfig, month: str,
         media = json.loads(row["media"] or "[]")
         media_summary = (f"{sum(1 for m in media if m['kind'] == 'image')} image(s), "
                          f"{sum(1 for m in media if m['kind'] == 'video_cover')} video(s)")
+        acct = brand.account(row["platform"]) or brand.account("weibo")
         try:
             verdict = llm.call_json("filter", {
                 "brand_display": brand.display_name,
-                "account_name": (brand.account("weibo").screen_name
-                                 if brand.account("weibo") else ""),
+                "account_name": (acct.screen_name if acct else ""),
                 "created_at": row["created_at"] or "",
                 "caption": row["caption"] or "",
                 "at_tags": json.loads(row["at_tags"] or "[]"),

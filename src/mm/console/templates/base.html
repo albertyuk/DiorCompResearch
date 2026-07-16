@@ -83,6 +83,12 @@ form.inline { display:inline; }
 .pbar.indet .fill { width:28%; animation:pbar-sweep 1.6s infinite linear; }
 @keyframes pbar-sweep { from { transform:translateX(-110%); }
                         to   { transform:translateX(460%); } }
+/* project cards + drag-and-drop grouping */
+.proj-card { border:1px solid var(--line); padding:16px; margin-bottom:14px;
+  background:var(--paper); }
+.proj-card.dropt { outline:2px solid var(--ok); outline-offset:2px; }
+.drag-handle { cursor:grab; user-select:none; }
+.drag-handle:active { cursor:grabbing; }
 /* image lightbox — click any .zoom thumbnail to inspect at full size */
 img.zoom { cursor:zoom-in; }
 #mmlb { position:fixed; inset:0; background:rgba(12,11,10,.93); z-index:60;
@@ -120,6 +126,7 @@ img.zoom { cursor:zoom-in; }
     <a href="/review/{{ month }}/projects" {% if active == 'projects' %}class="active"{% endif %}>Review · Projects</a>
     {% endif %}
     <a href="/decks" {% if active == 'decks' %}class="active"{% endif %}>Decks</a>
+    <a href="/celebs" {% if active == 'celebs' %}class="active"{% endif %}>Celebs</a>
     <a href="/archives" {% if active == 'archives' %}class="active"{% endif %}>Archives</a>
     <a href="/learning" {% if active == 'learning' %}class="active"{% endif %}>Learning</a>
   </nav>

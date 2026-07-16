@@ -303,6 +303,10 @@ def enrich_brand(engine, llm: LLM, cfg: BrandsConfig, month: str, brand_key: str
             merged[key]["post_ids"] = list(dict.fromkeys(
                 (merged[key].get("post_ids") or []) + (cluster.get("post_ids") or [])))
             merged[key]["ongoing"] = merged[key].get("ongoing") or cluster.get("ongoing")
+            extra = (cluster.get("rationale") or "").strip()
+            if extra:
+                merged[key]["rationale"] = " ".join(
+                    x for x in [(merged[key].get("rationale") or "").strip(), extra] if x)
         else:
             cluster = dict(cluster)
             cluster["_title"], cluster["_suffix"] = title, suffix
@@ -362,7 +366,8 @@ def enrich_brand(engine, llm: LLM, cfg: BrandsConfig, month: str, brand_key: str
                 description=naming.format_title(title, suffix),  # fallback
                 celebs=json.dumps(proj_celebs, ensure_ascii=False),
                 hero_media=json.dumps(_hero_media(members), ensure_ascii=False),
-                status="draft"),
+                status="draft",
+                rationale=str(cluster.get("rationale") or "")[:1000] or None),
             "member_ids": member_ids,
             "first_member": members[0],
             "matches": matches,
@@ -431,7 +436,16 @@ def enrich_brand(engine, llm: LLM, cfg: BrandsConfig, month: str, brand_key: str
                           {"project_id": project_id, "platform": plat,
                            "present": True, "matched_url": hit["url"],
                            "matched_date": hit["date"],
+                           "matched_post_id": hit.get("post_id"),
                            "confidence": hit["confidence"]},
                           ["project_id", "platform"])
+                # the matched cross-platform post joins the project's post
+                # list (role=match) so review #2 can inspect it and select
+                # its images for the slide
+                if hit.get("post_id"):
+                    db.upsert(conn, db.project_posts,
+                              {"project_id": project_id,
+                               "post_id": hit["post_id"], "role": "match"},
+                              ["project_id", "post_id"])
             n += 1
     return {"projects": n, "celebs": len(celebs)}

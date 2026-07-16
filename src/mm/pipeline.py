@@ -188,8 +188,17 @@ def run_crosscheck(month: str, brand_keys: list[str] | None = None,
                                       should_stop=should_stop)
             _matches_path(month, brand.key).write_text(
                 json.dumps(res["matches"], ensure_ascii=False, indent=1))
+            # sift the orphans with the same rubric as review #1, so the
+            # orphan list at checkpoint #2 arrives pre-filtered
+            ostats = {}
+            if res["orphans"] and not (should_stop and should_stop()):
+                note(f"filtering {res['orphans']} orphans…")
+                ostats = filtering.filter_orphans(
+                    engine, llm, cfg, month, brand.key,
+                    should_stop=should_stop)
             note("done")
-            return brand.key, {"pulls": pulls, "orphans": res["orphans"]}
+            return brand.key, {"pulls": pulls, "orphans": res["orphans"],
+                               "orphans_kept": ostats.get("kept")}
         except Exception as e:
             note("error")
             return brand.key, {"error": str(e)}
@@ -303,6 +312,7 @@ def _project_visuals(conn, factory, brand_key: str, project: dict,
         .order_by(db.posts.c.created_at)).mappings())
     is_video = project["assets"] == "VIDEO"
     visuals = []
+    labeled_names: set[str] = set()
     for row in rows[: GRID_CAP * 2]:
         post = dict(row)
         label_top = label_name = None
@@ -318,6 +328,10 @@ def _project_visuals(conn, factory, brand_key: str, project: dict,
                   and Path(m["local_path"]).exists()]
         images = [Path(m["local_path"]) for m in chosen]
         if not images:
+            # cross-platform members (role=match) only render what a human
+            # ticked — auto cards are built from Weibo posts alone
+            if post.get("platform") != "weibo":
+                continue
             if is_video:
                 img = factory.video_cover_for_post(brand_key, post) \
                       or factory.visual_for_post(brand_key, post)
@@ -327,6 +341,8 @@ def _project_visuals(conn, factory, brand_key: str, project: dict,
                 continue
             images = [img]
         for i, img in enumerate(images):
+            if i == 0 and label_name:
+                labeled_names.add(label_name)
             visuals.append({"image": str(img),
                             "kind": "video_still" if is_video else "photo",
                             "link": post["url"] if is_video else None,
@@ -334,6 +350,21 @@ def _project_visuals(conn, factory, brand_key: str, project: dict,
                             "label_name": label_name if i == 0 else None})
             if len(visuals) >= GRID_CAP:
                 return visuals
+    # celebs with a curated photo library (Celebs page) but no labeled post
+    # visual get their first library image as a labeled visual
+    for c in celebs:
+        if len(visuals) >= GRID_CAP:
+            break
+        if not c.get("name_cn") or c.get("display") in labeled_names:
+            continue
+        reg = conn.execute(
+            select(db.celeb_registry.c.images_json)
+            .where(db.celeb_registry.c.name_cn == c["name_cn"])).scalar()
+        imgs = [p for p in json.loads(reg or "[]") if Path(p).exists()]
+        if imgs:
+            visuals.append({"image": imgs[0], "kind": "photo", "link": None,
+                            "label_top": c.get("relation_display"),
+                            "label_name": c.get("display")})
     return visuals
 
 

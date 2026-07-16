@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% set active = 'celebs' %}
+{% block title %}Celebs{% endblock %}
+{% block content %}
+<h2 style="margin-top:0">Celebrity registry</h2>
+<p class="note">Names, brand relationships and photo libraries compound across
+months. Relations verified from a caption or a source keep their label;
+unverified ones render with a trailing <code>?</code> on the deck. Photos
+uploaded here are used on slides when a project's celeb has no labeled post
+image — the first photo wins; click any photo to preview the library.</p>
+{% if msg %}<div class="banner info">{{ msg }}</div>{% endif %}
+
+<form method="post" action="/celebs/new" class="row-flex"
+      style="gap:8px; margin:14px 0 6px; max-width:560px">
+  <input type="text" name="name_cn" placeholder="中文名 (required)" style="flex:1" required>
+  <input type="text" name="name_en" placeholder="Latin name" style="flex:1">
+  <button type="submit">Add celeb</button>
+</form>
+<hr class="rule">
+
+{% for c in celebs %}
+<div class="proj-card" style="margin-bottom:16px">
+  <form method="post" action="/celebs/{{ c.id }}/update">
+    <div class="row-flex">
+      <div style="flex:1; min-width:260px">
+        <div class="micro">Name (中文 · Latin · occupation)</div>
+        <div class="row-flex" style="gap:6px">
+          <input type="text" name="name_cn" value="{{ c.name_cn or '' }}" style="flex:1">
+          <input type="text" name="name_en" value="{{ c.name_en or '' }}" style="flex:1">
+          <input type="text" name="occupation" value="{{ c.occupation or '' }}"
+                 placeholder="ACTOR / SINGER / …" style="flex:1">
+        </div>
+        <div class="micro" style="margin-top:10px">Relationship per brand
+          <span style="text-transform:none">(blank = none; tick verified when a source confirms it)</span></div>
+        {% for b in brands %}
+        {% set rel = c.relations.get(b.key) %}
+        <div class="row-flex" style="gap:6px; margin-top:4px; align-items:center; flex-wrap:nowrap">
+          <span class="micro" style="width:110px">{{ b.display_name }}</span>
+          <input type="text" name="relation_{{ b.key }}"
+                 value="{{ rel.relation if rel else '' }}"
+                 placeholder="BRAND AMBASSADOR / BRAND FRIEND / …" style="flex:1">
+          <label class="micro" style="white-space:nowrap">
+            <input type="checkbox" name="verified_{{ b.key }}"
+                   {% if rel and rel.verified %}checked{% endif %}> verified</label>
+          {% if rel and rel.source_url %}
+          <a class="micro" href="{{ rel.source_url }}" target="_blank">source ↗</a>
+          {% endif %}
+        </div>
+        {% endfor %}
+        <div class="row-flex" style="margin-top:10px">
+          <button type="submit">Save</button>
+        </div>
+      </div>
+      <div style="flex:1; min-width:280px">
+        <div class="micro">Photos — first one is used on slides</div>
+        <div class="row-flex" data-gallery='{{ c.gal | tojson }}'
+             style="gap:6px; margin-top:6px; align-items:center">
+          {% for img in c.images %}
+          <span style="position:relative; display:inline-block">
+            <img class="thumb zoom" loading="lazy" data-gidx="{{ loop.index0 }}"
+                 title="Click to preview" src="/media?path={{ img | urlencode }}"
+                 style="width:84px; height:84px">
+            <button type="button" class="ghost celeb-img-del"
+                    data-celeb="{{ c.id }}" data-idx="{{ loop.index0 }}"
+                    title="Remove from the library"
+                    style="position:absolute; top:2px; right:2px; padding:0 6px">✕</button>
+          </span>
+          {% endfor %}
+          <div class="dropzone celeb-drop" data-celeb="{{ c.id }}"
+               style="width:84px; height:84px; border:1px dashed var(--mut);
+                      display:flex; align-items:center; justify-content:center;
+                      text-align:center; font-size:9px; color:var(--mut);
+                      cursor:pointer">drop or click<br>to add photo</div>
+        </div>
+      </div>
+    </div>
+  </form>
+</div>
+{% endfor %}
+{% if not celebs %}
+<p class="note">No celebs yet — the registry fills itself as enrichment runs,
+or add one above.</p>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+function celebUpload(celebId, fileList) {
+  const fd = new FormData();
+  for (const f of fileList) fd.append('files', f);
+  fetch(`/celebs/${celebId}/images/upload`, {method: 'POST', body: fd})
+    .then(async r => {
+      if (!r.ok) throw new Error((await r.json()).error || r.status);
+      location.reload();
+    })
+    .catch(err => alert('Upload failed: ' + err.message));
+}
+document.querySelectorAll('.celeb-drop').forEach(dz => {
+  dz.addEventListener('click', () => {
+    const inp = document.createElement('input');
+    inp.type = 'file'; inp.accept = 'image/*'; inp.multiple = true;
+    inp.onchange = () => celebUpload(dz.dataset.celeb, inp.files);
+    inp.click();
+  });
+  dz.addEventListener('dragover', e => {
+    e.preventDefault(); dz.style.borderColor = '#2e7d32';
+  });
+  dz.addEventListener('dragleave', () => dz.style.borderColor = '');
+  dz.addEventListener('drop', e => {
+    e.preventDefault(); dz.style.borderColor = '';
+    if (e.dataTransfer.files.length) celebUpload(dz.dataset.celeb, e.dataTransfer.files);
+  });
+});
+document.querySelectorAll('.celeb-img-del').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    if (!confirm('Remove this photo from the library?')) return;
+    try {
+      const r = await fetch(`/celebs/${btn.dataset.celeb}/images/delete`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: `idx=${btn.dataset.idx}`,
+      });
+      if (!r.ok) throw new Error((await r.json()).error || r.status);
+      location.reload();
+    } catch (err) { alert('Delete failed: ' + err.message); }
+  });
+});
+</script>
+{% endblock %}

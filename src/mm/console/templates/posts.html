@@ -40,8 +40,7 @@
                                  "sel": m.selected or false}) %}
   {% endif %}{% endfor %}
   <tr class="{% if not p.effective_keep %}dropped{% endif %}"
-      {% if gal.items %}data-gallery='{{ gal.items | tojson }}'
-      data-post="{{ p.post_id }}"{% endif %}>
+      {% if gal.items %}data-gallery='{{ gal.items | tojson }}'{% endif %}>
     <td>{% if p.thumb %}<img class="thumb zoom" data-gidx="0" loading="lazy"
           title="Click to preview all images"
           src="/media?path={{ p.thumb | urlencode }}">{% endif %}</td>
@@ -56,31 +55,19 @@
         {% for c in p.celebs_list %}<span class="pill">{{ c.name_cn or c.handle }}
           {% if c.name_en_guess %}· {{ c.name_en_guess }}{% endif %}</span>{% endfor %}
       </div>{% endif %}
-      {% if p.effective_keep %}
+      {% if p.effective_keep and gal.items %}
       <div class="row-flex" style="gap:6px; margin-top:8px; align-items:center">
         {% for gitem in gal.items %}
         <span style="position:relative; display:inline-block">
           <img class="thumb zoom" loading="lazy" data-gidx="{{ loop.index0 }}"
-               title="Click to preview"
-               style="width:64px; height:64px;
-               {% if gitem.sel %}outline:3px solid #3d6b45{% endif %}"
-               src="{{ gitem.src }}">
-          <input type="checkbox" class="media-sel" data-post="{{ p.post_id }}"
-                 data-idx="{{ gitem.midx }}" {% if gitem.sel %}checked{% endif %}
-                 title="tick = this image goes on the slide"
-                 style="position:absolute; top:2px; left:2px; cursor:pointer">
+               title="Click to preview" src="{{ gitem.src }}"
+               style="width:64px; height:64px">
           {% if gitem.hq %}<span class="pill ok"
              style="position:absolute; bottom:2px; left:2px; background:#fff">HQ</span>{% endif %}
         </span>
         {% endfor %}
-        <div class="dropzone" data-post="{{ p.post_id }}"
-             style="width:64px; height:64px; border:1px dashed var(--mut);
-                    display:flex; align-items:center; justify-content:center;
-                    text-align:center; font-size:9px; color:var(--mut);
-                    cursor:pointer">drop HQ<br>image</div>
-        <span class="note" style="max-width:200px; font-size:10.5px">Ticked
-          images render on the slide — none ticked means the automatic
-          post-card is used.</span>
+        <span class="note" style="max-width:220px; font-size:10.5px">Slide
+          images are chosen at Review · Projects, after consolidation.</span>
       </div>
       {% endif %}
     </td>
@@ -120,52 +107,6 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
-// image checkbox → this image renders on the slide
-document.addEventListener('change', async e => {
-  const t = e.target;
-  if (!t.classList.contains('media-sel')) return;
-  try {
-    const r = await fetch(`/review/{{ month }}/posts/${encodeURIComponent(t.dataset.post)}/media/select`, {
-      method: 'POST',
-      headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-      body: `idx=${t.dataset.idx}&selected=${t.checked}`,
-    });
-    if (!r.ok) throw new Error(await r.text());
-    t.parentElement.querySelector('img').style.outline =
-      t.checked ? '3px solid #3d6b45' : '';
-  } catch (err) { t.checked = !t.checked; alert('Could not save selection: ' + err); }
-});
-
-// HQ drop zone: drag an original image (downloaded from the post) or click
-function uploadTo(postId, fileList) {
-  const fd = new FormData();
-  for (const f of fileList) fd.append('files', f);
-  fetch(`/review/{{ month }}/posts/${encodeURIComponent(postId)}/upload`,
-        {method: 'POST', body: fd})
-    .then(async r => {
-      if (!r.ok) throw new Error((await r.json()).error || r.status);
-      location.reload();
-    })
-    .catch(err => alert('Upload failed: ' + err.message));
-}
-document.querySelectorAll('.dropzone').forEach(dz => {
-  dz.addEventListener('click', () => {
-    const inp = document.createElement('input');
-    inp.type = 'file'; inp.accept = 'image/*'; inp.multiple = true;
-    inp.onchange = () => uploadTo(dz.dataset.post, inp.files);
-    inp.click();
-  });
-  dz.addEventListener('dragover', e => {
-    e.preventDefault(); dz.style.borderColor = '#2e7d32';
-  });
-  dz.addEventListener('dragleave', () => dz.style.borderColor = '');
-  dz.addEventListener('drop', e => {
-    e.preventDefault(); dz.style.borderColor = '';
-    if (e.dataTransfer.files.length) uploadTo(dz.dataset.post, e.dataTransfer.files);
-  });
-});
-</script>
 {% if busy %}
 <script>
 // while a run is working on this month, narrate it and reload when it pauses

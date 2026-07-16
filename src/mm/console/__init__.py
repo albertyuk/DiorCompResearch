@@ -16,7 +16,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, select
 from starlette.background import BackgroundTask
 
-from .. import db, pipeline
+from .. import db, naming, pipeline
 from ..config import (DATA_DIR, DB_PATH, DEFAULT_VISUALS, IS_HOSTED, OUTPUT_DIR,
                       BrandsConfig, Settings, console_auth_config)
 from ..dates import previous_month
@@ -253,17 +253,44 @@ def create_app() -> FastAPI:
                         r["platform"]: dict(r) for r in conn.execute(
                             select(db.platform_matches)
                             .where(db.platform_matches.c.project_id == p["id"])).mappings()}
+                    # the consolidated posts behind this project — weibo
+                    # members first, then cross-platform matches
+                    members = []
+                    for r in conn.execute(
+                            select(db.posts, db.project_posts.c.role)
+                            .join(db.project_posts,
+                                  db.project_posts.c.post_id == db.posts.c.post_id)
+                            .where(db.project_posts.c.project_id == p["id"])
+                            .order_by(db.posts.c.platform != "weibo",
+                                      db.posts.c.created_at)).mappings():
+                        d = dict(r)
+                        d["media_list"] = json.loads(d.get("media") or "[]")
+                        d["thumb"] = next((m.get("local_path")
+                                           for m in d["media_list"]
+                                           if m.get("local_path")), None)
+                        members.append(d)
+                    p["member_posts"] = members
                 groups.append({"brand": brand, "projects": rows})
             for r in conn.execute(
-                    select(db.orphans, db.posts)
+                    select(db.orphans, db.posts, db.verdicts.c.keep,
+                           db.verdicts.c.confidence, db.verdicts.c.rationale,
+                           db.verdicts.c.reasons)
                     .join(db.posts, db.posts.c.post_id == db.orphans.c.post_id)
+                    .join(db.verdicts,
+                          db.verdicts.c.post_id == db.orphans.c.post_id,
+                          isouter=True)
                     .where(db.orphans.c.month == month,
                            db.orphans.c.resolution == "pending")).mappings():
                 d = dict(r)
                 d["media_list"] = json.loads(d.get("media") or "[]")
                 d["thumb"] = next((m.get("local_path") for m in d["media_list"]
                                    if m.get("local_path")), None)
+                # filtered like review #1: dropped orphans grey out, keeps
+                # (and not-yet-filtered) stay prominent
+                d["effective_keep"] = d["keep"] is None or bool(d["keep"])
                 orphans.append(d)
+            orphans.sort(key=lambda o: (not o["effective_keep"],
+                                        o.get("created_at") or ""))
             run = db.get_run(conn, month)
             registry = [dict(r) for r in conn.execute(select(db.celeb_registry)).mappings()]
             confirmed_by = db.last_audit(conn, "confirm_posts", "month", month)
@@ -589,6 +616,31 @@ def create_app() -> FastAPI:
                                               ensure_ascii=False)
             except json.JSONDecodeError:
                 pass
+        elif "celeb_0_display" in form or form.get("celeb_new_display", "").strip():
+            # structured celeb rows: name + relation per row, remove ticks a
+            # row out, and one blank row adds a new celeb
+            celebs, i = [], 0
+            while f"celeb_{i}_display" in form:
+                display = form[f"celeb_{i}_display"].strip()
+                if display and form.get(f"celeb_{i}_remove") != "on":
+                    rel = form.get(f"celeb_{i}_relation", "").strip()
+                    celebs.append({
+                        "name_cn": form.get(f"celeb_{i}_name_cn", "").strip() or None,
+                        "name_en": form.get(f"celeb_{i}_name_en", "").strip() or None,
+                        "display": display.upper(),
+                        "relation_display": rel.upper() or "CELEBRITY ?",
+                        "verified": form.get(f"celeb_{i}_verified") == "1",
+                        "occupation": form.get(f"celeb_{i}_occupation") or None})
+                i += 1
+            new_display = form.get("celeb_new_display", "").strip()
+            if new_display:
+                celebs.append({
+                    "name_cn": form.get("celeb_new_name_cn", "").strip() or None,
+                    "name_en": None, "display": new_display.upper(),
+                    "relation_display": (form.get("celeb_new_relation", "")
+                                         .strip() or "CELEBRITY ?").upper(),
+                    "verified": False, "occupation": None})
+            values["celebs"] = json.dumps(celebs, ensure_ascii=False)
         with engine.begin() as conn:
             if values:
                 conn.execute(db.projects.update()
@@ -614,6 +666,202 @@ def create_app() -> FastAPI:
                      project_id)
         return RedirectResponse(f"/review/{month}/projects", status_code=303)
 
+    @app.post("/review/{month}/projects/{project_id}/merge")
+    def project_merge(request: Request, month: str, project_id: int,
+                      target_id: int = Form(...)):
+        """Drag one project onto another: the source's posts, platform
+        evidence, celebs and hero media fold into the target; dates extend;
+        the source project disappears."""
+        engine = db.get_engine()
+        with engine.begin() as conn:
+            src = conn.execute(select(db.projects).where(
+                db.projects.c.id == project_id)).mappings().first()
+            tgt = conn.execute(select(db.projects).where(
+                db.projects.c.id == target_id)).mappings().first()
+            if src is None or tgt is None:
+                return JSONResponse({"error": "unknown project"}, status_code=404)
+            if src["id"] == tgt["id"]:
+                return JSONResponse({"error": "cannot merge a project into itself"},
+                                    status_code=400)
+            if src["brand"] != tgt["brand"] or src["month"] != tgt["month"]:
+                return JSONResponse(
+                    {"error": "projects must belong to the same brand and month"},
+                    status_code=400)
+            for r in conn.execute(select(db.project_posts).where(
+                    db.project_posts.c.project_id == src["id"])).mappings():
+                db.upsert(conn, db.project_posts,
+                          {"project_id": tgt["id"], "post_id": r["post_id"],
+                           "role": r["role"]}, ["project_id", "post_id"],
+                          no_update_cols=["role"])
+            conn.execute(db.project_posts.delete().where(
+                db.project_posts.c.project_id == src["id"]))
+            tgt_pm = {r["platform"]: dict(r) for r in conn.execute(
+                select(db.platform_matches).where(
+                    db.platform_matches.c.project_id == tgt["id"])).mappings()}
+            for r in conn.execute(select(db.platform_matches).where(
+                    db.platform_matches.c.project_id == src["id"])).mappings():
+                prev = tgt_pm.get(r["platform"])
+                if prev is None or (r["present"] and not prev["present"]) \
+                        or (r["confidence"] or 0) > (prev["confidence"] or 0):
+                    db.upsert(conn, db.platform_matches,
+                              {**dict(r), "project_id": tgt["id"]},
+                              ["project_id", "platform"])
+            conn.execute(db.platform_matches.delete().where(
+                db.platform_matches.c.project_id == src["id"]))
+            celebs = json.loads(tgt["celebs"] or "[]")
+            seen = {(c.get("name_cn"), c.get("display")) for c in celebs}
+            for c in json.loads(src["celebs"] or "[]"):
+                if (c.get("name_cn"), c.get("display")) not in seen:
+                    celebs.append(c)
+            heroes = list(dict.fromkeys(json.loads(tgt["hero_media"] or "[]")
+                                        + json.loads(src["hero_media"] or "[]")))
+            starts = [d for d in (tgt["date_start"], src["date_start"]) if d]
+            ends = [d for d in (tgt["date_end"], src["date_end"]) if d]
+            why = (f"Merged '{naming.format_title(src['title'], src['phase_suffix'])}'"
+                   f" into this project by {_actor(request)}.")
+            rationale = " ".join(x for x in (tgt["rationale"], why,
+                                             src["rationale"]) if x)
+            conn.execute(db.projects.update()
+                         .where(db.projects.c.id == tgt["id"])
+                         .values(celebs=json.dumps(celebs, ensure_ascii=False),
+                                 hero_media=json.dumps(heroes[:6],
+                                                       ensure_ascii=False),
+                                 date_start=min(starts) if starts else None,
+                                 date_end=max(ends) if ends else None,
+                                 ongoing=bool(src["ongoing"] or tgt["ongoing"]),
+                                 assets=(tgt["assets"] if tgt["assets"] == src["assets"]
+                                         else "PHOTO VIDEO"),
+                                 rationale=rationale[:2000] or None))
+            conn.execute(db.projects.delete().where(db.projects.c.id == src["id"]))
+            db.audit(conn, _actor(request), "project_merge", "project",
+                     f"{src['id']}->{tgt['id']}")
+        return JSONResponse({"ok": True, "merged_into": tgt["id"]})
+
+    @app.post("/review/{month}/projects/{project_id}/ungroup")
+    def project_ungroup(request: Request, month: str, project_id: int):
+        """Split a project back into one project per Weibo post; matched
+        cross-platform posts return to the orphan list."""
+        import re as _re
+        engine = db.get_engine()
+        with engine.begin() as conn:
+            proj = conn.execute(select(db.projects).where(
+                db.projects.c.id == project_id)).mappings().first()
+            if proj is None:
+                return JSONResponse({"error": "unknown project"}, status_code=404)
+            members = list(conn.execute(
+                select(db.posts)
+                .join(db.project_posts,
+                      db.project_posts.c.post_id == db.posts.c.post_id)
+                .where(db.project_posts.c.project_id == project_id)
+                .order_by(db.posts.c.created_at)).mappings())
+            weibo = [m for m in members if m["platform"] == "weibo"]
+            if len(weibo) <= 1:
+                return JSONResponse(
+                    {"error": "nothing to ungroup — the project has a single post"},
+                    status_code=400)
+            proj_title = naming.format_title(proj["title"], proj["phase_suffix"])
+            celebs = json.loads(proj["celebs"] or "[]")
+            taken = {(r["title"], r["phase_suffix"]) for r in conn.execute(
+                select(db.projects.c.title, db.projects.c.phase_suffix)
+                .where(db.projects.c.month == month,
+                       db.projects.c.brand == proj["brand"])).mappings()}
+            conn.execute(db.project_posts.delete().where(
+                db.project_posts.c.project_id == project_id))
+            conn.execute(db.platform_matches.delete().where(
+                db.platform_matches.c.project_id == project_id))
+            conn.execute(db.projects.delete().where(
+                db.projects.c.id == project_id))
+            for m in weibo:
+                caption = _re.sub(r"\s+", " ", (m["caption"] or "")).strip()
+                base = (caption[:60].upper() or proj["title"])
+                title, n = base, 2
+                while (title, None) in taken:
+                    title, n = f"{base[:54]} ({n})", n + 1
+                taken.add((title, None))
+                media = json.loads(m["media"] or "[]")
+                has_video = any(x.get("kind") == "video_cover" for x in media)
+                has_photo = any(x.get("kind") == "image" for x in media)
+                res = conn.execute(db.projects.insert().values(
+                    month=month, brand=proj["brand"], title=title,
+                    phase_suffix=None,
+                    date_start=(m["created_at"] or f"{month}-01")[:10],
+                    date_end=(m["created_at"] or f"{month}-01")[:10],
+                    ongoing=False,
+                    assets=naming.assets_label(has_photo or not has_video,
+                                               has_video),
+                    description=caption[:90].upper() or title,
+                    celebs=json.dumps(
+                        [c for c in celebs if c.get("name_cn")
+                         and c["name_cn"] in (m["caption"] or "")],
+                        ensure_ascii=False),
+                    hero_media=json.dumps(
+                        [x["local_path"] for x in media
+                         if x.get("local_path")][:3], ensure_ascii=False),
+                    status="draft",
+                    rationale=f"Ungrouped from '{proj_title}' by {_actor(request)}."))
+                pid = res.inserted_primary_key[0]
+                db.upsert(conn, db.project_posts,
+                          {"project_id": pid, "post_id": m["post_id"],
+                           "role": "member"}, ["project_id", "post_id"])
+                db.upsert(conn, db.platform_matches,
+                          {"project_id": pid, "platform": "weibo",
+                           "present": True, "matched_url": m["url"],
+                           "matched_date": m["created_at"],
+                           "matched_post_id": m["post_id"],
+                           "confidence": 1.0}, ["project_id", "platform"])
+            # cross-platform members go back to the orphan pool
+            for m in members:
+                if m["platform"] != "weibo":
+                    db.upsert(conn, db.orphans,
+                              {"post_id": m["post_id"], "month": month,
+                               "resolution": "pending"}, ["post_id"])
+            db.audit(conn, _actor(request), "project_ungroup", "project",
+                     f"{project_id} -> {len(weibo)} projects")
+        return RedirectResponse(f"/review/{month}/projects", status_code=303)
+
+    @app.post("/review/{month}/projects/{project_id}/adopt")
+    def project_adopt(request: Request, month: str, project_id: int,
+                      post_id: str = Form(...)):
+        """Drag a single post (project member or orphan) onto a project:
+        membership moves there; orphans count as resolved."""
+        engine = db.get_engine()
+        with engine.begin() as conn:
+            tgt = conn.execute(select(db.projects).where(
+                db.projects.c.id == project_id)).mappings().first()
+            post = conn.execute(select(db.posts).where(
+                db.posts.c.post_id == post_id)).mappings().first()
+            if tgt is None or post is None:
+                return JSONResponse({"error": "unknown project or post"},
+                                    status_code=404)
+            if post["brand"] != tgt["brand"]:
+                return JSONResponse(
+                    {"error": "post and project belong to different brands"},
+                    status_code=400)
+            month_pids = select(db.projects.c.id).where(
+                db.projects.c.month == tgt["month"],
+                db.projects.c.brand == tgt["brand"])
+            conn.execute(db.project_posts.delete().where(
+                db.project_posts.c.post_id == post_id,
+                db.project_posts.c.project_id.in_(month_pids)))
+            role = "member" if post["platform"] == "weibo" else "match"
+            db.upsert(conn, db.project_posts,
+                      {"project_id": tgt["id"], "post_id": post_id,
+                       "role": role}, ["project_id", "post_id"])
+            if post["platform"] != "weibo":
+                db.upsert(conn, db.platform_matches,
+                          {"project_id": tgt["id"],
+                           "platform": post["platform"], "present": True,
+                           "matched_url": post["url"],
+                           "matched_date": post["created_at"],
+                           "matched_post_id": post_id, "confidence": 1.0},
+                          ["project_id", "platform"])
+                conn.execute(db.orphans.update()
+                             .where(db.orphans.c.post_id == post_id)
+                             .values(resolution="promoted"))
+            db.audit(conn, _actor(request), "project_adopt", "project",
+                     f"{post_id}->{tgt['id']}")
+        return JSONResponse({"ok": True})
+
     @app.post("/review/{month}/orphans/{post_id:path}/resolve")
     def orphan_resolve(request: Request, month: str, post_id: str,
                        action: str = Form(...)):
@@ -631,7 +879,9 @@ def create_app() -> FastAPI:
                         date_end=(row["created_at"] or f"{month}-01")[:10],
                         ongoing=False, assets="PHOTO",
                         description=(row["caption"] or "")[:90].upper(),
-                        celebs="[]", hero_media="[]", status="draft"))
+                        celebs="[]", hero_media="[]", status="draft",
+                        rationale=(f"Promoted from a {row['platform']} orphan "
+                                   f"by {_actor(request)}.")))
                     pid = res.inserted_primary_key[0]
                     db.upsert(conn, db.project_posts,
                               {"project_id": pid, "post_id": post_id,
@@ -640,6 +890,7 @@ def create_app() -> FastAPI:
                               {"project_id": pid, "platform": row["platform"],
                                "present": True, "matched_url": row["url"],
                                "matched_date": row["created_at"],
+                               "matched_post_id": post_id,
                                "confidence": 1.0}, ["project_id", "platform"])
             conn.execute(db.orphans.update()
                          .where(db.orphans.c.post_id == post_id)
@@ -692,6 +943,149 @@ def create_app() -> FastAPI:
         cfg = BrandsConfig.load()
         confirm_account(cfg, brand_key, platform, uid.strip(), name.strip() or None)
         return RedirectResponse("/", status_code=303)
+
+    # ---------- celebs ----------
+
+    _CELEB_DIR = DATA_DIR / "celebs"
+
+    @app.get("/celebs", response_class=HTMLResponse)
+    def celebs_view(request: Request, msg: str = ""):
+        cfg = BrandsConfig.load()
+        with db.get_engine().connect() as conn:
+            rows = [dict(r) for r in conn.execute(
+                select(db.celeb_registry)
+                .order_by(db.celeb_registry.c.name_cn)).mappings()]
+        from urllib.parse import quote
+        for r in rows:
+            r["relations"] = json.loads(r["relations_json"] or "{}")
+            r["images"] = json.loads(r["images_json"] or "[]")
+            r["gal"] = [{"src": f"/media?path={quote(p, safe='')}"}
+                        for p in r["images"]]
+        return TEMPLATES.TemplateResponse(request, "celebs.html", {
+            "celebs": rows, "brands": cfg.brands, "msg": msg})
+
+    @app.post("/celebs/new")
+    def celeb_new(request: Request, name_cn: str = Form(...),
+                  name_en: str = Form("")):
+        from urllib.parse import quote
+        name = name_cn.strip()
+        if not name:
+            return RedirectResponse(f"/celebs?msg={quote('name required')}",
+                                    status_code=303)
+        with db.get_engine().begin() as conn:
+            db.upsert(conn, db.celeb_registry,
+                      {"name_cn": name, "name_en": name_en.strip() or None,
+                       "relations_json": "{}", "images_json": "[]"},
+                      ["name_cn"],
+                      no_update_cols=["relations_json", "images_json"])
+            db.audit(conn, _actor(request), "celeb_new", "celeb", name)
+        return RedirectResponse("/celebs", status_code=303)
+
+    @app.post("/celebs/{celeb_id}/update")
+    async def celeb_update(request: Request, celeb_id: int):
+        from urllib.parse import quote
+        cfg = BrandsConfig.load()
+        form = dict(await request.form())
+        with db.get_engine().begin() as conn:
+            row = conn.execute(select(db.celeb_registry).where(
+                db.celeb_registry.c.id == celeb_id)).mappings().first()
+            if row is None:
+                return JSONResponse({"error": "unknown celeb"}, status_code=404)
+            relations = json.loads(row["relations_json"] or "{}")
+            for brand in cfg.brands:
+                key = f"relation_{brand.key}"
+                if key not in form:
+                    continue
+                rel = form[key].strip()
+                if rel:
+                    prev = relations.get(brand.key, {})
+                    relations[brand.key] = {
+                        **prev, "relation": rel.upper(),
+                        "verified": form.get(f"verified_{brand.key}") == "on"}
+                else:
+                    relations.pop(brand.key, None)
+            values = {"name_en": form.get("name_en", "").strip() or None,
+                      "occupation": form.get("occupation", "").strip() or None,
+                      "relations_json": json.dumps(relations,
+                                                   ensure_ascii=False)}
+            new_name = form.get("name_cn", "").strip()
+            if new_name and new_name != row["name_cn"]:
+                dup = conn.execute(select(db.celeb_registry.c.id).where(
+                    db.celeb_registry.c.name_cn == new_name)).first()
+                if dup:
+                    return RedirectResponse(
+                        f"/celebs?msg={quote(f'{new_name} already exists')}",
+                        status_code=303)
+                values["name_cn"] = new_name
+            conn.execute(db.celeb_registry.update()
+                         .where(db.celeb_registry.c.id == celeb_id)
+                         .values(**values))
+            db.audit(conn, _actor(request), "celeb_edit", "celeb",
+                     values.get("name_cn", row["name_cn"]))
+        return RedirectResponse("/celebs", status_code=303)
+
+    @app.post("/celebs/{celeb_id}/images/upload")
+    async def celeb_image_upload(request: Request, celeb_id: int):
+        """Photo library per celeb — same validation as post HQ uploads."""
+        engine = db.get_engine()
+        with engine.connect() as conn:
+            row = conn.execute(select(db.celeb_registry).where(
+                db.celeb_registry.c.id == celeb_id)).mappings().first()
+        if row is None:
+            return JSONResponse({"error": "unknown celeb"}, status_code=404)
+        form = await request.form()
+        files = [v for v in form.getlist("files") if hasattr(v, "read")]
+        if not files:
+            return JSONResponse({"error": "no files"}, status_code=400)
+        import hashlib as _hashlib
+        _CELEB_DIR.mkdir(parents=True, exist_ok=True)
+        new_paths = []
+        for f in files:
+            data = b""
+            while chunk := await f.read(1 << 20):
+                data += chunk
+                if len(data) > _UPLOAD_CAP:
+                    return JSONResponse({"error": f"{f.filename}: over 30MB"},
+                                        status_code=413)
+            ext = _image_ext(data)
+            if ext is None:
+                return JSONResponse(
+                    {"error": f"{f.filename}: not a JPEG/PNG/GIF/WebP image"},
+                    status_code=400)
+            path = _CELEB_DIR / (f"celeb{celeb_id}_"
+                                 f"{_hashlib.sha1(data).hexdigest()[:16]}{ext}")
+            path.write_bytes(data)
+            new_paths.append(str(path))
+        with engine.begin() as conn:
+            fresh = conn.execute(select(db.celeb_registry.c.images_json).where(
+                db.celeb_registry.c.id == celeb_id)).scalar()
+            images = json.loads(fresh or "[]")
+            images.extend(p for p in new_paths if p not in images)
+            conn.execute(db.celeb_registry.update()
+                         .where(db.celeb_registry.c.id == celeb_id)
+                         .values(images_json=json.dumps(images)))
+            db.audit(conn, _actor(request), "celeb_image_upload", "celeb",
+                     f"{row['name_cn']} (+{len(new_paths)})")
+        return JSONResponse({"ok": True, "added": len(new_paths)})
+
+    @app.post("/celebs/{celeb_id}/images/delete")
+    def celeb_image_delete(request: Request, celeb_id: int,
+                           idx: int = Form(...)):
+        with db.get_engine().begin() as conn:
+            row = conn.execute(select(db.celeb_registry).where(
+                db.celeb_registry.c.id == celeb_id)).mappings().first()
+            if row is None:
+                return JSONResponse({"error": "unknown celeb"}, status_code=404)
+            images = json.loads(row["images_json"] or "[]")
+            if not 0 <= idx < len(images):
+                return JSONResponse({"error": "bad image index"}, status_code=400)
+            images.pop(idx)      # registry entry only; the file stays on disk
+            conn.execute(db.celeb_registry.update()
+                         .where(db.celeb_registry.c.id == celeb_id)
+                         .values(images_json=json.dumps(images)))
+            db.audit(conn, _actor(request), "celeb_image_delete", "celeb",
+                     f"{row['name_cn']}#{idx}")
+        return JSONResponse({"ok": True})
 
     # ---------- backup ----------
 

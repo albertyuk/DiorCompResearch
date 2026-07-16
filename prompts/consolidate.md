@@ -30,13 +30,17 @@ Examples of distinct projects from real decks:
       "phase_suffix": "TEASER" | "CELEBS" | "EVENT" | "MAKING OF" | "VIP ARRIVAL" | "SCENOGRAPHY" | "ARRIVAL" | null,
       "post_ids": ["..", ".."],
       "category": "campaign|event|cover|product|show|other",
-      "ongoing": true or false
+      "ongoing": true or false,
+      "rationale": "1-3 sentences: the concrete evidence that these posts are one campaign+phase (shared event/venue/product/hashtag/celebs, date proximity) — and, when relevant, why nearby posts were NOT included."
     }
   ]
 }
 
 Notes:
 - Every input post_id must appear in exactly one project.
+- `rationale` is shown to the human reviewer verbatim — cite the actual signals
+  (e.g. "all 4 posts tag 王一博 and hashtag #SpeedyP9# within 3 days"), not
+  generic phrases.
 - `ongoing`: true when the activity clearly continues past month end (e.g. a seeding
   campaign still active at the last day of the month).
 - Titles: English, ALL CAPS, ≤60 chars, matching the register of the examples

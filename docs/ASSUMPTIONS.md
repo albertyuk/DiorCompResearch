@@ -296,6 +296,31 @@ each is easy to revisit.
     `<>&'` but deliberately NOT double quotes, so the attribute must stay
     single-quoted; a regression test locks this in.
 
+54. **Review #2 overhaul (owner request, 2026-07)**: (a) image selection
+    (checkboxes + HQ drop zones) moved from review #1 to review #2 — each
+    project card lists its consolidated posts (weibo members first, matched
+    cross-platform posts tagged `matched`), every post linked to its source;
+    review #1 keeps click-to-preview only. (b) Cross-check evidence is now
+    inspectable: platform rows link to the matched post (matched_url /
+    matched_post_id) and matched posts join project_posts with role=match so
+    their images are selectable for slides (auto-cards still come from Weibo
+    posts only). (c) Orphans are sifted by the SAME filter.md rubric right
+    after each brand's cross-check (filter_orphans; verdicts + rationale
+    shown, drops greyed, keeps first). (d) Grouping is human-editable via
+    drag-and-drop: project handle → merge (posts/celebs/evidence/dates fold
+    in, rationale records the merge), post handle → move a single post or
+    attach an orphan, Ungroup → one project per weibo post with matches
+    returned to the orphan pool. Draft groupings are still replaced if
+    enrichment re-runs; confirmed projects are never overwritten. (e) Celebs
+    page (/celebs): rename (unique name_cn enforced), per-brand relation +
+    verified flag, multi-image photo library (magic-byte validated, stored
+    under DATA_DIR/celebs); the renderer uses the FIRST library image as a
+    labeled visual when a project celeb got no labeled post image. Project
+    cards edit celebs with structured rows (display name / relation label /
+    remove / add) instead of raw JSON. (f) consolidate.md now returns a
+    per-project `rationale` (stored on projects, shown as "Why these posts
+    are grouped"); merges/ungroups/promotions append their own provenance.
+
 ## Testing
 
 25. The ~15 caption fixtures test the deterministic layers (@-tag extraction,

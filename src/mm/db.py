@@ -103,6 +103,7 @@ projects = Table(
     Column("celebs", Text),                             # JSON [{name_cn,name_en,relation,verified,occupation}]
     Column("hero_media", Text),                         # JSON [local paths]
     Column("status", String, default="draft"),          # draft|confirmed|rendered
+    Column("rationale", Text),                          # why these posts are one project
     UniqueConstraint("month", "brand", "title", "phase_suffix", name="uq_project"),
 )
 
@@ -120,6 +121,7 @@ platform_matches = Table(
     Column("present", Boolean, default=False),
     Column("matched_url", String),
     Column("matched_date", String),
+    Column("matched_post_id", String),                  # evidence post, when known
     Column("confidence", Float),
 )
 
@@ -137,6 +139,7 @@ celeb_registry = Table(
     Column("name_en", String),
     Column("occupation", String),
     Column("relations_json", Text, default="{}"),       # {brand_key: {relation, raw_cn_title, verified, source_url, date}}
+    Column("images_json", Text, default="[]"),          # [local paths] — celeb photo library
 )
 
 audit_log = Table(
@@ -220,6 +223,17 @@ def _migrate(engine: Engine) -> None:
             c.exec_driver_sql("ALTER TABLE verdicts ADD COLUMN decided_by VARCHAR")
         if cols and "rationale" not in cols:
             c.exec_driver_sql("ALTER TABLE verdicts ADD COLUMN rationale TEXT")
+        cols = [r[1] for r in c.exec_driver_sql("PRAGMA table_info(projects)")]
+        if cols and "rationale" not in cols:
+            c.exec_driver_sql("ALTER TABLE projects ADD COLUMN rationale TEXT")
+        cols = [r[1] for r in c.exec_driver_sql("PRAGMA table_info(platform_matches)")]
+        if cols and "matched_post_id" not in cols:
+            c.exec_driver_sql(
+                "ALTER TABLE platform_matches ADD COLUMN matched_post_id VARCHAR")
+        cols = [r[1] for r in c.exec_driver_sql("PRAGMA table_info(celeb_registry)")]
+        if cols and "images_json" not in cols:
+            c.exec_driver_sql(
+                "ALTER TABLE celeb_registry ADD COLUMN images_json TEXT DEFAULT '[]'")
 
 
 def now_iso() -> str:
