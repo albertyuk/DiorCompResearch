@@ -471,6 +471,94 @@ def create_app() -> FastAPI:
             db.audit(conn, _actor(request), f"post_{decision}", "post", post_id)
         return RedirectResponse(f"/review/{month}/posts", status_code=303)
 
+    @app.post("/review/{month}/posts/{post_id}/media/select")
+    def media_select(request: Request, month: str, post_id: str,
+                     idx: int = Form(...), selected: str = Form(...)):
+        """Checkbox next to an image: exactly the ticked images render into
+        the slide for this post (untick all → automatic card/screenshot)."""
+        engine = db.get_engine()
+        with engine.begin() as conn:
+            row = conn.execute(select(db.posts).where(
+                db.posts.c.post_id == post_id)).mappings().first()
+            if row is None:
+                return JSONResponse({"error": "unknown post"}, status_code=404)
+            media = json.loads(row["media"] or "[]")
+            if not 0 <= idx < len(media):
+                return JSONResponse({"error": "bad media index"}, status_code=400)
+            media[idx]["selected"] = selected in ("true", "1", "on")
+            conn.execute(db.posts.update()
+                         .where(db.posts.c.post_id == post_id)
+                         .values(media=json.dumps(media, ensure_ascii=False)))
+            db.audit(conn, _actor(request),
+                     "media_select" if media[idx]["selected"] else "media_deselect",
+                     "post", f"{post_id}#{idx}")
+        return JSONResponse({"ok": True, "selected": media[idx]["selected"]})
+
+    _UPLOAD_CAP = 30 * 1024 * 1024
+
+    def _image_ext(data: bytes) -> str | None:
+        if data.startswith(b"\xff\xd8\xff"):
+            return ".jpg"
+        if data.startswith(b"\x89PNG"):
+            return ".png"
+        if data.startswith(b"GIF8"):
+            return ".gif"
+        if data.startswith(b"RIFF") and data[8:12] == b"WEBP":
+            return ".webp"
+        return None
+
+    @app.post("/review/{month}/posts/{post_id}/upload")
+    async def media_upload(request: Request, month: str, post_id: str):
+        """Drop zone: the reviewer downloads the original image from the post
+        and drops it here — stored as a selected, upload-sourced media item."""
+        engine = db.get_engine()
+        with engine.connect() as conn:
+            row = conn.execute(select(db.posts).where(
+                db.posts.c.post_id == post_id)).mappings().first()
+        if row is None:
+            return JSONResponse({"error": "unknown post"}, status_code=404)
+        form = await request.form()
+        files = [v for v in form.getlist("files") if hasattr(v, "read")]
+        if not files:
+            return JSONResponse({"error": "no files"}, status_code=400)
+        import hashlib as _hashlib
+        from ..media import MediaStore
+        store = MediaStore(row["month"])
+        added = 0
+        new_items = []
+        for f in files:
+            # stream with a running cap — a huge file must not reach memory
+            data = b""
+            while chunk := await f.read(1 << 20):
+                data += chunk
+                if len(data) > _UPLOAD_CAP:
+                    return JSONResponse({"error": f"{f.filename}: over 30MB"},
+                                        status_code=413)
+            ext = _image_ext(data)
+            if ext is None:
+                return JSONResponse(
+                    {"error": f"{f.filename}: not a JPEG/PNG/GIF/WebP image"},
+                    status_code=400)
+            name = f"upload_{_hashlib.sha1(data).hexdigest()[:16]}{ext}"
+            path = store.media_dir(row["brand"]) / name
+            path.write_bytes(data)
+            new_items.append({"kind": "image", "url": None,
+                              "local_path": str(path), "source": "upload",
+                              "selected": True})
+            added += 1
+        with engine.begin() as conn:
+            fresh = conn.execute(select(db.posts.c.media).where(
+                db.posts.c.post_id == post_id)).scalar()
+            media = json.loads(fresh or "[]")
+            have = {m.get("local_path") for m in media}
+            media.extend(m for m in new_items if m["local_path"] not in have)
+            conn.execute(db.posts.update()
+                         .where(db.posts.c.post_id == post_id)
+                         .values(media=json.dumps(media, ensure_ascii=False)))
+            db.audit(conn, _actor(request), "media_upload", "post",
+                     f"{post_id} (+{added})")
+        return JSONResponse({"ok": True, "added": added})
+
     @app.post("/review/{month}/posts/confirm")
     def posts_confirm(request: Request, month: str):
         pipeline.confirm_posts_review(month)

@@ -255,25 +255,35 @@ def _project_visuals(conn, factory, brand_key: str, project: dict,
     visuals = []
     for row in rows[: GRID_CAP * 2]:
         post = dict(row)
-        if is_video:
-            img = factory.video_cover_for_post(brand_key, post) \
-                  or factory.visual_for_post(brand_key, post)
-        else:
-            img = factory.visual_for_post(brand_key, post)
-        if img is None:
-            continue
         label_top = label_name = None
         caption = (post.get("caption") or "")
         for c in celebs:
             if c.get("name_cn") and c["name_cn"] in caption:
                 label_top, label_name = c["relation_display"], c["display"]
                 break
-        visuals.append({"image": str(img),
-                        "kind": "video_still" if is_video else "photo",
-                        "link": post["url"] if is_video else None,
-                        "label_top": label_top, "label_name": label_name})
-        if len(visuals) >= GRID_CAP:
-            break
+        # human-selected images (review checkboxes / HQ uploads) always win
+        # over the automatic card/screenshot; label goes on the first one
+        chosen = [m for m in json.loads(post.get("media") or "[]")
+                  if m.get("selected") and m.get("local_path")
+                  and Path(m["local_path"]).exists()]
+        images = [Path(m["local_path"]) for m in chosen]
+        if not images:
+            if is_video:
+                img = factory.video_cover_for_post(brand_key, post) \
+                      or factory.visual_for_post(brand_key, post)
+            else:
+                img = factory.visual_for_post(brand_key, post)
+            if img is None:
+                continue
+            images = [img]
+        for i, img in enumerate(images):
+            visuals.append({"image": str(img),
+                            "kind": "video_still" if is_video else "photo",
+                            "link": post["url"] if is_video else None,
+                            "label_top": label_top if i == 0 else None,
+                            "label_name": label_name if i == 0 else None})
+            if len(visuals) >= GRID_CAP:
+                return visuals
     return visuals
 
 

@@ -238,6 +238,18 @@ each is easy to revisit.
     and never greys never-filtered posts; the Learning page's pending count
     is a real DB count, not capped by the display window.
 
+49. **HQ images & human image selection (owner change order)**: ingest now
+    downloads the *largest* variant weibo offers (chosen by pixel area, not
+    variant name). In Review · Posts, every kept post shows its images with a
+    checkbox — **ticked images render directly on the slide** (label on the
+    first; no ticks → the automatic card/screenshot as before, so the old
+    flow is the default) — plus a drop zone to upload manually-downloaded
+    originals (JPEG/PNG/GIF/WebP by magic bytes, 30MB streamed cap, stored
+    content-hashed, auto-selected, audited). Fonts per owner spec: the
+    projects xlsx is Futura Lt BT 11 throughout; the celeb relationship +
+    name labels under slide visuals are Calibre 9 (link lines keep their
+    original size).
+
 ## Testing
 
 25. The ~15 caption fixtures test the deterministic layers (@-tag extraction,

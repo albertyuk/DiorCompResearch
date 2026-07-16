@@ -129,9 +129,13 @@ mid-run.
   `resolve` in `config/brands.yaml`. The Console's Runs page lists them with a
   one-click TikHub lookup; WeChat Channels IDs must be pasted from the WeChat
   app (not web-discoverable).
-- **Media discipline**: every image is downloaded at ingest
-  (`data/runs/{month}/{brand}/media/`); TikHub/CDN URLs expire and are never
-  treated as source of truth. The PPTX embeds local files only.
+- **Media discipline**: every image is downloaded at ingest — at the largest
+  resolution weibo offers — into `data/runs/{month}/{brand}/media/`;
+  TikHub/CDN URLs expire and are never treated as source of truth. The PPTX
+  embeds local files only. In Review · Posts, tick the checkbox on the images
+  you want on the slide (none ticked → automatic post-card), and use each
+  post's drop zone to upload a manually-downloaded original when the scraped
+  file isn't good enough.
 - **WeChat is the weakest column by design** (Channels has no keyword search;
   MP matching is title/date-based) — fix it at review checkpoint #2.
 - **Costs**: `mm costs --month …` prints per-endpoint TikHub calls and LLM

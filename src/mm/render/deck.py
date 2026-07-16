@@ -190,17 +190,21 @@ class DeckBuilder:
             self._run(p, text, size=14, bold=True,
                       color="000000" if i == 1 else None)
 
+    CELEB_LABEL_SIZE = 9      # celeb relationship + name: Calibre 9 (owner spec)
+
     def _add_label(self, slide, cx: float, top: float, *, link: str | None,
                    label_top: str | None, label_name: str | None,
                    size: float = 10, max_w: float = 3.2) -> None:
-        """Centered link/relationship/name label block under a visual."""
+        """Centered link/relationship/name label block under a visual. The
+        link keeps the caller's size; the celeb title and name lines are
+        always Calibre 9."""
         lines = []
         if link:
-            lines.append((link, False))
+            lines.append((link, False, size))
         if label_top:
-            lines.append((label_top, False))
+            lines.append((label_top, False, self.CELEB_LABEL_SIZE))
         if label_name:
-            lines.append((label_name, True))
+            lines.append((label_name, True, self.CELEB_LABEL_SIZE))
         if not lines:
             return
         h = 0.05 + 0.19 * len(lines)
@@ -208,10 +212,10 @@ class DeckBuilder:
         tf = box.text_frame
         tf.word_wrap = True
         tf.margin_top = tf.margin_bottom = 0
-        for i, (text, bold) in enumerate(lines):
+        for i, (text, bold, sz) in enumerate(lines):
             p = self._para(tf, i == 0)
             p.alignment = PP_ALIGN.CENTER
-            self._run(p, text, size=size, bold=bold)
+            self._run(p, text, size=sz, bold=bold)
 
     # -- icons / logos --------------------------------------------------------
 

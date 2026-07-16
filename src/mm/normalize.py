@@ -94,6 +94,29 @@ def weibo_posts_from_response(data) -> list[dict]:
     return find_post_list(data, {"mblogid", "mblog_id", "text_raw", "isLongText"})
 
 
+def _largest_pic_variant(info: dict) -> dict:
+    """Highest-resolution variant of a weibo picture: start from the named
+    preference chain, then let any variant with a strictly larger pixel area
+    win — variant naming shifts (original/largest/large/mw2000) but width ×
+    height doesn't lie. Slides need the biggest file weibo will give us."""
+    def area(v) -> int:
+        try:
+            return int(v.get("width") or 0) * int(v.get("height") or 0)
+        except (TypeError, ValueError):
+            return 0
+    best = (info.get("largest") or info.get("original") or info.get("large")
+            or info.get("mw2000") or {})
+    if not isinstance(best, dict):
+        best = {}
+    for v in info.values():
+        if isinstance(v, dict) and v.get("url") and area(v) > area(best):
+            best = v
+    if not best.get("url"):     # unknown variant names, no dimensions
+        best = next((v for v in info.values()
+                     if isinstance(v, dict) and v.get("url")), {})
+    return best
+
+
 def normalize_weibo(mblog: dict, uid: str) -> dict | None:
     mid = str(mblog.get("mblogid") or mblog.get("bid") or mblog.get("mid")
               or mblog.get("id") or "")
@@ -114,11 +137,12 @@ def normalize_weibo(mblog: dict, uid: str) -> dict | None:
     pic_ids = mblog.get("pic_ids") or list(pic_infos.keys())
     for pid in pic_ids:
         info = pic_infos.get(pid) or {}
-        best = (info.get("original") or info.get("largest") or info.get("large")
-                or info.get("mw2000") or {})
+        best = _largest_pic_variant(info)
         url = best.get("url")
         if url:
-            media.append({"kind": "image", "url": url})
+            media.append({"kind": "image", "url": url,
+                          "width": best.get("width"),
+                          "height": best.get("height")})
     page_info = mblog.get("page_info") or {}
     if page_info.get("object_type") == "video" or "media_info" in page_info:
         cover = (page_info.get("page_pic") or {})
