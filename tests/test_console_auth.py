@@ -464,16 +464,17 @@ def test_hosted_account_overrides_overlay(tmp_path, monkeypatch):
     monkeypatch.setattr(mconfig, "ACCOUNT_OVERRIDES_YAML",
                         tmp_path / "account_overrides.yaml")
     cfg = mconfig.BrandsConfig.load()
-    assert not cfg.brand("chanel").account("douyin").resolved
+    repo_uid = cfg.brand("chanel").account("douyin").uid   # whatever ships
+    assert repo_uid != "SEC_UID_X"
     cfg.save_account_resolution("chanel", "douyin", "SEC_UID_X", "CHANEL抖音",
                                 "2026-07-15")
     # repo yaml untouched; overlay applied on every load
     import yaml as _y
     repo = _y.safe_load(mconfig.BRANDS_YAML.read_text())
     chanel = next(b for b in repo["brands"] if b["key"] == "chanel")
-    assert chanel["douyin"]["status"] == "resolve"        # repo unchanged
+    assert chanel["douyin"].get("uid") == repo_uid        # repo unchanged
     fresh = mconfig.BrandsConfig.load()
     acct = fresh.brand("chanel").account("douyin")
-    assert acct.resolved and acct.uid == "SEC_UID_X"
+    assert acct.resolved and acct.uid == "SEC_UID_X"      # overlay wins
     # repo remains authoritative for everything else
     assert fresh.filters["exclude_fragrance"] is True
