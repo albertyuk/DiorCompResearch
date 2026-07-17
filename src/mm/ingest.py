@@ -15,7 +15,7 @@ from datetime import datetime, timedelta
 
 from . import db, normalize
 from .config import BrandsConfig, Brand
-from .dates import month_bounds
+from .dates import CST, month_bounds
 from .media import MediaStore
 from .tikhub import TikHubClient
 
@@ -120,7 +120,7 @@ def ingest_weibo(engine, client: TikHubClient, cfg: BrandsConfig, month: str,
         if not uid:
             raise RuntimeError(f"{brand_key}: could not resolve weibo uid")
         cfg.save_account_resolution(brand.key, "weibo", uid, acct.screen_name,
-                                    datetime.now().date().isoformat())
+                                    datetime.now(CST).date().isoformat())
     start, end = month_bounds(month)
     store = MediaStore(month)
     n_new, n_reposts, page, since_id = 0, 0, 1, None

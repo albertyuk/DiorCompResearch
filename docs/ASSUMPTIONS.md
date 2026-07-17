@@ -564,6 +564,16 @@ each is easy to revisit.
     OUTPUT_DIR). The QA raster dir ({month}_qa) still overwrites — it's
     diagnostics, not a deliverable.
 
+73. **The site clock is Beijing time (owner report: clock incorrect)**: the
+    Fly box runs UTC, so generated timestamps were 8h behind the team.
+    Every time source now uses CST (Asia/Shanghai): db.now_iso() (audit
+    trail, decisions, judgments, archives, learning versions — stored with
+    an explicit +08:00 offset), the Runs activity-log line stamps, the
+    Decks "Last changed" column, the render filename timestamps, and the
+    account-resolution date. Post dates were already CST (normalize.py).
+    Rows written before this change keep their old UTC strings — history
+    is not rewritten.
+
 ## Testing
 
 25. The ~15 caption fixtures test the deterministic layers (@-tag extraction,

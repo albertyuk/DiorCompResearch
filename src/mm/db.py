@@ -6,7 +6,7 @@ sqlite upserts, so re-running any phase never duplicates rows.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime
 
 from sqlalchemy import (Boolean, Column, Float, ForeignKey, Integer, MetaData,
                         String, Table, Text, UniqueConstraint, create_engine, select)
@@ -265,7 +265,10 @@ def _migrate(engine: Engine) -> None:
 
 
 def now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    # every timestamp the app writes or shows is Beijing time (the team's
+    # timezone) — the +08:00 offset stays in the stored string
+    from .dates import CST
+    return datetime.now(CST).isoformat(timespec="seconds")
 
 
 def upsert(conn, table: Table, values: dict, key_cols: list[str],

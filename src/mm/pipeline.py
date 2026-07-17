@@ -585,11 +585,12 @@ def run_render(month: str, *, visuals_mode: str | None = None,
                                          display_name=brand.display_name,
                                          projects=projects))
     year, mm_ = month.split("-")
-    # every render writes NEW files — a timestamp (plus a PARTIAL marker for
-    # subset renders) keeps versions side by side on the Decks page instead
-    # of silently overwriting the previous deck
-    import time as _time
-    stamp = _time.strftime("%Y%m%d-%H%M%S")
+    # every render writes NEW files — a Beijing-time stamp (plus a PARTIAL
+    # marker for subset renders) keeps versions side by side on the Decks
+    # page instead of silently overwriting the previous deck
+    from datetime import datetime as _dt
+    from .dates import CST
+    stamp = _dt.now(CST).strftime("%Y%m%d-%H%M%S")
     tag = f"{'_PARTIAL' if partial else ''}_{stamp}"
     name = (f"_CREATIVE_{year}_{deck_month_token(month)}"
             f"_PR_COMPETITOR_REPORT_FASHION{tag}.pptx")

@@ -80,3 +80,19 @@ def test_assets_label():
 def test_date_runs_none_start_is_tbd():
     assert date_text(None, None) == "TBD"
     assert date_text(None, None, ongoing=True) == "TBD"
+
+
+# -- the site clock is Beijing time -------------------------------------------
+
+def test_now_iso_is_beijing_time():
+    """Owner report: timestamps ran on the server clock (UTC on Fly). Every
+    generated timestamp is Beijing wall-clock time with an explicit +08:00."""
+    from datetime import datetime
+    from mm import db
+    from mm.dates import CST
+    stamp = db.now_iso()
+    assert stamp.endswith("+08:00")
+    parsed = datetime.fromisoformat(stamp)
+    beijing_now = datetime.now(CST)
+    assert abs((beijing_now - parsed).total_seconds()) < 5
+    assert parsed.hour == beijing_now.hour       # wall clock, not UTC digits

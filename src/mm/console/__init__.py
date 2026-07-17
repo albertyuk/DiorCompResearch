@@ -65,9 +65,10 @@ _LOCK = threading.Lock()
 def _log_activity(month: str, msg: str) -> None:
     from collections import deque
     from datetime import datetime
+    from ..dates import CST
     with _LOCK:
         log = ACTIVITY.setdefault(month, deque(maxlen=200))
-    log.append(f"{datetime.now().strftime('%H:%M:%S')}  {msg}")
+    log.append(f"{datetime.now(CST).strftime('%H:%M:%S')}  {msg}")
 
 
 def _spawn(month: str, name: str, fn, *args, **kwargs):
@@ -728,6 +729,7 @@ def create_app() -> FastAPI:
     @app.get("/decks", response_class=HTMLResponse)
     def decks_view(request: Request):
         from datetime import datetime
+        from ..dates import CST
         # every render writes new timestamped files — list ALL versions,
         # newest first, so older renders of the same month stay reachable
         files = sorted([*OUTPUT_DIR.glob("*.pptx"), *OUTPUT_DIR.glob("*.xlsx")],
@@ -736,7 +738,7 @@ def create_app() -> FastAPI:
             "files": [{"name": f.name,
                        "size_mb": round(f.stat().st_size / 1e6, 1),
                        "changed": datetime.fromtimestamp(
-                           f.stat().st_mtime).strftime("%Y-%m-%d %H:%M")}
+                           f.stat().st_mtime, CST).strftime("%Y-%m-%d %H:%M")}
                       for f in files]})
 
     @app.post("/decks/delete")
