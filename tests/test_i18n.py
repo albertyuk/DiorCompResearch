@@ -51,16 +51,16 @@ def test_lang_toggle_translates_the_console(client, tmp_db):
     assert "mm_lang=zh" in r.headers.get("set-cookie", "")
     page = client.get("/").text
     assert 'lang="zh-CN"' in page
-    assert "启动本月" in page and "归档并重置" in page    # runs page chrome
-    assert ">运行<" in page and ">幻灯片<" in page       # nav
+    assert "开始搜索" in page and "归档并重置" in page    # runs page chrome
+    assert ">任务<" in page and ">报告<" in page         # nav
     assert "EN</button>" in page                         # switch back offered
     page = client.get("/review/2026-06/posts").text
-    assert "审核检查点 #1 — 帖子" in page
+    assert "帖子审核（第 1 步）" in page
     assert "确认并继续" in page
     page = client.get("/review/2026-06/projects").text
-    assert "审核检查点 #2 — 项目" in page
+    assert "项目审核（第 2 步）" in page
     page = client.get("/celebs").text
-    assert "名人档案" in page
+    assert "明星档案" in page
     # back to English
     client.post("/lang", data={"lang": "en", "next": "/"})
     assert "Start month" in client.get("/").text
@@ -122,8 +122,8 @@ def test_every_page_carries_a_guide(client, tmp_db):
     # and they translate
     client.post("/lang", data={"lang": "zh", "next": "/"})
     page = client.get("/review/2026-06/posts").text
-    assert "本页使用说明" in page and "接下来会发生什么" in page
-    assert "逐个品牌检查" in page
+    assert "操作指南" in page and "后续流程" in page
+    assert "按品牌逐一检查" in page
     client.post("/lang", data={"lang": "en", "next": "/"})
 
 
@@ -135,4 +135,4 @@ def test_login_page_translates_too(tmp_db, monkeypatch):
     assert "Team passphrase" in c.get("/login").text
     c.post("/lang", data={"lang": "zh", "next": "/login"})   # public route
     page = c.get("/login").text
-    assert "团队口令" in page and "你的名字" in page
+    assert "团队口令" in page and "姓名" in page
