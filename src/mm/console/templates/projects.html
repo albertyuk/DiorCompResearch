@@ -13,13 +13,17 @@
 {% call pagehead(T("Review checkpoint #2 — projects") ~ " · " ~ month,
                  T("Each project lists the posts consolidated into it — tick the images that should render on the slide (or drop an HQ original). Drag the ⠿ handle of a project onto another project to merge them; drag a post's ⠿ handle to move just that post. Celeb names, relations and photo libraries live on the")
                  ~ ' <a href="/celebs">' ~ T("Celebs page") ~ "</a>.") %}
-  <form method="post" action="/review/{{ month }}/render"
-        onsubmit="return confirm('{{ T("Confirm projects and render the deck?") }}')">
+  <form method="post" action="/review/{{ month }}/render" id="render-form">
+    <input type="hidden" name="only" id="render-only">
     <select name="visuals" style="width:auto; display:inline-block">
       <option value="live" {% if default_visuals == 'live' %}selected{% endif %}>{{ T("image-less posts: live weibo screenshot") }}</option>
       <option value="card" {% if default_visuals == 'card' %}selected{% endif %}>{{ T("image-less posts: post card") }}</option>
     </select>
-    <button type="submit" class="primary">{{ T("Confirm & render →") }}</button>
+    <button type="submit" name="scope" value="selected" class="primary">
+      {{ T("Confirm & render →") }} <span id="rsel-count"></span></button>
+    <button type="submit" name="scope" value="all" class="ghost"
+            title="{{ T('Render every project, ignoring the render ticks') }}">
+      {{ T("Render all") }}</button>
   </form>
 {% endcall %}
 {{ guide("projects", [
@@ -27,7 +31,7 @@
   T("Tick the images that should appear on the slide (click any image to preview it full-size; drag an HQ original onto the dashed box). Nothing ticked = the post's first photo is used, exactly as you see it in the preview — never a screenshot of the whole post."),
   T("Edit the title, dates, description line, celebs and platform ticks, then press Save on that project."),
   T("Review the Orphans at the bottom — keeps come first. Drag one onto a project, Promote it to its own project, or Ignore it."),
-  T("Press Confirm & render and watch the progress bar."),
+  T("Untick include in render on any project you want to leave out, then press Confirm & render — or Render all to ignore the ticks. Watch the progress bar."),
 ], T("The PPTX deck and the XLSX spreadsheet are generated and appear on the Decks page. Render as often as you like — every edit here is picked up by the next render.")) }}
 <div class="micro">
   {% if confirmed_by %}{{ T("posts confirmed by {who} · {t}") | replace("{who}", confirmed_by.actor_name) | replace("{t}", confirmed_by.at[:16]) }}{% endif %}
@@ -47,7 +51,13 @@
           data-brand="{{ g.brand.key }}"
           title="{{ T('Drag onto another project to merge') }}">
       ⠿&nbsp;{{ p.title }}{% if p.phase_suffix %} — {{ p.phase_suffix }}{% endif %}</span>
-    <span class="micro">{{ T("status: ") }}{{ T(p.status) }}</span>
+    <span class="micro" style="white-space:nowrap">
+      {% if p.status != 'dropped' %}
+      <label style="cursor:pointer" title="{{ T('untick to leave this project out of the next render') }}">
+        <input type="checkbox" class="render-sel" value="{{ p.id }}" checked>
+        {{ T("include in render") }}</label> ·
+      {% endif %}
+      {{ T("status: ") }}{{ T(p.status) }}</span>
   </div>
   {% if p.rationale %}
   <div class="note" style="margin:8px 0 4px; border-left:2px solid var(--line); padding-left:10px">
@@ -306,6 +316,37 @@ window.MM_PROJECTS = {
 {% endfor %}
 };
 mmWireMovers({{ month | tojson }});
+
+// render selection: untick "include in render" to leave a project out of the
+// NEXT render; the primary button renders the ticked set, Render all ignores
+// the ticks. The count badge shows when a subset is selected.
+function mmRenderCount() {
+  const all = document.querySelectorAll('.render-sel').length;
+  const sel = document.querySelectorAll('.render-sel:checked').length;
+  document.getElementById('rsel-count').textContent =
+    sel < all ? `(${sel}/${all})` : '';
+}
+document.querySelectorAll('.render-sel').forEach(c =>
+  c.addEventListener('change', mmRenderCount));
+mmRenderCount();
+document.getElementById('render-form').addEventListener('submit', e => {
+  const sel = [...document.querySelectorAll('.render-sel:checked')]
+    .map(c => c.value);
+  const all = document.querySelectorAll('.render-sel').length;
+  document.getElementById('render-only').value = sel.join(',');
+  const scope = (e.submitter && e.submitter.value) || 'selected';
+  if (scope === 'selected' && all > 0 && sel.length === 0) {
+    e.preventDefault();
+    mmToast({{ T("Nothing is ticked — tick include in render on at least one project, or press Render all.") | tojson }}, 'err');
+    return;
+  }
+  const partial = scope === 'selected' && sel.length < all;
+  const msg = partial
+    ? {{ T("Confirm projects and render only the {n} ticked ones?") | tojson }}
+        .replace('{n}', sel.length)
+    : {{ T("Confirm projects and render the deck?") | tojson }};
+  if (!confirm(msg)) e.preventDefault();
+});
 
 // image checkbox → this image renders on the slide (same endpoint as before,
 // now living at checkpoint #2 where consolidation context exists)

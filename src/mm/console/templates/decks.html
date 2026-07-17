@@ -9,20 +9,30 @@
   <a class="btn" href="/backup/db">{{ T("Download database backup") }}</a>
 {% endcall %}
 {{ guide("decks", [
-  T("Download the newest PPTX (the deck) and XLSX (the project spreadsheet) — filenames carry the month."),
+  T("Download the newest PPTX (the deck) and XLSX (the project spreadsheet) — filenames carry the month and the render time."),
+  T("Every render creates a NEW file; older versions of the same month stay listed here (newest first, PARTIAL marks a selective render) until you delete them."),
   T("Download database backup regularly — it holds every decision, project and the celeb registry, the parts that cannot be regenerated."),
 ], T("To change the deck's content, adjust the projects on Review · Projects and render again — a new file appears here.")) }}
 {% if not files %}
 <div class="empty"><span class="micro">{{ T("Nothing rendered yet.") }}</span>
   {{ T("Decks appear here after Confirm & render on Review · Projects.") }}</div>
 {% else %}
-<table class="grid" style="max-width:820px">
-  <tr><th>{{ T("File") }}</th><th style="width:90px">{{ T("Size") }}</th><th style="width:130px"></th></tr>
+<table class="grid" style="max-width:980px">
+  <tr><th>{{ T("File") }}</th><th style="width:140px">{{ T("Last changed") }}</th>
+      <th style="width:90px">{{ T("Size") }}</th><th style="width:200px"></th></tr>
   {% for f in files %}
   <tr>
     <td>{{ f.name }}</td>
+    <td class="micro">{{ f.changed }}</td>
     <td class="micro">{{ f.size_mb }} MB</td>
-    <td><a class="btn sm" href="/download/{{ f.name }}">{{ T("Download") }}</a></td>
+    <td>
+      <a class="btn sm" href="/download/{{ f.name }}">{{ T("Download") }}</a>
+      <form class="inline" method="post" action="/decks/delete"
+            onsubmit="return confirm('{{ T("Delete {f}? The file is removed from the server — this cannot be undone.") | replace("{f}", f.name) }}')">
+        <input type="hidden" name="name" value="{{ f.name }}">
+        <button type="submit" class="danger sm">{{ T("Delete") }}</button>
+      </form>
+    </td>
   </tr>
   {% endfor %}
 </table>

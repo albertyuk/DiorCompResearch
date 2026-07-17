@@ -553,8 +553,23 @@ ZH: dict[str, str] = {
      "project, Promote it to its own project, or Ignore it."):
         "最后看一下底部的「未匹配帖子」——「保留」的排在前面。可以拖进某个项目、"
         "让它「单独成项」，或者「忽略」。",
-    "Press Confirm & render and watch the progress bar.":
-        "点击「确认并生成报告 →」，通过进度条查看生成进度。",
+    ("Untick include in render on any project you want to leave out, then "
+     "press Confirm & render — or Render all to ignore the ticks. Watch the "
+     "progress bar."):
+        "把不想放进报告的项目取消勾选「纳入本次生成」，再点「确认并生成报告」；"
+        "点「生成全部」则忽略勾选、全部生成。生成进度看进度条。",
+    "include in render": "纳入本次生成",
+    "untick to leave this project out of the next render":
+        "取消勾选后，下次生成的报告不含该项目",
+    "Render all": "生成全部",
+    "Render every project, ignoring the render ticks":
+        "生成全部项目（忽略勾选）",
+    ("Nothing is ticked — tick include in render on at least one project, "
+     "or press Render all."):
+        "一个项目都没有勾选——请至少勾选一个「纳入本次生成」，"
+        "或点击「生成全部」。",
+    "Confirm projects and render only the {n} ticked ones?":
+        "确认所有项目，但本次只生成勾选的 {n} 个？",
     ("The PPTX deck and the XLSX spreadsheet are generated and appear on "
      "the Decks page. Render as often as you like — every edit here is "
      "picked up by the next render."):
@@ -562,8 +577,18 @@ ZH: dict[str, str] = {
         "可以反复生成——本页的每次修改都会体现在新生成的文件里。",
     # decks
     ("Download the newest PPTX (the deck) and XLSX (the project "
-     "spreadsheet) — filenames carry the month."):
-        "下载最新的 PPT 报告和 Excel 项目表格，文件名里标注了月份。",
+     "spreadsheet) — filenames carry the month and the render time."):
+        "下载最新的 PPT 报告和 Excel 项目表格，文件名里标注了月份和生成时间。",
+    ("Every render creates a NEW file; older versions of the same month "
+     "stay listed here (newest first, PARTIAL marks a selective render) "
+     "until you delete them."):
+        "每次生成都会产生一个新文件；同一月份的旧版本会保留在这里"
+        "（最新的排在最上面，带 PARTIAL 的表示只生成了部分项目），"
+        "直到你手动删除。",
+    "Last changed": "最后更新",
+    ("Delete {f}? The file is removed from the server — this cannot be "
+     "undone."):
+        "确定删除 {f}？文件将从服务器移除，无法恢复。",
     ("Download database backup regularly — it holds every decision, project "
      "and the celeb registry, the parts that cannot be regenerated."):
         "请定期点击「下载数据库备份」——里面是所有审核决定、项目和明星档案，"

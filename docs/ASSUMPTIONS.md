@@ -549,6 +549,21 @@ each is easy to revisit.
     reopens it any time. Fully translated, dark-mode aware, Esc/backdrop
     close.
 
+72. **Selective render + versioned decks (owner request)**: (a) every
+    non-dropped project card carries an "include in render" tick (default
+    on); Confirm & render renders the ticked set (the button shows n/m when
+    a subset is picked, and refuses an empty selection), while a Render all
+    button ignores the ticks. The subset only narrows what's RENDERED —
+    confirm semantics and project statuses are unchanged, and the render
+    ticks are render-time choices, not persisted state. (b) renders no
+    longer overwrite: the PPTX/XLSX filenames carry a render timestamp
+    (seconds resolution) and a _PARTIAL marker for subset renders, so every
+    version of a month coexists. (c) the Decks page lists all versions
+    newest-first with a Last changed column and a per-file Delete (confirm
+    + audit; name validated against traversal, only .pptx/.xlsx inside
+    OUTPUT_DIR). The QA raster dir ({month}_qa) still overwrites — it's
+    diagnostics, not a deliverable.
+
 ## Testing
 
 25. The ~15 caption fixtures test the deterministic layers (@-tag extraction,

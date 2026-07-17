@@ -137,10 +137,11 @@ def _crosscheck_and_enrich(month):
     return {"crosscheck": r1, "enrich": r2}
 
 
-def _render_task(month, visuals_mode):
+def _render_task(month, visuals_mode, only_ids=None):
     # note/stop resolve inside the worker: _spawn has registered the task
     # and its stop event by the time this runs
     return pipeline.run_render(month, visuals_mode=visuals_mode,
+                               only_ids=only_ids,
                                progress=_task_note(month, "render"),
                                should_stop=_stop_flag(month, "render"))
 
@@ -726,10 +727,29 @@ def create_app() -> FastAPI:
 
     @app.get("/decks", response_class=HTMLResponse)
     def decks_view(request: Request):
-        files = sorted(OUTPUT_DIR.glob("*.pptx")) + sorted(OUTPUT_DIR.glob("*.xlsx"))
+        from datetime import datetime
+        # every render writes new timestamped files — list ALL versions,
+        # newest first, so older renders of the same month stay reachable
+        files = sorted([*OUTPUT_DIR.glob("*.pptx"), *OUTPUT_DIR.glob("*.xlsx")],
+                       key=lambda f: f.stat().st_mtime, reverse=True)
         return TEMPLATES.TemplateResponse(request, "decks.html", {
-            "files": [{"name": f.name, "size_mb": round(f.stat().st_size / 1e6, 1)}
+            "files": [{"name": f.name,
+                       "size_mb": round(f.stat().st_size / 1e6, 1),
+                       "changed": datetime.fromtimestamp(
+                           f.stat().st_mtime).strftime("%Y-%m-%d %H:%M")}
                       for f in files]})
+
+    @app.post("/decks/delete")
+    def deck_delete(request: Request, name: str = Form(...)):
+        p = (OUTPUT_DIR / name).resolve()
+        if (Path(name).name != name
+                or p.suffix.lower() not in (".pptx", ".xlsx")
+                or not p.is_relative_to(OUTPUT_DIR.resolve())
+                or not p.is_file()):
+            return JSONResponse({"error": "unknown file"}, status_code=404)
+        p.unlink()
+        db.audit(db.get_engine(), _actor(request), "deck_delete", "file", name)
+        return RedirectResponse("/decks", status_code=303)
 
     # ---------- actions ----------
 
@@ -1496,14 +1516,24 @@ def create_app() -> FastAPI:
 
     @app.post("/review/{month}/render")
     def render_deck(request: Request, month: str,
-                    visuals: str = Form(DEFAULT_VISUALS)):
+                    visuals: str = Form(DEFAULT_VISUALS),
+                    scope: str = Form("all"), only: str = Form("")):
         # never audit/confirm a render that did not start (e.g. double-click
         # while one is already running)
         if TASKS.get(f"{month}:render", {}).get("state") == "running":
             return RedirectResponse(f"/review/{month}/projects", status_code=303)
+        # "selected" scope renders only the ticked projects; Render all (or
+        # an empty selection) keeps the full-deck behavior
+        only_ids = None
+        if scope == "selected":
+            ids = [int(x) for x in only.split(",") if x.strip().isdigit()]
+            if ids:
+                only_ids = ids
         pipeline.confirm_projects_review(month)
-        if _spawn(month, "render", _render_task, month, visuals):
-            db.audit(db.get_engine(), _actor(request), "render", "month", month)
+        if _spawn(month, "render", _render_task, month, visuals, only_ids):
+            db.audit(db.get_engine(), _actor(request), "render", "month",
+                     month if only_ids is None
+                     else f"{month} (projects {','.join(map(str, only_ids))})")
         return RedirectResponse(f"/review/{month}/projects", status_code=303)
 
     # ---------- Phase R ----------

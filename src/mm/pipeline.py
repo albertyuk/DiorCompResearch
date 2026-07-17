@@ -453,6 +453,7 @@ def _project_visuals(conn, factory, brand_key: str, project: dict,
 
 def run_render(month: str, *, visuals_mode: str | None = None,
                include_drafts: bool = False, qa_pngs: bool | None = None,
+               only_ids: list[int] | None = None,
                progress=None, should_stop=None) -> dict:
     from .config import DEFAULT_VISUALS, IS_HOSTED
     visuals_mode = visuals_mode or DEFAULT_VISUALS   # local→live, hosted→card
@@ -476,16 +477,25 @@ def run_render(month: str, *, visuals_mode: str | None = None,
     # collect first so progress can report a real i/N over all projects
     with engine.connect() as conn:
         brand_rows = []
+        n_available = 0
         for brand in cfg.brands:
             q = select(db.projects).where(db.projects.c.month == month,
                                           db.projects.c.brand == brand.key,
                                           db.projects.c.status != "dropped")
             if not include_drafts:
                 q = q.where(db.projects.c.status != "draft")
-            brand_rows.append((brand, [dict(r) for r in conn.execute(
-                q.order_by(db.projects.c.date_start)).mappings()]))
+            rows = [dict(r) for r in conn.execute(
+                q.order_by(db.projects.c.date_start)).mappings()]
+            n_available += len(rows)
+            # the reviewer can render a chosen subset — dropped stays out,
+            # untouched projects keep their state for the next full render
+            if only_ids is not None:
+                rows = [r for r in rows if r["id"] in set(only_ids)]
+            brand_rows.append((brand, rows))
     total = sum(len(rows) for _, rows in brand_rows)
-    note(f"render · visuals 0/{total} projects ({visuals_mode} mode)")
+    partial = total < n_available
+    note(f"render · visuals 0/{total} projects ({visuals_mode} mode"
+         f"{', selection' if partial else ''})")
 
     # projects render in parallel: each is an independent read + Playwright
     # composition. Sync Playwright objects are single-threaded, so every
@@ -575,12 +585,19 @@ def run_render(month: str, *, visuals_mode: str | None = None,
                                          display_name=brand.display_name,
                                          projects=projects))
     year, mm_ = month.split("-")
-    name = f"_CREATIVE_{year}_{deck_month_token(month)}_PR_COMPETITOR_REPORT_FASHION.pptx"
+    # every render writes NEW files — a timestamp (plus a PARTIAL marker for
+    # subset renders) keeps versions side by side on the Decks page instead
+    # of silently overwriting the previous deck
+    import time as _time
+    stamp = _time.strftime("%Y%m%d-%H%M%S")
+    tag = f"{'_PARTIAL' if partial else ''}_{stamp}"
+    name = (f"_CREATIVE_{year}_{deck_month_token(month)}"
+            f"_PR_COMPETITOR_REPORT_FASHION{tag}.pptx")
     out_pptx = OUTPUT_DIR / name
     note("render · composing the deck (PPTX)…")
     DeckBuilder().build(brands_spec, out_pptx)
     note("render · writing the spreadsheet (XLSX)…")
-    out_xlsx = OUTPUT_DIR / f"{month}_projects.xlsx"
+    out_xlsx = OUTPUT_DIR / f"{month}_projects{tag}.xlsx"
     write_projects_xlsx(brands_spec, out_xlsx)
     # the QA slide raster (LibreOffice → PDF → PNGs) is minutes of work whose
     # output nothing on the hosted box ever displays — hosted skips it by
