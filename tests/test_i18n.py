@@ -97,6 +97,36 @@ def test_theme_toggle_dark_mode(client, tmp_db):
     assert 'data-theme=' in client.get("/login").text
 
 
+def test_every_page_carries_a_guide(client, tmp_db):
+    """Each page explains exactly what to do and what happens next."""
+    _seed_month(tmp_db)
+    pages = {
+        "/": "runs",
+        "/review/2026-06/posts": "posts",
+        "/review/2026-06/projects": "projects",
+        "/decks": "decks",
+        "/celebs": "celebs",
+        "/archives": "archives",
+        "/learning": "learning",
+    }
+    for path, key in pages.items():
+        page = client.get(path).text
+        assert f'data-guide="{key}"' in page, path
+        assert "How this page works" in page, path
+        assert "What happens next" in page, path
+    # the steps are concrete instructions, not lorem
+    posts = client.get("/review/2026-06/posts").text
+    assert "Confirm &amp; continue" in posts or "Confirm & continue" in posts
+    projects = client.get("/review/2026-06/projects").text
+    assert "Orphans" in projects and "Decks page" in projects
+    # and they translate
+    client.post("/lang", data={"lang": "zh", "next": "/"})
+    page = client.get("/review/2026-06/posts").text
+    assert "本页使用说明" in page and "接下来会发生什么" in page
+    assert "逐个品牌检查" in page
+    client.post("/lang", data={"lang": "en", "next": "/"})
+
+
 def test_login_page_translates_too(tmp_db, monkeypatch):
     monkeypatch.setenv("CONSOLE_PASSPHRASE", PASS)
     monkeypatch.setenv("MM_SECRET_KEY", "f" * 64)

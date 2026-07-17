@@ -2,6 +2,11 @@
 {% set active = 'decks' %}
 {% block title %}Decks{% endblock %}
 {% block content %}
+{% from "_guide.html" import guide with context %}
+{{ guide("decks", [
+  T("Download the newest PPTX (the deck) and XLSX (the project spreadsheet) — filenames carry the month."),
+  T("Download database backup regularly — it holds every decision, project and the celeb registry, the parts that cannot be regenerated."),
+], T("To change the deck's content, adjust the projects on Review · Projects and render again — a new file appears here.")) }}
 <div class="row-flex" style="justify-content:space-between; align-items:baseline">
   <h2 style="margin-top:0">{{ T("Deck archive") }}</h2>
   <a class="btn" href="/backup/db">{{ T("Download database backup") }}</a>

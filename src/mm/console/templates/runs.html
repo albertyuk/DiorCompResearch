@@ -1,8 +1,15 @@
 {% extends "base.html" %}
 {% set active = 'runs' %}
 {% block content %}
+{% from "_guide.html" import guide with context %}
 
 {% if msg %}<div class="banner">{{ msg }}</div>{% endif %}
+
+{{ guide("runs", [
+  T("Enter the month to search (YYYY-MM) and press Start month. The system pulls every brand's Weibo timeline for that month, then the AI filter marks each post keep or drop."),
+  T("While it runs you'll see RUNNING, a progress bar and the activity log under the month. Stop pauses at the next safe point; Start month resumes exactly where it left off."),
+  T("When the filter pill shows done and review_posts shows waiting, press Open review."),
+], T("The run waits at Review · Posts for your keep/drop decisions — nothing continues until you confirm there. Archive & reset moves a finished month into Archives so a fresh search can start from scratch.")) }}
 
 {% if unresolved %}
 <h2>{{ T("Accounts") }}</h2>

@@ -1,0 +1,10 @@
+{% macro guide(key, steps, next) %}
+<details class="guide" open data-guide="{{ key }}">
+  <summary>{{ T("How this page works") }}</summary>
+  <ol>
+    {% for s in steps %}<li>{{ s }}</li>{% endfor %}
+  </ol>
+  <div class="guide-next"><span class="micro">{{ T("What happens next") }}</span>
+    {{ next }}</div>
+</details>
+{% endmacro %}

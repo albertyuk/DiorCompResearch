@@ -2,12 +2,19 @@
 {% set active = 'posts' %}
 {% block title %}Review · Posts · {{ month }}{% endblock %}
 {% block content %}
+{% from "_guide.html" import guide with context %}
 {% if busy %}
 <div class="banner info" id="busy-banner">{{ T("A run is working on {m} right now") | replace("{m}", month) }}{% if started_by %} ({{ T("started {t} by {who}") | replace("{t}", started_by.at[:16]) | replace("{who}", started_by.actor_name) }}){% endif %} — <span id="busy-detail"></span><br>
   {{ T("This page shows the last completed state; freshly ingested posts appear here after the filter step. It refreshes itself when the run pauses.") }}
   <div class="pbar" id="busy-pbar"><div class="fill"></div></div>
 </div>
 {% endif %}
+{{ guide("posts", [
+  T("Work brand by brand. Greyed rows are dropped; everything else goes forward. Posts flagged needs review are listed first — decide those."),
+  T("Click any thumbnail to preview the images full-size. Open why? to see the AI's reasoning for each verdict."),
+  T("Use Delete / Keep / Restore to overrule the filter. Every correction is remembered and makes the filter more accurate next month (see Learning)."),
+  T("When the keeps look right, press Confirm & continue."),
+], T("Cross-platform verification (Douyin / RED / WeChat) and grouping into projects run automatically — usually a few minutes. When the run pauses again, continue on Review · Projects. If you change decisions here afterwards, press Confirm & continue again to regroup.")) }}
 <div class="row-flex" style="justify-content:space-between">
   <div>
     <h2 style="margin-top:0">{{ T("Review checkpoint #1 — posts") }} · {{ month }}</h2>

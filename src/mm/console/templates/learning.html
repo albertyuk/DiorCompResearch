@@ -2,8 +2,13 @@
 {% set active = 'learning' %}
 {% block title %}Filter · Learning{% endblock %}
 {% block content %}
+{% from "_guide.html" import guide with context %}
 {% if msg %}<div class="banner">{{ msg }}</div>{% endif %}
 
+{{ guide("learning", [
+  T("Read the correction catalogue — every human keep/drop beside what the AI had decided."),
+  T("Press Update learned rules now to distill fresh corrections immediately (this also happens automatically before every filter run)."),
+], T("The updated guidance is appended to the filter prompt, so next month's filtering starts smarter. The core rules (China-market test, no perfume/beauty) never change.")) }}
 <div class="row-flex" style="justify-content:space-between">
   <div>
     <h2 style="margin-top:0">{{ T("Filter learning") }}</h2>

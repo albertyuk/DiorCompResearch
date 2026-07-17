@@ -440,6 +440,14 @@ each is easy to revisit.
     and hover/selection colors to variables so both modes share one
     stylesheet. The login page is themed too. Default stays light.
 
+65. **Per-page guides (owner request)**: every page opens with a collapsible
+    "How this page works" box — numbered, concrete steps for THAT page plus
+    a "What happens next" footer describing what the pipeline does after the
+    user acts. Shared macro (_guide.html), fully translated (中文), styled to
+    the house design; collapsing one is remembered per browser/page via
+    localStorage so experienced users see them once. Guides are additive —
+    the existing contextual notes stay.
+
 ## Testing
 
 25. The ~15 caption fixtures test the deterministic layers (@-tag extraction,

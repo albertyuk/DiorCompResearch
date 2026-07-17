@@ -2,7 +2,14 @@
 {% set active = 'celebs' %}
 {% block title %}Celebs{% endblock %}
 {% block content %}
+{% from "_guide.html" import guide with context %}
 <h2 style="margin-top:0">{{ T("Celebrity registry") }}</h2>
+{{ guide("celebs", [
+  T("Correct names (中文 + Latin) and each brand relationship. Tick verified only when a source confirms it — unverified labels render with a trailing ? on the deck."),
+  T("Upload photos per celeb — the first one is used on slides whenever a project's celeb has no labeled post image."),
+  T("Press Save on the card you edited."),
+], T("Changes apply to the next enrichment run and the next render, and the registry carries over to every future month.")) }}
+
 <p class="note">{{ T("Names, brand relationships and photo libraries compound across months. Relations verified from a caption or a source keep their label; unverified ones render with a trailing ? on the deck. Photos uploaded here are used on slides when a project's celeb has no labeled post image — the first photo wins; click any photo to preview the library.") }}</p>
 {% if msg %}<div class="banner info">{{ msg }}</div>{% endif %}
 

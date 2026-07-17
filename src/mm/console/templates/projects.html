@@ -2,10 +2,18 @@
 {% set active = 'projects' %}
 {% block title %}Review · Projects · {{ month }}{% endblock %}
 {% block content %}
+{% from "_guide.html" import guide with context %}
 {% if busy %}
 <div class="banner info" id="busy-banner">⏳ {{ T("A run is working on {m} right now") | replace("{m}", month) }} — <span id="busy-detail"></span><br>
   {{ T("Projects below are the last completed state; the list refreshes itself when cross-check / enrichment / render finishes.") }}</div>
 {% endif %}
+{{ guide("projects", [
+  T("Check each project's grouping — read Why these posts are grouped. Fix mistakes by dragging the ⠿ handles (merge two projects, or move a single post), with ✕ remove, or with Ungroup."),
+  T("Tick the images that should appear on the slide (click any image to preview it full-size; drag an HQ original onto the dashed box). Nothing ticked = an automatic post card is used."),
+  T("Edit the title, dates, description line, celebs and platform ticks, then press Save on that project."),
+  T("Review the Orphans at the bottom — keeps come first. Drag one onto a project, Promote it to its own project, or Ignore it."),
+  T("Press Confirm & render and watch the progress bar."),
+], T("The PPTX deck and the XLSX spreadsheet are generated and appear on the Decks page. Render as often as you like — every edit here is picked up by the next render.")) }}
 <div class="row-flex" style="justify-content:space-between">
   <div>
     <h2 style="margin-top:0">{{ T("Review checkpoint #2 — projects") }} · {{ month }}</h2>

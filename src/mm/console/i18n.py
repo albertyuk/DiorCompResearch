@@ -333,6 +333,122 @@ ZH: dict[str, str] = {
     "Verification": "认证信息",
     "Manual entry": "手动输入",
     "display name (optional)": "显示名（可选）",
+    # ── per-page guides ──────────────────────────────────────────────────
+    "How this page works": "本页使用说明",
+    "What happens next": "接下来会发生什么",
+    # runs
+    ("Enter the month to search (YYYY-MM) and press Start month. The system "
+     "pulls every brand's Weibo timeline for that month, then the AI filter "
+     "marks each post keep or drop."):
+        "输入要搜索的月份（YYYY-MM），点击「启动本月」。系统会抓取每个品牌该月的"
+        "微博时间线，然后由 AI 过滤器将每条帖子标记为保留或剔除。",
+    ("While it runs you'll see RUNNING, a progress bar and the activity log "
+     "under the month. Stop pauses at the next safe point; Start month "
+     "resumes exactly where it left off."):
+        "运行期间月份下方会显示「运行中」、进度条和活动日志。「停止」会在下一个"
+        "安全点暂停；再次「启动本月」会从中断处继续。",
+    ("When the filter pill shows done and review_posts shows waiting, press "
+     "Open review."):
+        "当「过滤」显示完成、「审核帖子」显示等待中时，点击「打开审核」。",
+    ("The run waits at Review · Posts for your keep/drop decisions — nothing "
+     "continues until you confirm there. Archive & reset moves a finished "
+     "month into Archives so a fresh search can start from scratch."):
+        "运行会停在「审核 · 帖子」等待你的保留/剔除决定——在那里确认之前不会继续。"
+        "「归档并重置」把已完成的月份移入归档，下次可以从零开始重新搜索。",
+    # posts
+    ("Work brand by brand. Greyed rows are dropped; everything else goes "
+     "forward. Posts flagged needs review are listed first — decide those."):
+        "逐个品牌检查。灰色行为已剔除；其余都会进入下一步。标记「需人工复核」的"
+        "帖子排在最前——请优先处理。",
+    ("Click any thumbnail to preview the images full-size. Open why? to see "
+     "the AI's reasoning for each verdict."):
+        "点击任意缩略图可全尺寸预览图片。展开「原因？」可查看 AI 每条判定的理由。",
+    ("Use Delete / Keep / Restore to overrule the filter. Every correction "
+     "is remembered and makes the filter more accurate next month (see "
+     "Learning)."):
+        "用「删除 / 保留 / 恢复」推翻过滤器的判定。每次修正都会被记住，让下个月的"
+        "过滤更准确（见「学习」页）。",
+    "When the keeps look right, press Confirm & continue.":
+        "确认保留的帖子无误后，点击「确认并继续 →」。",
+    ("Cross-platform verification (Douyin / RED / WeChat) and grouping into "
+     "projects run automatically — usually a few minutes. When the run "
+     "pauses again, continue on Review · Projects. If you change decisions "
+     "here afterwards, press Confirm & continue again to regroup."):
+        "跨平台核对（抖音/小红书/微信）与项目归组会自动运行——通常几分钟。再次暂停后，"
+        "请前往「审核 · 项目」继续。若之后在本页改动了决定，再点一次「确认并继续」"
+        "即可重新归组。",
+    # projects
+    ("Check each project's grouping — read Why these posts are grouped. Fix "
+     "mistakes by dragging the ⠿ handles (merge two projects, or move a "
+     "single post), with ✕ remove, or with Ungroup."):
+        "检查每个项目的归组——阅读「为什么这些帖子被归为一组」。有误时可拖动 ⠿ 手柄"
+        "（合并两个项目，或移动单条帖子）、用「✕ 移除」，或用「拆分」。",
+    ("Tick the images that should appear on the slide (click any image to "
+     "preview it full-size; drag an HQ original onto the dashed box). "
+     "Nothing ticked = an automatic post card is used."):
+        "勾选要出现在幻灯片上的图片（点击可全尺寸预览；把高清原图拖到虚线框内）。"
+        "全部不勾选 = 使用自动生成的帖子卡片。",
+    ("Edit the title, dates, description line, celebs and platform ticks, "
+     "then press Save on that project."):
+        "编辑标题、日期、描述、名人和平台勾选，然后在该项目上点「保存」。",
+    ("Review the Orphans at the bottom — keeps come first. Drag one onto a "
+     "project, Promote it to its own project, or Ignore it."):
+        "查看底部的「未匹配帖子」——保留的排在最前。可拖到某个项目上、"
+        "「提升为项目」，或「忽略」。",
+    "Press Confirm & render and watch the progress bar.":
+        "点击「确认并生成 →」，然后关注进度条。",
+    ("The PPTX deck and the XLSX spreadsheet are generated and appear on "
+     "the Decks page. Render as often as you like — every edit here is "
+     "picked up by the next render."):
+        "系统会生成 PPTX 幻灯片和 XLSX 表格，出现在「幻灯片」页面。可以随时重新"
+        "生成——本页的每次修改都会体现在下一次生成中。",
+    # decks
+    ("Download the newest PPTX (the deck) and XLSX (the project "
+     "spreadsheet) — filenames carry the month."):
+        "下载最新的 PPTX（幻灯片）和 XLSX（项目表格）——文件名包含月份。",
+    ("Download database backup regularly — it holds every decision, project "
+     "and the celeb registry, the parts that cannot be regenerated."):
+        "请定期「下载数据库备份」——其中包含所有决定、项目和名人档案，"
+        "这些内容无法重新生成。",
+    ("To change the deck's content, adjust the projects on Review · "
+     "Projects and render again — a new file appears here."):
+        "要修改幻灯片内容，请在「审核 · 项目」调整项目后重新生成——"
+        "新文件会出现在这里。",
+    # celebs
+    ("Correct names (中文 + Latin) and each brand relationship. Tick "
+     "verified only when a source confirms it — unverified labels render "
+     "with a trailing ? on the deck."):
+        "修正名字（中文 + 拉丁）及与各品牌的关系。只有在有来源证实时才勾选"
+        "「已核实」——未核实的标签在幻灯片上会带「?」后缀。",
+    ("Upload photos per celeb — the first one is used on slides whenever a "
+     "project's celeb has no labeled post image."):
+        "为每位名人上传照片——当项目中的名人没有带标签的帖子图片时，"
+        "幻灯片会使用第一张照片。",
+    "Press Save on the card you edited.": "在编辑过的卡片上点「保存」。",
+    ("Changes apply to the next enrichment run and the next render, and the "
+     "registry carries over to every future month."):
+        "修改会应用于下一次整理和下一次生成；档案会延续到之后的每个月份。",
+    # archives
+    ("Browse any archived month — its posts, decisions and projects exactly "
+     "as they were, read-only."):
+        "浏览任意已归档的月份——帖子、决定和项目保持原样，只读。",
+    ("Nothing here affects live data. To archive the current month and "
+     "start it over, use Archive & reset on the Runs page."):
+        "本页不影响在用数据。要归档当前月份并重新开始，请在「运行」页使用"
+        "「归档并重置」。",
+    # learning
+    ("Read the correction catalogue — every human keep/drop beside what the "
+     "AI had decided."):
+        "查看修正记录——每次人工保留/剔除都与 AI 当时的判定并列显示。",
+    ("Press Update learned rules now to distill fresh corrections "
+     "immediately (this also happens automatically before every filter "
+     "run)."):
+        "点击「立即更新学习准则」可马上提炼新的修正（每次过滤运行前也会自动进行）。",
+    ("The updated guidance is appended to the filter prompt, so next "
+     "month's filtering starts smarter. The core rules (China-market test, "
+     "no perfume/beauty) never change."):
+        "更新后的准则会附加到过滤提示词中，下个月的过滤会更聪明。核心规则"
+        "（中国市场判断、剔除香水/美妆）永不改变。",
 }
 
 

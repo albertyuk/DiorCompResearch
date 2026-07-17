@@ -93,6 +93,19 @@ form.inline { display:inline; }
 .pbar.indet .fill { width:28%; animation:pbar-sweep 1.6s infinite linear; }
 @keyframes pbar-sweep { from { transform:translateX(-110%); }
                         to   { transform:translateX(460%); } }
+/* per-page how-to guide — collapsible, state remembered per browser */
+.guide { border:1px solid var(--line); border-left:2px solid var(--ink);
+  background:var(--soft); padding:10px 18px 12px; margin:0 0 26px;
+  max-width:980px; }
+.guide summary { cursor:pointer; font-size:10px; letter-spacing:2.5px;
+  text-transform:uppercase; color:var(--ink); padding:4px 0;
+  user-select:none; }
+.guide ol { margin:10px 0 4px 20px; font-size:12.5px; line-height:1.65;
+  color:var(--ink); }
+.guide li { margin-bottom:6px; max-width:860px; }
+.guide-next { font-size:12px; color:var(--mut); max-width:860px;
+  border-top:1px solid var(--line); margin-top:10px; padding-top:8px; }
+.guide-next .micro { display:block; margin-bottom:3px; }
 /* project cards + drag-and-drop grouping */
 .proj-card { border:1px solid var(--line); padding:16px; margin-bottom:14px;
   background:var(--paper); }
@@ -260,6 +273,15 @@ function mmProgress(el, tasks) {
 <main>
 {% block content %}{% endblock %}
 </main>
+<script>
+// guides start open; a user who collapses one keeps it collapsed (per page)
+document.querySelectorAll('details.guide').forEach(g => {
+  const k = 'mm_guide_' + g.dataset.guide;
+  if (localStorage.getItem(k) === 'closed') g.open = false;
+  g.addEventListener('toggle', () =>
+    localStorage.setItem(k, g.open ? 'open' : 'closed'));
+});
+</script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

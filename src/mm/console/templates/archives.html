@@ -2,7 +2,12 @@
 {% set active = 'archives' %}
 {% block title %}Archives{% endblock %}
 {% block content %}
+{% from "_guide.html" import guide with context %}
 <h2 style="margin-top:0">{{ T("Archived searches") }}</h2>
+{{ guide("archives", [
+  T("Browse any archived month — its posts, decisions and projects exactly as they were, read-only."),
+], T("Nothing here affects live data. To archive the current month and start it over, use Archive & reset on the Runs page.")) }}
+
 <p class="note">{{ T("Each Archive & reset snapshots a month's entire search — posts, filter verdicts, human decisions, projects — and clears the live tables so the next Start month searches from scratch. Nothing is deleted: browse any archive below.") }}</p>
 {% if not items %}<p class="note">{{ T("No archives yet.") }}</p>{% endif %}
 {% if items %}
