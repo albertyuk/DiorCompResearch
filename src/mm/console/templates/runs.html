@@ -75,7 +75,7 @@
     | replace("{p}", a.counts.get('posts', 0) | string)
     | replace("{pr}", a.counts.get('projects', 0) | string) }}</div>
   {% endfor %}
-  <div class="pbar" id="pbar-{{ m.month }}"><div class="fill"></div></div>
+  <div class="pbar-row" id="pbar-{{ m.month }}"><div class="pbar"><div class="fill"></div></div><span class="pbar-label"></span></div>
   <div class="micro" id="task-{{ m.month }}"></div>
   <details id="actwrap-{{ m.month }}" style="margin-top:6px">
     <summary class="micro" style="cursor:pointer">{{ T("activity log") }}</summary>

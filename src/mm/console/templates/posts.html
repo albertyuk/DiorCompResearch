@@ -6,7 +6,7 @@
 {% if busy %}
 <div class="banner info" id="busy-banner">{{ T("A run is working on {m} right now") | replace("{m}", month) }}{% if started_by %} ({{ T("started {t} by {who}") | replace("{t}", started_by.at[:16]) | replace("{who}", started_by.actor_name) }}){% endif %} — <span id="busy-detail"></span><br>
   {{ T("This page shows the last completed state; freshly ingested posts appear here after the filter step. It refreshes itself when the run pauses.") }}
-  <div class="pbar" id="busy-pbar"><div class="fill"></div></div>
+  <div class="pbar-row" id="busy-pbar"><div class="pbar"><div class="fill"></div></div><span class="pbar-label"></span></div>
 </div>
 {% endif %}
 {{ guide("posts", [

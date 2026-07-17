@@ -143,6 +143,9 @@ ZH: dict[str, str] = {
     "Slide images are chosen at Review · Projects, after consolidation.":
         "幻灯片图片在「审核 · 项目」（合并后）中选择。",
     "working…": "运行中…",
+    "~{t} left": "预计剩余 {t}",
+    "min": "分钟",
+    "s": "秒",
     # ── review · projects ────────────────────────────────────────────────
     "Review checkpoint #2 — projects": "审核检查点 #2 — 项目",
     ("Each project lists the posts consolidated into it — tick the images "

@@ -32,7 +32,7 @@
   {% if confirmed_by %}{{ T("posts confirmed by {who} · {t}") | replace("{who}", confirmed_by.actor_name) | replace("{t}", confirmed_by.at[:16]) }}{% endif %}
   {% if rendered_by %} — {{ T("last render by {who} · {t}") | replace("{who}", rendered_by.actor_name) | replace("{t}", rendered_by.at[:16]) }}{% endif %}
 </div>
-<div class="pbar" id="task-pbar"><div class="fill"></div></div>
+<div class="pbar-row" id="task-pbar"><div class="pbar"><div class="fill"></div></div><span class="pbar-label"></span></div>
 <div class="micro" id="task-line"></div>
 <hr class="rule">
 
