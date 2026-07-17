@@ -127,6 +127,33 @@ def _render_task(month, visuals_mode):
                                should_stop=_stop_flag(month, "render"))
 
 
+def _record_decision(conn, post_id: str, decision: str, actor: str) -> None:
+    """Human keep/drop with the learning-loop bookkeeping — the same
+    semantics as the review #1 buttons, reused by grouping-board drags
+    (dragging a dropped post into a project IS a keep decision)."""
+    from ..learn import record_feedback
+    post_row = conn.execute(select(db.posts).where(
+        db.posts.c.post_id == post_id)).mappings().first()
+    if post_row is None:
+        return
+    verdict_row = conn.execute(select(db.verdicts).where(
+        db.verdicts.c.post_id == post_id)).mappings().first()
+    db.upsert(conn, db.verdicts, {
+        "post_id": post_id,
+        "human_decision": None if decision == "restore" else decision,
+        "decided_at": db.now_iso(), "decided_by": actor}, ["post_id"])
+    record_feedback(conn, post_row, verdict_row, decision, actor)
+
+
+def _effective_keep(conn, post_id: str):
+    v = conn.execute(select(db.verdicts).where(
+        db.verdicts.c.post_id == post_id)).mappings().first()
+    if v is None:
+        return None
+    return v["keep"] if v["human_decision"] is None \
+        else v["human_decision"] == "keep"
+
+
 def _spinoff_project(conn, month: str, proj, post, rationale: str,
                      taken: set) -> int:
     """A single-post draft project for a weibo post leaving `proj` (used by
@@ -993,9 +1020,194 @@ def create_app() -> FastAPI:
                 conn.execute(db.orphans.update()
                              .where(db.orphans.c.post_id == post_id)
                              .values(resolution="promoted"))
+            elif _effective_keep(conn, post_id) is False:
+                # dragging a dropped weibo post into a project IS a keep
+                # decision — recorded like a review #1 override, learning
+                # loop included
+                _record_decision(conn, post_id, "keep", _actor(request))
             db.audit(conn, _actor(request), "project_adopt", "project",
                      f"{post_id}->{tgt['id']}")
         return JSONResponse({"ok": True})
+
+    # ---------- grouping board (split screen) ----------
+
+    @app.get("/review/{month}/board", response_class=HTMLResponse)
+    def board_view(request: Request, month: str):
+        """Split-screen grouping workspace: projects left, unplaced posts
+        (orphans / dropped / unassigned keeps) right, drag both ways."""
+        cfg = BrandsConfig.load()
+        engine = db.get_engine()
+        brands = []
+        with engine.connect() as conn:
+            member_ids = {r[0] for r in conn.execute(
+                select(db.project_posts.c.post_id)
+                .join(db.projects,
+                      db.projects.c.id == db.project_posts.c.project_id)
+                .where(db.projects.c.month == month))}
+            for brand in cfg.brands:
+                projects = []
+                for p in conn.execute(
+                        select(db.projects)
+                        .where(db.projects.c.month == month,
+                               db.projects.c.brand == brand.key)
+                        .order_by(db.projects.c.date_start)).mappings():
+                    members = []
+                    for r in conn.execute(
+                            select(db.posts, db.project_posts.c.role)
+                            .join(db.project_posts,
+                                  db.project_posts.c.post_id == db.posts.c.post_id)
+                            .where(db.project_posts.c.project_id == p["id"])
+                            .order_by(db.posts.c.platform != "weibo",
+                                      db.posts.c.created_at)).mappings():
+                        media = json.loads(r["media"] or "[]")
+                        members.append({
+                            "post_id": r["post_id"], "platform": r["platform"],
+                            "role": r["role"], "url": r["url"],
+                            "caption": (r["caption"] or "")[:90],
+                            "thumb": next((m.get("local_path") for m in media
+                                           if m.get("local_path")), None)})
+                    projects.append({**dict(p), "members": members})
+
+                def chip(r, keep=None, rationale=None):
+                    media = json.loads(r["media"] or "[]")
+                    return {"post_id": r["post_id"], "platform": r["platform"],
+                            "url": r["url"], "keep": keep,
+                            "rationale": rationale,
+                            "created_at": (r["created_at"] or "")[:10],
+                            "caption": (r["caption"] or "")[:140],
+                            "thumb": next((m.get("local_path") for m in media
+                                           if m.get("local_path")), None)}
+
+                orphans, dropped, unassigned = [], [], []
+                for r in conn.execute(
+                        select(db.posts, db.orphans.c.resolution,
+                               db.verdicts.c.keep, db.verdicts.c.rationale,
+                               db.verdicts.c.human_decision)
+                        .join(db.orphans,
+                              db.orphans.c.post_id == db.posts.c.post_id)
+                        .join(db.verdicts,
+                              db.verdicts.c.post_id == db.posts.c.post_id,
+                              isouter=True)
+                        .where(db.orphans.c.month == month,
+                               db.orphans.c.resolution == "pending",
+                               db.posts.c.brand == brand.key)
+                        .order_by(db.posts.c.created_at)).mappings():
+                    if r["post_id"] in member_ids:
+                        continue
+                    keep = r["keep"] is None or bool(r["keep"])
+                    orphans.append(chip(r, keep=keep, rationale=r["rationale"]))
+                orphans.sort(key=lambda o: not o["keep"])
+                for r in conn.execute(
+                        select(db.posts, db.verdicts.c.keep,
+                               db.verdicts.c.rationale,
+                               db.verdicts.c.human_decision)
+                        .join(db.verdicts,
+                              db.verdicts.c.post_id == db.posts.c.post_id,
+                              isouter=True)
+                        .where(db.posts.c.month == month,
+                               db.posts.c.brand == brand.key,
+                               db.posts.c.platform == "weibo")
+                        .order_by(db.posts.c.created_at)).mappings():
+                    if r["post_id"] in member_ids:
+                        continue
+                    keep = (r["keep"] if r["human_decision"] is None
+                            else r["human_decision"] == "keep")
+                    if keep is False:
+                        dropped.append(chip(r, keep=False,
+                                            rationale=r["rationale"]))
+                    elif keep:
+                        unassigned.append(chip(r, keep=True,
+                                               rationale=r["rationale"]))
+                brands.append({"brand": brand, "projects": projects,
+                               "orphans": orphans, "dropped": dropped,
+                               "unassigned": unassigned})
+        busy = any(k.startswith(f"{month}:") and v.get("state") == "running"
+                   for k, v in TASKS.items())
+        return TEMPLATES.TemplateResponse(request, "board.html", {
+            "month": month, "brands": brands, "busy": busy})
+
+    @app.post("/review/{month}/board/pool")
+    def board_pool(request: Request, month: str, post_id: str = Form(...)):
+        """Drag a post OUT of its project into the pool: a weibo post is
+        un-placed and marked dropped (a review decision, learning included);
+        a cross-platform post returns to the orphan list."""
+        engine = db.get_engine()
+        with engine.begin() as conn:
+            post = conn.execute(select(db.posts).where(
+                db.posts.c.post_id == post_id)).mappings().first()
+            if post is None:
+                return JSONResponse({"error": "unknown post"}, status_code=404)
+            month_pids = select(db.projects.c.id).where(
+                db.projects.c.month == month)
+            conn.execute(db.project_posts.delete().where(
+                db.project_posts.c.post_id == post_id,
+                db.project_posts.c.project_id.in_(month_pids)))
+            if post["platform"] == "weibo":
+                if _effective_keep(conn, post_id) is not False:
+                    _record_decision(conn, post_id, "drop", _actor(request))
+            else:
+                conn.execute(db.platform_matches.delete().where(
+                    db.platform_matches.c.matched_post_id == post_id,
+                    db.platform_matches.c.project_id.in_(month_pids)))
+                db.upsert(conn, db.orphans,
+                          {"post_id": post_id, "month": month,
+                           "resolution": "pending"}, ["post_id"])
+            db.audit(conn, _actor(request), "board_pool", "post", post_id)
+        return JSONResponse({"ok": True})
+
+    @app.post("/review/{month}/board/new_project")
+    def board_new_project(request: Request, month: str,
+                          post_id: str = Form(...)):
+        """Drag a post onto the New-project zone: it becomes its own draft
+        project (a dropped weibo post is kept in the same motion)."""
+        import re as _re
+        engine = db.get_engine()
+        with engine.begin() as conn:
+            post = conn.execute(select(db.posts).where(
+                db.posts.c.post_id == post_id)).mappings().first()
+            if post is None:
+                return JSONResponse({"error": "unknown post"}, status_code=404)
+            month_pids = select(db.projects.c.id).where(
+                db.projects.c.month == month)
+            conn.execute(db.project_posts.delete().where(
+                db.project_posts.c.post_id == post_id,
+                db.project_posts.c.project_id.in_(month_pids)))
+            caption = _re.sub(r"\s+", " ", (post["caption"] or "")).strip()
+            res = conn.execute(db.projects.insert().values(
+                month=month, brand=post["brand"],
+                title=(caption[:60].upper() or "NEW PROJECT"),
+                phase_suffix=None,
+                date_start=(post["created_at"] or f"{month}-01")[:10],
+                date_end=(post["created_at"] or f"{month}-01")[:10],
+                ongoing=False, assets="PHOTO",
+                description=caption[:90].upper() or "NEW PROJECT",
+                celebs="[]", hero_media=json.dumps(
+                    [m["local_path"] for m in
+                     json.loads(post["media"] or "[]")
+                     if m.get("local_path")][:3], ensure_ascii=False),
+                status="draft",
+                rationale=(f"Created from a single post by "
+                           f"{_actor(request)} (grouping board).")))
+            pid = res.inserted_primary_key[0]
+            role = "member" if post["platform"] == "weibo" else "match"
+            db.upsert(conn, db.project_posts,
+                      {"project_id": pid, "post_id": post_id, "role": role},
+                      ["project_id", "post_id"])
+            db.upsert(conn, db.platform_matches,
+                      {"project_id": pid, "platform": post["platform"],
+                       "present": True, "matched_url": post["url"],
+                       "matched_date": post["created_at"],
+                       "matched_post_id": post_id, "confidence": 1.0},
+                      ["project_id", "platform"])
+            if post["platform"] == "weibo":
+                if _effective_keep(conn, post_id) is False:
+                    _record_decision(conn, post_id, "keep", _actor(request))
+            else:
+                conn.execute(db.orphans.update()
+                             .where(db.orphans.c.post_id == post_id)
+                             .values(resolution="promoted"))
+            db.audit(conn, _actor(request), "board_new_project", "project", pid)
+        return JSONResponse({"ok": True, "project_id": pid})
 
     @app.post("/review/{month}/orphans/{post_id:path}/resolve")
     def orphan_resolve(request: Request, month: str, post_id: str,

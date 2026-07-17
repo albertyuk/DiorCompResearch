@@ -336,6 +336,42 @@ ZH: dict[str, str] = {
     "Verification": "认证信息",
     "Manual entry": "手动输入",
     "display name (optional)": "显示名（可选）",
+    # ── grouping board ───────────────────────────────────────────────────
+    "Grouping": "分组",
+    "Grouping board": "分组看板",
+    "Projects": "项目",
+    "New project — drop a post here": "新建项目——把帖子拖到这里",
+    "empty": "空",
+    "No projects yet — drop a post on the New project zone.":
+        "还没有项目——把帖子拖到「新建项目」区即可。",
+    "Unplaced posts": "未归组的帖子",
+    "filter…": "筛选…",
+    "Orphans (other platforms)": "未匹配（其他平台）",
+    "Unassigned keeps": "已保留但未归组",
+    "Dropped by the filter / a reviewer": "被过滤器/审核人剔除",
+    "Nothing unplaced — every post is either in a project or was never ingested.":
+        "没有未归组的帖子——所有帖子要么已在项目中，要么从未被抓取。",
+    ("Pick a brand tab. Projects sit on the left; every unplaced post sits "
+     "on the right — orphans from other platforms, dropped weibo posts, and "
+     "kept posts not yet in any project."):
+        "选择品牌标签。左侧是项目；右侧是所有未归组的帖子——其他平台的未匹配帖子、"
+        "被剔除的微博帖子，以及尚未归入任何项目的保留帖子。",
+    ("Drag a post from the right onto a project to place it there. Dragging "
+     "a dropped post in also marks it kept; dragging an orphan in resolves "
+     "it."):
+        "把右侧的帖子拖到某个项目上即可归入。拖入被剔除的帖子会同时将其标记为保留；"
+        "拖入未匹配帖子会将其解决。",
+    ("Drag a post onto the New project zone to start a fresh project from "
+     "it. Drag a post from a project back to the right side to un-place it "
+     "(weibo posts are marked dropped, platform posts return to orphans)."):
+        "把帖子拖到「新建项目」区可以以它为起点新建项目。把项目里的帖子拖回右侧"
+        "即可取消归组（微博帖子会标记为剔除，其他平台帖子回到未匹配列表）。",
+    ("Fine-tune titles, dates, celebs and slide images on Review · Projects "
+     "afterwards."):
+        "之后在「审核 · 项目」中微调标题、日期、名人和幻灯片图片。",
+    ("Every drag saves immediately. When the grouping looks right, go to "
+     "Review · Projects and press Confirm & render."):
+        "每次拖拽都会立即保存。分组满意后，前往「审核 · 项目」点击「确认并生成」。",
     # ── per-page guides ──────────────────────────────────────────────────
     "How this page works": "本页使用说明",
     "What happens next": "接下来会发生什么",

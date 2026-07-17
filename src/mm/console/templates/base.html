@@ -112,6 +112,41 @@ form.inline { display:inline; }
 .guide-next { font-size:12px; color:var(--mut); max-width:860px;
   border-top:1px solid var(--line); margin-top:10px; padding-top:8px; }
 .guide-next .micro { display:block; margin-bottom:3px; }
+/* grouping board — split screen, both panes scroll independently */
+.board-tabs { display:flex; gap:8px; flex-wrap:wrap; margin:14px 0 18px; }
+.board-tabs .board-tab.on { border-color:var(--ink); color:var(--ink); }
+.board-tabs .micro { margin-left:6px; }
+.board { display:grid; grid-template-columns:1fr 1fr; gap:22px;
+  align-items:start; }
+.board[hidden] { display:none; }   /* display:grid must not defeat hidden */
+.board .pane { border:1px solid var(--line); background:var(--paper);
+  padding:14px 16px; max-height:calc(100vh - 230px); overflow-y:auto;
+  position:sticky; top:14px; }
+.pane-head { border-bottom:1px solid var(--ink); padding-bottom:8px;
+  margin-bottom:12px; display:flex; justify-content:space-between;
+  align-items:center; gap:12px; }
+.pool-filter { width:180px !important; padding:4px 8px !important;
+  font-size:11px !important; }
+.pool-sec { margin:14px 0 6px; }
+.bproj { border:1px solid var(--line); padding:10px 12px; margin-bottom:10px;
+  background:var(--paper); }
+.bproj.dropt, .pane.pool.dropt { outline:2px solid var(--ok);
+  outline-offset:2px; }
+.bproj.newzone { border-style:dashed; color:var(--mut); text-align:center;
+  font-size:10.5px; letter-spacing:2px; text-transform:uppercase;
+  padding:14px; }
+.chiprow { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+.chip { display:flex; align-items:center; gap:8px; border:1px solid var(--line);
+  background:var(--soft); padding:4px 8px 4px 4px; font-size:11px;
+  cursor:grab; max-width:100%; }
+.chip:active { cursor:grabbing; }
+.chip img { width:34px; height:34px; object-fit:cover; flex:none;
+  border:1px solid var(--line); }
+.chip .pill { flex:none; }
+.chip-cap { overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  max-width:340px; }
+.pool-chip { margin-bottom:6px; }
+.pool-chip.dim { opacity:.55; }
 /* project cards + drag-and-drop grouping */
 .proj-card { border:1px solid var(--line); padding:16px; margin-bottom:14px;
   background:var(--paper); }
@@ -170,6 +205,7 @@ img.zoom { cursor:zoom-in; }
     {% if month is defined and month %}
     <a href="/review/{{ month }}/posts" {% if active == 'posts' %}class="active"{% endif %}>{{ T("Review · Posts") }}</a>
     <a href="/review/{{ month }}/projects" {% if active == 'projects' %}class="active"{% endif %}>{{ T("Review · Projects") }}</a>
+    <a href="/review/{{ month }}/board" {% if active == 'board' %}class="active"{% endif %}>{{ T("Grouping") }}</a>
     {% endif %}
     <a href="/decks" {% if active == 'decks' %}class="active"{% endif %}>{{ T("Decks") }}</a>
     <a href="/celebs" {% if active == 'celebs' %}class="active"{% endif %}>{{ T("Celebs") }}</a>

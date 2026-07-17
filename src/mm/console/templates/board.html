@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+{% set active = 'board' %}
+{% block title %}Grouping · {{ month }}{% endblock %}
+{% block content %}
+{% from "_guide.html" import guide with context %}
+{{ guide("board", [
+  T("Pick a brand tab. Projects sit on the left; every unplaced post sits on the right — orphans from other platforms, dropped weibo posts, and kept posts not yet in any project."),
+  T("Drag a post from the right onto a project to place it there. Dragging a dropped post in also marks it kept; dragging an orphan in resolves it."),
+  T("Drag a post onto the New project zone to start a fresh project from it. Drag a post from a project back to the right side to un-place it (weibo posts are marked dropped, platform posts return to orphans)."),
+  T("Fine-tune titles, dates, celebs and slide images on Review · Projects afterwards."),
+], T("Every drag saves immediately. When the grouping looks right, go to Review · Projects and press Confirm & render.")) }}
+
+<div class="row-flex" style="justify-content:space-between; align-items:baseline">
+  <h2 style="margin-top:0">{{ T("Grouping board") }} · {{ month }}</h2>
+  <a class="btn" href="/review/{{ month }}/projects">{{ T("Review · Projects") }} →</a>
+</div>
+<div class="board-tabs">
+  {% for b in brands %}
+  <button class="ghost board-tab" data-brand="{{ b.brand.key }}">
+    {{ b.brand.display_name }}
+    <span class="micro">{{ b.projects|length }} · {{ (b.orphans|length) + (b.dropped|length) + (b.unassigned|length) }}</span>
+  </button>
+  {% endfor %}
+</div>
+
+{% for b in brands %}
+<div class="board" data-brand-pane="{{ b.brand.key }}" hidden>
+  <div class="pane" data-drop="none">
+    <div class="micro pane-head">{{ T("Projects") }} — {{ b.brand.display_name }}</div>
+    <div class="bproj newzone" data-newproject data-brand="{{ b.brand.key }}">
+      ＋ {{ T("New project — drop a post here") }}</div>
+    {% for p in b.projects %}
+    <div class="bproj {% if p.status == 'dropped' %}dropped{% endif %}"
+         data-proj="{{ p.id }}" data-brand="{{ b.brand.key }}">
+      <div class="row-flex" style="justify-content:space-between; align-items:baseline; gap:8px">
+        <strong style="font-size:12.5px; letter-spacing:.5px">{{ p.title }}{% if p.phase_suffix %} — {{ p.phase_suffix }}{% endif %}</strong>
+        <span class="micro">{{ (p.date_start or '')[5:] }}{% if p.date_end and p.date_end != p.date_start %}–{{ p.date_end[5:] }}{% endif %}
+          · {{ T(p.status) }}</span>
+      </div>
+      <div class="chiprow">
+        {% for m in p.members %}
+        <div class="chip" draggable="true" data-post="{{ m.post_id }}"
+             data-brand="{{ b.brand.key }}" data-from="{{ p.id }}"
+             title="{{ m.caption }}">
+          {% if m.thumb %}<img loading="lazy" src="/media?path={{ m.thumb | urlencode }}">{% endif %}
+          <span class="pill {% if m.role == 'match' %}warn{% endif %}">{{ m.platform }}</span>
+          <span class="chip-cap">{{ m.caption[:46] }}</span>
+        </div>
+        {% endfor %}
+        {% if not p.members %}<span class="micro">{{ T("empty") }}</span>{% endif %}
+      </div>
+    </div>
+    {% endfor %}
+    {% if not b.projects %}<p class="note">{{ T("No projects yet — drop a post on the New project zone.") }}</p>{% endif %}
+  </div>
+
+  <div class="pane pool" data-pool data-brand="{{ b.brand.key }}">
+    <div class="micro pane-head">{{ T("Unplaced posts") }}
+      <input type="text" class="pool-filter" data-brand="{{ b.brand.key }}"
+             placeholder="{{ T('filter…') }}"></div>
+    {% for section, items, cls in [
+        ("Orphans (other platforms)", b.orphans, "warn"),
+        ("Unassigned keeps", b.unassigned, "ok"),
+        ("Dropped by the filter / a reviewer", b.dropped, "err")] %}
+    <div class="micro pool-sec">{{ T(section) }} — {{ items|length }}</div>
+    {% for o in items %}
+    <div class="chip pool-chip {% if o.keep is sameas false %}dim{% endif %}"
+         draggable="true" data-post="{{ o.post_id }}"
+         data-brand="{{ b.brand.key }}" data-from="pool">
+      {% if o.thumb %}<img loading="lazy" src="/media?path={{ o.thumb | urlencode }}">{% endif %}
+      <span class="pill {{ cls }}">{{ o.platform }}</span>
+      <span class="chip-cap">{{ o.created_at }} · {{ o.caption }}</span>
+      <a href="{{ o.url }}" target="_blank" class="micro"
+         onclick="event.stopPropagation()">↗</a>
+    </div>
+    {% endfor %}
+    {% endfor %}
+    {% if not (b.orphans or b.dropped or b.unassigned) %}
+    <p class="note">{{ T("Nothing unplaced — every post is either in a project or was never ingested.") }}</p>
+    {% endif %}
+  </div>
+</div>
+{% endfor %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+// brand tabs — remember the last one per month
+const tabs = document.querySelectorAll('.board-tab');
+function showBrand(key) {
+  document.querySelectorAll('[data-brand-pane]').forEach(p =>
+    p.hidden = p.dataset.brandPane !== key);
+  tabs.forEach(t => t.classList.toggle('on', t.dataset.brand === key));
+  localStorage.setItem('mm_board_brand_{{ month }}', key);
+}
+tabs.forEach(t => t.addEventListener('click', () => showBrand(t.dataset.brand)));
+showBrand(localStorage.getItem('mm_board_brand_{{ month }}')
+          || (tabs[0] && tabs[0].dataset.brand));
+
+// pool text filter
+document.querySelectorAll('.pool-filter').forEach(inp => {
+  inp.addEventListener('input', () => {
+    const q = inp.value.trim().toLowerCase();
+    inp.closest('.pool').querySelectorAll('.pool-chip').forEach(c =>
+      c.style.display = !q || c.textContent.toLowerCase().includes(q)
+        ? '' : 'none');
+  });
+});
+
+// drag & drop: chip → project (adopt), chip → pool (un-place),
+// chip → new-project zone (fresh project)
+let bDrag = null;
+async function bPost(url, body) {
+  try {
+    const r = await fetch(url, {method: 'POST',
+      headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body});
+    if (!r.ok) throw new Error((await r.json()).error || r.status);
+    location.reload();
+  } catch (err) { alert({{ T("Move failed: ") | tojson }} + err.message); }
+}
+document.addEventListener('dragstart', e => {
+  const chip = e.target.closest && e.target.closest('.chip');
+  if (!chip) return;
+  bDrag = {post: chip.dataset.post, brand: chip.dataset.brand,
+           from: chip.dataset.from};
+  e.dataTransfer.effectAllowed = 'move';
+});
+document.addEventListener('dragend', () => {
+  bDrag = null;
+  document.querySelectorAll('.dropt').forEach(x => x.classList.remove('dropt'));
+});
+function wireTarget(el, accepts, act) {
+  el.addEventListener('dragover', e => {
+    if (bDrag && accepts()) { e.preventDefault(); el.classList.add('dropt'); }
+  });
+  el.addEventListener('dragleave', () => el.classList.remove('dropt'));
+  el.addEventListener('drop', e => {
+    e.preventDefault(); el.classList.remove('dropt');
+    if (bDrag && accepts()) { const d = bDrag; bDrag = null; act(d); }
+  });
+}
+document.querySelectorAll('.bproj[data-proj]').forEach(card => {
+  wireTarget(card,
+    () => bDrag.brand === card.dataset.brand && bDrag.from !== card.dataset.proj,
+    d => bPost(`/review/{{ month }}/projects/${card.dataset.proj}/adopt`,
+               `post_id=${encodeURIComponent(d.post)}`));
+});
+document.querySelectorAll('[data-newproject]').forEach(zone => {
+  wireTarget(zone, () => bDrag.brand === zone.dataset.brand,
+    d => bPost(`/review/{{ month }}/board/new_project`,
+               `post_id=${encodeURIComponent(d.post)}`));
+});
+document.querySelectorAll('[data-pool]').forEach(pool => {
+  wireTarget(pool,
+    () => bDrag.brand === pool.dataset.brand && bDrag.from !== 'pool',
+    d => bPost(`/review/{{ month }}/board/pool`,
+               `post_id=${encodeURIComponent(d.post)}`));
+});
+</script>
+{% endblock %}
