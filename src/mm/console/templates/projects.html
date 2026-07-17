@@ -27,7 +27,7 @@
   </form>
 {% endcall %}
 {{ guide("projects", [
-  T("Check each project's grouping — read Why these posts are grouped. Fix mistakes by dragging the ⠿ handles (merge two projects, or move a single post), with ✕ remove, or with Ungroup."),
+  T("Pick a brand tab, then check each project's grouping — read Why these posts are grouped. Fix mistakes by dragging the ⠿ handles (merge two projects, or move a single post), with ✕ remove, or with Ungroup."),
   T("Tick the images that should appear on the slide (click any image to preview it full-size; drag an HQ original onto the dashed box). Nothing ticked = the post's first photo is used, exactly as you see it in the preview — never a screenshot of the whole post."),
   T("Edit the title, dates, description line, celebs and platform ticks, then press Save on that project."),
   T("Review the Orphans at the bottom — keeps come first. Drag one onto a project, Promote it to its own project, or Ignore it."),
@@ -41,8 +41,21 @@
 <div class="micro" id="task-line"></div>
 <hr class="rule">
 
+{# one tab per brand — projects AND that brand's orphans live in its pane #}
+<div class="board-tabs">
+  {% for g in groups %}
+  {% set n_orph = orphans | selectattr("brand", "equalto", g.brand.key) | list | length %}
+  <button class="ghost board-tab" data-brand="{{ g.brand.key }}">
+    {{ g.brand.display_name }}
+    <span class="micro">{{ g.projects|length }}{% if n_orph %} · {{ n_orph }}{% endif %}</span>
+  </button>
+  {% endfor %}
+</div>
+
 {% for g in groups %}
+<div data-brand-pane="{{ g.brand.key }}" hidden>
 <h2>{{ g.brand.display_name }} <span class="micro">— {{ g.projects|length }} {{ T("projects") }}</span></h2>
+{% if not g.projects %}<p class="note">{{ T("No projects for this brand yet.") }}</p>{% endif %}
 {% for p in g.projects %}
 <div class="proj-card {% if p.status == 'dropped' %}dropped{% endif %}"
      data-proj="{{ p.id }}" data-brand="{{ g.brand.key }}">
@@ -238,16 +251,16 @@
   {% endif %}
 </div>
 {% endfor %}
-{% endfor %}
 
-{% if orphans %}
+{% set brand_orphans = orphans | selectattr("brand", "equalto", g.brand.key) | list %}
+{% if brand_orphans %}
 <hr class="rule">
 <h2>{{ T("Orphans") }} <span class="micro">{{ T("— cross-platform posts matching no kept Weibo post, sifted by the same filter as review #1") }}</span></h2>
 <p class="note">{{ T("Keeps surface first; greyed rows were dropped by the filter (open the rationale to see why). Drag an orphan's ⠿ handle onto a project to attach it there, or promote it to its own project.") }}</p>
 <table class="grid">
   <tr><th style="width:24px"></th><th style="width:96px"></th><th>{{ T("Post") }}</th>
       <th style="width:230px">{{ T("Filter verdict") }}</th><th style="width:220px"></th></tr>
-  {% for o in orphans %}
+  {% for o in brand_orphans %}
   {% set ogal = namespace(items=[]) %}
   {% for m in o.media_list %}{% if m.local_path %}
     {% set _ = ogal.items.append({"src": "/media?path=" ~ (m.local_path | urlencode)}) %}
@@ -297,6 +310,8 @@
   {% endfor %}
 </table>
 {% endif %}
+</div>
+{% endfor %}
 {% endblock %}
 
 {% block scripts %}
@@ -316,6 +331,23 @@ window.MM_PROJECTS = {
 {% endfor %}
 };
 mmWireMovers({{ month | tojson }});
+
+// brand tabs — same pattern as the grouping board, remembered per month
+const projTabs = document.querySelectorAll('.board-tab');
+function showBrandPane(key) {
+  document.querySelectorAll('[data-brand-pane]').forEach(p =>
+    p.hidden = p.dataset.brandPane !== key);
+  projTabs.forEach(t => t.classList.toggle('on', t.dataset.brand === key));
+  localStorage.setItem('mm_proj_brand_{{ month }}', key);
+}
+projTabs.forEach(t =>
+  t.addEventListener('click', () => showBrandPane(t.dataset.brand)));
+(function () {
+  const stored = localStorage.getItem('mm_proj_brand_{{ month }}');
+  const valid = [...projTabs].some(t => t.dataset.brand === stored);
+  showBrandPane(valid ? stored
+                      : (projTabs[0] && projTabs[0].dataset.brand));
+})();
 
 // render selection: untick "include in render" to leave a project out of the
 // NEXT render; the primary button renders the ticked set, Render all ignores

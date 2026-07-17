@@ -138,6 +138,27 @@ def test_picker_endpoints_accept_the_picker_call_shape(client, tmp_db):
     assert members == {"weibo:M1", "weibo:M2"}
 
 
+def test_projects_page_has_brand_tabs_with_scoped_orphans(client, tmp_db):
+    """Review #2 is organized by brand tab (like the grouping board): every
+    brand gets a tab + pane, and each pane carries ITS brand's projects and
+    orphans — no cross-brand scrolling."""
+    from mm.config import BrandsConfig
+    _seed(tmp_db)
+    page = client.get("/review/2026-06/projects").text
+    keys = [b.key for b in BrandsConfig.load().brands]
+    for k in keys:
+        assert f'class="ghost board-tab" data-brand="{k}"' in page, k
+        assert f'data-brand-pane="{k}"' in page, k
+    assert "showBrandPane(" in page                # tab wiring present
+    # the lv orphan renders inside the lv pane, before the next pane opens
+    lv_pane = page.split('data-brand-pane="lv"')[1].split("data-brand-pane=")[0]
+    assert "orphan douyin" in lv_pane
+    assert "Promote to project" in lv_pane
+    # the lv tab badge shows its project + orphan counts
+    lv_tab = page.split('data-brand="lv"')[1][:200]
+    assert "2 · 1" in lv_tab                       # 2 projects · 1 orphan
+
+
 def test_picker_strings_translate(client, tmp_db):
     _seed(tmp_db)
     client.post("/lang", data={"lang": "zh", "next": "/"})

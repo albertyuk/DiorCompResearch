@@ -643,6 +643,15 @@ each is easy to revisit.
     Note the parsed fans field is a truncated display number (78 ≡ 78.8万);
     the user-info endpoint has real counts.
 
+79. **Review #2 is organized by brand tabs (owner request)**: the projects
+    page reuses the grouping board's tab pattern — one tab per brand
+    (badge: n projects · n orphans), one pane per brand holding that
+    brand's project cards AND its orphan table, so nothing requires
+    cross-brand scrolling. The chosen tab is remembered per month
+    (localStorage, invalid stored keys fall back to the first tab). All
+    content still renders server-side in hidden panes, so drag & drop, the
+    Move to… pickers, MM_PROJECTS and scroll restoration are untouched.
+
 ## Testing
 
 25. The ~15 caption fixtures test the deterministic layers (@-tag extraction,

@@ -540,11 +540,13 @@ ZH: dict[str, str] = {
         "一般需要几分钟。完成后请前往「审核 · 项目」继续。如果之后又在本页改了"
         "决定，再点一次「确认并继续」即可重新归组。",
     # projects
-    ("Check each project's grouping — read Why these posts are grouped. Fix "
-     "mistakes by dragging the ⠿ handles (merge two projects, or move a "
-     "single post), with ✕ remove, or with Ungroup."):
-        "逐个检查项目的归组是否合理——可参考「归组理由」。分错了就拖 ⠿ 手柄调整"
-        "（合并两个项目，或移动单条帖子），也可以用「✕ 移出」或「拆分该组」。",
+    ("Pick a brand tab, then check each project's grouping — read Why these "
+     "posts are grouped. Fix mistakes by dragging the ⠿ handles (merge two "
+     "projects, or move a single post), with ✕ remove, or with Ungroup."):
+        "先选一个品牌标签，再逐个检查项目的归组是否合理——可参考「归组理由」。"
+        "分错了就拖 ⠿ 手柄调整（合并两个项目，或移动单条帖子），也可以用"
+        "「✕ 移出」或「拆分该组」。",
+    "No projects for this brand yet.": "该品牌暂无项目。",
     ("Tick the images that should appear on the slide (click any image to "
      "preview it full-size; drag an HQ original onto the dashed box). "
      "Nothing ticked = the post's first photo is used, exactly as you see "
