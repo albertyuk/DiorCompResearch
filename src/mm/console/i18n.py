@@ -210,10 +210,13 @@ ZH: dict[str, str] = {
     "Drop project": "删除项目",
     "Restore project": "恢复项目",
     "Ungroup ({n} posts)": "拆分该组（{n} 条帖子）",
-    ("Split this project into {n} single-post projects? Matched "
-     "cross-platform posts return to the orphan list."):
-        "确定把该项目拆分成 {n} 个单帖项目？其他平台的匹配帖子会回到"
-        "「未匹配帖子」列表。",
+    ("Split this project into {n} single-post projects? Each matched "
+     "cross-platform post follows its weibo post; the rest return to the "
+     "orphan list."):
+        "确定把该项目拆分成 {n} 个单帖项目？其他平台的匹配帖子会跟随各自"
+        "对应的微博帖子；没有对应关系的会回到「未匹配帖子」列表。",
+    "matched weibo post ↗": "对应的微博帖子 ↗",
+    "placed by a reviewer": "由审核人手动归入",
     ("Remove just this post from the group? It becomes its own project."):
         "只把这条帖子移出该组？移出后它会单独成为一个项目。",
     ("Detach this matched {p} post from the group? It returns to the orphan "

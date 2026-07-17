@@ -883,12 +883,13 @@ def test_enrich_stores_rationale_and_match_membership(tmp_db, monkeypatch):
                 return {"description": "CAMPAIGN ONE"}
             raise AssertionError(name)
 
-    matches = {"weibo:E1": {"douyin": {
-        "post_id": "douyin:E2", "url": "https://x/douyin:E2",
-        "date": "2026-06-05T13:00:00+08:00", "confidence": 0.8,
-        "why": "shared keywords"}}}
+    with tmp_db.get_engine().begin() as conn:
+        conn.execute(tmp_db.post_matches.insert().values(
+            ref_post_id="weibo:E1", cand_post_id="douyin:E2",
+            platform="douyin", month="2026-06", confidence=0.8,
+            reason="shared keywords", at="2026-06-05T13:00:00+08:00"))
     res = enrich.enrich_brand(tmp_db.get_engine(), FakeLLM(),
-                              BrandsConfig.load(), "2026-06", "lv", matches)
+                              BrandsConfig.load(), "2026-06", "lv")
     assert res["projects"] == 1
     with tmp_db.get_engine().connect() as conn:
         proj = conn.execute(select(tmp_db.projects)).mappings().first()

@@ -125,6 +125,21 @@ platform_matches = Table(
     Column("confidence", Float),
 )
 
+# ACCEPTED cross-platform matches, one row per (weibo reference post, matched
+# platform post) pair — the per-post source of truth. Project-level SOCIAL
+# ticks (platform_matches) are derived from these at enrich time and whenever
+# a post moves, so evidence always follows the post, not the project.
+post_matches = Table(
+    "post_matches", metadata,
+    Column("ref_post_id", String, ForeignKey("posts.post_id"), primary_key=True),
+    Column("cand_post_id", String, ForeignKey("posts.post_id"), primary_key=True),
+    Column("platform", String, nullable=False),
+    Column("month", String, nullable=False),
+    Column("confidence", Float),
+    Column("reason", String),
+    Column("at", String),
+)
+
 # cross-platform same-event judgments, cached per (reference, candidate) pair
 # so re-running cross-check is consistent (a pair can never flip between
 # runs) and free (no re-billing the match LLM for pairs already judged)
@@ -350,6 +365,8 @@ def archive_month(engine: Engine, month: str, actor: str) -> dict:
                 .where(project_posts.c.project_id.in_(project_ids)),
             "platform_matches": select(platform_matches)
                 .where(platform_matches.c.project_id.in_(project_ids)),
+            "post_matches": select(post_matches)
+                .where(post_matches.c.month == month),
             "orphans": select(orphans).where(orphans.c.month == month),
         }
         rows_by_tbl = {tbl: [dict(r) for r in conn.execute(q).mappings()]
@@ -374,6 +391,9 @@ def archive_month(engine: Engine, month: str, actor: str) -> dict:
         conn.execute(match_judgments.delete().where(or_(
             match_judgments.c.ref_post_id.in_(post_ids),
             match_judgments.c.cand_post_id.in_(post_ids))))
+        conn.execute(post_matches.delete().where(or_(
+            post_matches.c.ref_post_id.in_(post_ids),
+            post_matches.c.cand_post_id.in_(post_ids))))
         conn.execute(verdicts.delete().where(verdicts.c.post_id.in_(post_ids)))
         conn.execute(projects.delete().where(projects.c.month == month))
         conn.execute(posts.delete().where(posts.c.month == month))

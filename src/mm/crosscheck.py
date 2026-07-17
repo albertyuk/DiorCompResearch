@@ -2,8 +2,10 @@
 
 For each kept Weibo post: candidates = other-platform posts within ±5 days
 sharing a celeb name, sharing campaign keywords, or judged same-event by
-prompts/match.md with confidence ≥ 0.7. Matches are recorded per project later
-(consolidation joins them); here we record per-post platform hits and orphans.
+prompts/match.md with confidence ≥ 0.7. Accepted matches are persisted PER
+POST in db.post_matches — the source of truth. Project-level SOCIAL ticks
+are derived from these at enrich time, so a match always belongs to the
+specific weibo post it was verified against, never to a whole project.
 """
 from __future__ import annotations
 
@@ -223,6 +225,9 @@ def crosscheck_brand(engine, llm: LLM, cfg: BrandsConfig, month: str,
     # overlap — only nominates the pair for LLM judgment. Heuristics used to
     # auto-match at 0.85/0.75, which is exactly how a shared ambassador or
     # generic bigram overlap produced ticks inconsistent with reality.
+    # A cached same_event=False judgment (an LLM verdict OR a reviewer
+    # detaching the pair at checkpoint #2) vetoes even the hashtag tier —
+    # a pair a human separated must never re-match itself.
     escalations = []          # (kept row, ref_celebs, candidate, evidence)
     for row in kept:
         ref_date = parse_iso(row["created_at"])
@@ -232,6 +237,9 @@ def crosscheck_brand(engine, llm: LLM, cfg: BrandsConfig, month: str,
         hits = {}
         for cand, ckw, cand_text, cdate, ctags in cand_feats:
             if ref_date and cdate and abs((cdate - ref_date).days) > WINDOW_DAYS:
+                continue
+            cached = judged.get((row["post_id"], cand["post_id"]))
+            if cached is not None and not cached["same_event"]:
                 continue
             shared_tags = ref_tags & ctags
             overlap_kw = ref_kw & ckw
@@ -305,6 +313,20 @@ def crosscheck_brand(engine, llm: LLM, cfg: BrandsConfig, month: str,
                 row, cand, confidence, why = out
                 if confidence >= MATCH_CONFIDENCE:
                     record_hit(results[row["post_id"]], cand, confidence, why)
+
+    # persist the accepted matches PER POST — replace this brand·month's rows
+    # wholesale so re-runs (and human vetoes) are reflected exactly
+    with engine.begin() as conn:
+        conn.execute(db.post_matches.delete().where(
+            db.post_matches.c.ref_post_id.in_(
+                [r["post_id"] for r in kept])))
+        for ref_id, hits in results.items():
+            for plat, hit in hits.items():
+                db.upsert(conn, db.post_matches, {
+                    "ref_post_id": ref_id, "cand_post_id": hit["post_id"],
+                    "platform": plat, "month": month,
+                    "confidence": hit["confidence"], "reason": hit["why"],
+                    "at": db.now_iso()}, ["ref_post_id", "cand_post_id"])
 
     # orphans: pulled cross-platform posts matching no kept Weibo post
     n_orphans = 0

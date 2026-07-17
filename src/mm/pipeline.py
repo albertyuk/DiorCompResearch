@@ -32,6 +32,42 @@ def _matches_path(month: str, brand_key: str) -> Path:
     return p / "crosscheck_matches.json"
 
 
+def _seed_legacy_matches(engine, month: str, brand_key: str) -> None:
+    """Months crosschecked before per-post matches were first-class persisted
+    them only to crosscheck_matches.json — seed db.post_matches from that
+    file once, so enriching an old month keeps its evidence. New crosscheck
+    runs write the table directly and never need this."""
+    from sqlalchemy import func
+    mp = _matches_path(month, brand_key)
+    if not mp.exists():
+        return
+    with engine.connect() as conn:
+        have = conn.execute(
+            select(func.count()).select_from(
+                db.post_matches.join(
+                    db.posts,
+                    db.posts.c.post_id == db.post_matches.c.ref_post_id))
+            .where(db.post_matches.c.month == month,
+                   db.posts.c.brand == brand_key)).scalar()
+    if have:
+        return
+    try:
+        legacy = json.loads(mp.read_text())
+    except (ValueError, OSError):
+        return
+    with engine.begin() as conn:
+        for ref_id, hits in (legacy or {}).items():
+            for plat, hit in (hits or {}).items():
+                if not hit.get("post_id"):
+                    continue
+                db.upsert(conn, db.post_matches, {
+                    "ref_post_id": ref_id, "cand_post_id": hit["post_id"],
+                    "platform": plat, "month": month,
+                    "confidence": hit.get("confidence"),
+                    "reason": hit.get("why"), "at": db.now_iso()},
+                    ["ref_post_id", "cand_post_id"])
+
+
 def run_resolve_check(cfg: BrandsConfig) -> list[dict]:
     from .resolve import unresolved_accounts
     return unresolved_accounts(cfg)
@@ -226,18 +262,9 @@ def run_crosscheck(month: str, brand_keys: list[str] | None = None,
                     note(f"fixing {len(xhs_ids)} xhs links…")
                     hstats = xc.hydrate_xhs_links(engine, client, month,
                                                   brand.key, xhs_ids)
-                    # matches carry pre-hydration URLs — refresh from the DB
-                    # so enrich stores working evidence links
-                    with engine.connect() as conn:
-                        fresh = {r[0]: r[1] for r in conn.execute(
-                            select(db.posts.c.post_id, db.posts.c.url)
-                            .where(db.posts.c.post_id.in_(xhs_ids)))}
-                    for plats in res["matches"].values():
-                        for hit in plats.values():
-                            if hit.get("post_id") in fresh:
-                                hit["url"] = fresh[hit["post_id"]]
-            _matches_path(month, brand.key).write_text(
-                json.dumps(res["matches"], ensure_ascii=False, indent=1))
+                    # matches live in db.post_matches WITHOUT frozen urls —
+                    # enrich joins the posts table, so hydrated links are
+                    # picked up with no refresh step
             note("done")
             return brand.key, {"pulls": pulls, "orphans": res["orphans"],
                                "orphans_kept": ostats.get("kept"),
@@ -296,13 +323,9 @@ def run_enrich(month: str, brand_keys: list[str] | None = None,
         if should_stop and should_stop():
             return brand.key, None
         note(brand.key, "consolidating…")
-        matches = {}
-        mp = _matches_path(month, brand.key)
-        if mp.exists():
-            matches = json.loads(mp.read_text())
+        _seed_legacy_matches(engine, month, brand.key)
         try:
-            res = enrich_mod.enrich_brand(engine, llm, cfg, month,
-                                          brand.key, matches)
+            res = enrich_mod.enrich_brand(engine, llm, cfg, month, brand.key)
             note(brand.key, "done")
             return brand.key, res
         except Exception as e:

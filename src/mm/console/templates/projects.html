@@ -156,6 +156,14 @@
         <span class="pill {% if mp.role == 'match' %}warn{% endif %}">{{ mp.platform }}{% if mp.role == 'match' %} · {{ T("matched") }}{% endif %}</span>
         <div class="micro" style="margin-top:3px">{{ (mp.created_at or '')[:10] }} ·
           <a href="{{ mp.url }}" target="_blank">{{ T("post ↗") }}</a></div>
+        {% if mp.role == 'match' %}
+        <div class="micro" style="margin-top:3px; text-transform:none"
+             title="{{ mp.match.reason if mp.match else '' }}">
+          {% if mp.match %}
+          ↔ <a href="{{ mp.match.ref_url }}" target="_blank">{{ T("matched weibo post ↗") }}</a>
+          · {{ '%.2f'|format(mp.match.confidence or 0) }}
+          {% else %}↔ {{ T("placed by a reviewer") }}{% endif %}</div>
+        {% endif %}
         <form class="inline" method="post"
               action="/review/{{ month }}/projects/{{ p.id }}/eject"
               onsubmit="return confirm('{% if mp.role == 'match' %}{{ T("Detach this matched {p} post from the group? It returns to the orphan list.") | replace("{p}", mp.platform) }}{% else %}{{ T("Remove just this post from the group? It becomes its own project.") }}{% endif %}')">
@@ -214,7 +222,7 @@
   {% set weibo_members = p.member_posts | selectattr('platform', 'equalto', 'weibo') | list %}
   {% if weibo_members | length > 1 %}
   <form class="inline" method="post" action="/review/{{ month }}/projects/{{ p.id }}/ungroup"
-        onsubmit="return confirm('{{ T("Split this project into {n} single-post projects? Matched cross-platform posts return to the orphan list.") | replace("{n}", weibo_members | length | string) }}')">
+        onsubmit="return confirm('{{ T("Split this project into {n} single-post projects? Each matched cross-platform post follows its weibo post; the rest return to the orphan list.") | replace("{n}", weibo_members | length | string) }}')">
     <button class="ghost sm" type="submit">{{ T("Ungroup ({n} posts)") | replace("{n}", weibo_members | length | string) }}</button>
   </form>
   {% endif %}

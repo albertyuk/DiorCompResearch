@@ -294,7 +294,86 @@ def _spinoff_project(conn, month: str, proj, post, rationale: str,
                "matched_url": post["url"], "matched_date": post["created_at"],
                "matched_post_id": post["post_id"], "confidence": 1.0},
               ["project_id", "platform"])
+    # cross-platform matches belong to THIS post — any of its matched posts
+    # not currently placed in a project this month follows it here
+    for m in conn.execute(select(db.post_matches).where(
+            db.post_matches.c.ref_post_id == post["post_id"])).mappings():
+        placed = conn.execute(
+            select(db.project_posts.c.project_id)
+            .join(db.projects,
+                  db.projects.c.id == db.project_posts.c.project_id)
+            .where(db.project_posts.c.post_id == m["cand_post_id"],
+                   db.projects.c.month == month)).first()
+        if placed:
+            continue
+        db.upsert(conn, db.project_posts,
+                  {"project_id": pid, "post_id": m["cand_post_id"],
+                   "role": "match"}, ["project_id", "post_id"])
+        conn.execute(db.orphans.update().where(
+            db.orphans.c.post_id == m["cand_post_id"],
+            db.orphans.c.resolution == "pending")
+            .values(resolution="promoted"))
+        _sync_platform_tick(conn, pid, m["platform"])
     return pid
+
+
+def _sync_platform_tick(conn, project_id: int, platform: str) -> None:
+    """Recompute a project's SOCIAL tick for one platform from its CURRENT
+    role=match members — per-post evidence is the source of truth, so the
+    tick must follow whenever a post moves. Reviewer-placed posts (no
+    post_matches row) count as confidence 1.0; manual checkbox ticks (rows
+    without a matched_post_id) are never touched."""
+    if platform == "weibo":
+        return
+    rows = [dict(r) for r in conn.execute(
+        select(db.posts.c.post_id, db.posts.c.url, db.posts.c.created_at,
+               func.max(db.post_matches.c.confidence).label("conf"))
+        .select_from(
+            db.project_posts
+            .join(db.posts, db.posts.c.post_id == db.project_posts.c.post_id)
+            .outerjoin(db.post_matches,
+                       db.post_matches.c.cand_post_id == db.posts.c.post_id))
+        .where(db.project_posts.c.project_id == project_id,
+               db.project_posts.c.role == "match",
+               db.posts.c.platform == platform)
+        .group_by(db.posts.c.post_id, db.posts.c.url, db.posts.c.created_at)
+    ).mappings()]
+    if not rows:
+        conn.execute(db.platform_matches.delete().where(
+            db.platform_matches.c.project_id == project_id,
+            db.platform_matches.c.platform == platform,
+            db.platform_matches.c.matched_post_id.isnot(None)))
+        return
+    best = max(rows, key=lambda r: 1.0 if r["conf"] is None else r["conf"])
+    db.upsert(conn, db.platform_matches,
+              {"project_id": project_id, "platform": platform,
+               "present": True, "matched_url": best["url"],
+               "matched_date": best["created_at"],
+               "matched_post_id": best["post_id"],
+               "confidence": 1.0 if best["conf"] is None else best["conf"]},
+              ["project_id", "platform"])
+
+
+def _veto_pairs(conn, cand_post_id: str, ref_ids: list[str], actor: str) -> None:
+    """A reviewer separating a matched pair is a judgment: record
+    same_event=False for (ref, cand) so no future crosscheck run — hashtag
+    tier included — can silently re-create a match a human undid, and drop
+    the per-post match rows."""
+    if not ref_ids:
+        return
+    rows = list(conn.execute(select(db.post_matches).where(
+        db.post_matches.c.cand_post_id == cand_post_id,
+        db.post_matches.c.ref_post_id.in_(ref_ids))).mappings())
+    for r in rows:
+        db.upsert(conn, db.match_judgments, {
+            "ref_post_id": r["ref_post_id"], "cand_post_id": cand_post_id,
+            "same_event": False, "confidence": 1.0,
+            "reason": f"pair separated by {actor} at review #2",
+            "at": db.now_iso()}, ["ref_post_id", "cand_post_id"])
+    if rows:
+        conn.execute(db.post_matches.delete().where(
+            db.post_matches.c.cand_post_id == cand_post_id,
+            db.post_matches.c.ref_post_id.in_(ref_ids)))
 
 
 def create_app() -> FastAPI:
@@ -500,6 +579,26 @@ def create_app() -> FastAPI:
                                            for m in d["media_list"]
                                            if m.get("local_path")), None)
                         members.append(d)
+                    # per-post provenance: which weibo member each matched
+                    # post was verified against, and why
+                    member_ids = [m["post_id"] for m in members]
+                    ref = db.posts.alias("ref")
+                    match_info: dict[str, dict] = {}
+                    for r in conn.execute(
+                            select(db.post_matches,
+                                   ref.c.url.label("ref_url"))
+                            .join(ref, ref.c.post_id
+                                  == db.post_matches.c.ref_post_id)
+                            .where(db.post_matches.c.cand_post_id.in_(
+                                       member_ids),
+                                   db.post_matches.c.ref_post_id.in_(
+                                       member_ids))).mappings():
+                        cur = match_info.get(r["cand_post_id"])
+                        if cur is None or (r["confidence"] or 0) > \
+                                (cur["confidence"] or 0):
+                            match_info[r["cand_post_id"]] = dict(r)
+                    for m in members:
+                        m["match"] = match_info.get(m["post_id"])
                     p["member_posts"] = members
                 groups.append({"brand": brand, "projects": rows})
             for r in conn.execute(
@@ -982,8 +1081,10 @@ def create_app() -> FastAPI:
 
     @app.post("/review/{month}/projects/{project_id}/ungroup")
     def project_ungroup(request: Request, month: str, project_id: int):
-        """Split a project back into one project per Weibo post; matched
-        cross-platform posts return to the orphan list."""
+        """Split a project back into one project per Weibo post. Each matched
+        cross-platform post follows ITS weibo post into the new project
+        (matches are per post); only reviewer-placed posts with no reference
+        return to the orphan list."""
         engine = db.get_engine()
         with engine.begin() as conn:
             proj = conn.execute(select(db.projects).where(
@@ -1017,12 +1118,22 @@ def create_app() -> FastAPI:
                     conn, month, proj, m,
                     f"Ungrouped from '{proj_title}' by {_actor(request)}.",
                     taken)
-            # cross-platform members go back to the orphan pool
+            # cross-platform members the spinoffs did NOT claim (no per-post
+            # match to any of the weibo posts) go back to the orphan pool
             for m in members:
-                if m["platform"] != "weibo":
-                    db.upsert(conn, db.orphans,
-                              {"post_id": m["post_id"], "month": month,
-                               "resolution": "pending"}, ["post_id"])
+                if m["platform"] == "weibo":
+                    continue
+                placed = conn.execute(
+                    select(db.project_posts.c.project_id)
+                    .join(db.projects,
+                          db.projects.c.id == db.project_posts.c.project_id)
+                    .where(db.project_posts.c.post_id == m["post_id"],
+                           db.projects.c.month == month)).first()
+                if placed:
+                    continue
+                db.upsert(conn, db.orphans,
+                          {"post_id": m["post_id"], "month": month,
+                           "resolution": "pending"}, ["post_id"])
             db.audit(conn, _actor(request), "project_ungroup", "project",
                      f"{project_id} -> {len(weibo)} projects")
         return RedirectResponse(f"/review/{month}/projects", status_code=303)
@@ -1066,19 +1177,36 @@ def create_app() -> FastAPI:
                 conn.execute(db.project_posts.delete().where(
                     db.project_posts.c.project_id == project_id,
                     db.project_posts.c.post_id == post_id))
+                # this post's cross-platform matches leave with it (per-post
+                # evidence follows the post) — detach them here so the
+                # spinoff picks them up, then re-derive the old ticks
+                moved_plats = set()
+                for m in conn.execute(select(db.post_matches).where(
+                        db.post_matches.c.ref_post_id == post_id)).mappings():
+                    hit = conn.execute(db.project_posts.delete().where(
+                        db.project_posts.c.project_id == project_id,
+                        db.project_posts.c.post_id == m["cand_post_id"],
+                        db.project_posts.c.role == "match"))
+                    if hit.rowcount:
+                        moved_plats.add(m["platform"])
                 _spinoff_project(
                     conn, month, proj, post,
                     f"Removed from '{proj_title}' by {_actor(request)}.",
                     taken)
+                for plat in moved_plats:
+                    _sync_platform_tick(conn, project_id, plat)
             else:
                 conn.execute(db.project_posts.delete().where(
                     db.project_posts.c.project_id == project_id,
                     db.project_posts.c.post_id == post_id))
-                # drop the evidence row only when it points at this very post
-                conn.execute(db.platform_matches.delete().where(
-                    db.platform_matches.c.project_id == project_id,
-                    db.platform_matches.c.platform == post["platform"],
-                    db.platform_matches.c.matched_post_id == post_id))
+                # separating a matched pair is a human judgment — veto it so
+                # crosscheck can never re-create it, then re-derive the tick
+                # from the matches that remain
+                ref_ids = [r[0] for r in conn.execute(
+                    select(db.project_posts.c.post_id).where(
+                        db.project_posts.c.project_id == project_id))]
+                _veto_pairs(conn, post_id, ref_ids, _actor(request))
+                _sync_platform_tick(conn, project_id, post["platform"])
                 db.upsert(conn, db.orphans,
                           {"post_id": post_id, "month": month,
                            "resolution": "pending"}, ["post_id"])
@@ -1107,6 +1235,11 @@ def create_app() -> FastAPI:
             month_pids = select(db.projects.c.id).where(
                 db.projects.c.month == tgt["month"],
                 db.projects.c.brand == tgt["brand"])
+            old_pids = [r[0] for r in conn.execute(
+                select(db.project_posts.c.project_id).where(
+                    db.project_posts.c.post_id == post_id,
+                    db.project_posts.c.project_id.in_(month_pids),
+                    db.project_posts.c.project_id != tgt["id"]))]
             conn.execute(db.project_posts.delete().where(
                 db.project_posts.c.post_id == post_id,
                 db.project_posts.c.project_id.in_(month_pids)))
@@ -1115,13 +1248,10 @@ def create_app() -> FastAPI:
                       {"project_id": tgt["id"], "post_id": post_id,
                        "role": role}, ["project_id", "post_id"])
             if post["platform"] != "weibo":
-                db.upsert(conn, db.platform_matches,
-                          {"project_id": tgt["id"],
-                           "platform": post["platform"], "present": True,
-                           "matched_url": post["url"],
-                           "matched_date": post["created_at"],
-                           "matched_post_id": post_id, "confidence": 1.0},
-                          ["project_id", "platform"])
+                # ticks derive from per-post members — recompute both sides
+                _sync_platform_tick(conn, tgt["id"], post["platform"])
+                for pid in old_pids:
+                    _sync_platform_tick(conn, pid, post["platform"])
                 conn.execute(db.orphans.update()
                              .where(db.orphans.c.post_id == post_id)
                              .values(resolution="promoted"))
@@ -1247,6 +1377,10 @@ def create_app() -> FastAPI:
                 return JSONResponse({"error": "unknown post"}, status_code=404)
             month_pids = select(db.projects.c.id).where(
                 db.projects.c.month == month)
+            old_pids = [r[0] for r in conn.execute(
+                select(db.project_posts.c.project_id).where(
+                    db.project_posts.c.post_id == post_id,
+                    db.project_posts.c.project_id.in_(month_pids)))]
             conn.execute(db.project_posts.delete().where(
                 db.project_posts.c.post_id == post_id,
                 db.project_posts.c.project_id.in_(month_pids)))
@@ -1254,9 +1388,15 @@ def create_app() -> FastAPI:
                 if _effective_keep(conn, post_id) is not False:
                     _record_decision(conn, post_id, "drop", _actor(request))
             else:
-                conn.execute(db.platform_matches.delete().where(
-                    db.platform_matches.c.matched_post_id == post_id,
-                    db.platform_matches.c.project_id.in_(month_pids)))
+                # un-placing a matched post is a human judgment on its pairs —
+                # veto them so crosscheck can't silently re-match, then
+                # re-derive the old projects' ticks from what remains
+                for pid in old_pids:
+                    ref_ids = [r[0] for r in conn.execute(
+                        select(db.project_posts.c.post_id).where(
+                            db.project_posts.c.project_id == pid))]
+                    _veto_pairs(conn, post_id, ref_ids, _actor(request))
+                    _sync_platform_tick(conn, pid, post["platform"])
                 db.upsert(conn, db.orphans,
                           {"post_id": post_id, "month": month,
                            "resolution": "pending"}, ["post_id"])

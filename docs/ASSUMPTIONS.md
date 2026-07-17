@@ -503,6 +503,28 @@ each is easy to revisit.
     colors (learning override, resolve notes, dropzone drag highlight)
     became palette variables.
 
+69. **Cross-check is per POST, not per project (owner request)**: matches
+    were already judged post↔post, but enrichment folded them into one
+    best-hit per platform per PROJECT — discarding the rest, freezing
+    evidence in a JSON side-file, and letting ticks claim things no single
+    post supports. Now db.post_matches (weibo ref post ↔ matched platform
+    post, confidence, reason) is the persisted source of truth:
+    (a) crosscheck writes it wholesale per brand·month, and a cached
+    same_event=False judgment vetoes even the deterministic hashtag tier —
+    a pair a reviewer separated can never silently re-match. (b) enrich
+    reads it from the DB (no JSON coupling; legacy files are seeded into
+    the table once), attaches EVERY matched post to its project as
+    role=match, and derives the platform tick (SOCIAL column, schema
+    unchanged) as the best per-post hit. (c) evidence follows the post
+    through review #2: ejecting/ungrouping a weibo post carries its matched
+    posts into the spinoff project; ejecting or dragging out a matched
+    platform post records a same_event=False veto and re-derives the tick
+    from the matches that remain; adopting recomputes both source and
+    target ticks (_sync_platform_tick — manual checkbox ticks without a
+    matched_post_id are never touched). (d) each role=match post on Review ·
+    Projects names the weibo post it was verified against with confidence
+    and reason ("placed by a reviewer" when a human attached it by hand).
+
 ## Testing
 
 25. The ~15 caption fixtures test the deterministic layers (@-tag extraction,

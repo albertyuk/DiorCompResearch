@@ -8,7 +8,6 @@ Live-verified traps these tests codify:
   (canonical id + xsec_token) works. hydrate_xhs_links swaps it in for every
   post a human sees as a link.
 """
-import json
 
 import pytest
 from sqlalchemy import select
@@ -167,10 +166,12 @@ def test_crosscheck_phase_hydrates_matched_and_kept_orphans(tmp_db, monkeypatch,
     pipeline.run_crosscheck("2026-06", brand_keys=["lv"])
     # both the matched post and the kept orphan were in scope
     assert hydrated["lv"] == {"xhs:M", "xhs:K"}
-    # the persisted matches file carries the FIXED url for enrich to store
-    saved = json.loads((tmp_path / "runs" / "2026-06" / "lv"
-                        / "crosscheck_matches.json").read_text())
-    assert saved["weibo:W"]["xhs"]["url"] == "https://fixed/M?xsec_token=Z="
+    # matches persist per post WITHOUT a frozen url — enrich joins the posts
+    # table, so the hydrated link is what evidence will carry
+    with tmp_db.get_engine().connect() as conn:
+        url = conn.execute(select(tmp_db.posts.c.url).where(
+            tmp_db.posts.c.post_id == "xhs:M")).scalar()
+    assert url == "https://fixed/M?xsec_token=Z="
 
 
 def test_projects_view_prefers_live_url_for_evidence(tmp_db, monkeypatch):

@@ -386,7 +386,8 @@ def test_archive_month_moves_everything_and_resets(tmp_db):
             post_id="weibo:A1", month="2026-06"))
     summary = tmp_db.archive_month(tmp_db.get_engine(), "2026-06", "Albert")
     assert summary == {"posts": 1, "verdicts": 1, "projects": 1,
-                       "project_posts": 1, "platform_matches": 1, "orphans": 1}
+                       "project_posts": 1, "platform_matches": 1,
+                       "post_matches": 0, "orphans": 1}
     with tmp_db.get_engine().connect() as conn:
         for tbl in (tmp_db.posts, tmp_db.verdicts, tmp_db.projects,
                     tmp_db.project_posts, tmp_db.platform_matches,

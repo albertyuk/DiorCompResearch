@@ -266,14 +266,29 @@ def _hero_media(posts: list[dict], limit: int = 3) -> list[str]:
     return out
 
 
-def enrich_brand(engine, llm: LLM, cfg: BrandsConfig, month: str, brand_key: str,
-                 crosscheck_matches: dict | None = None) -> dict:
+def enrich_brand(engine, llm: LLM, cfg: BrandsConfig, month: str,
+                 brand_key: str) -> dict:
     brand = cfg.brand(brand_key)
     with engine.connect() as conn:
         posts = kept_posts(conn, month, brand_key)
         existing_confirmed = conn.execute(select(db.projects).where(
             db.projects.c.month == month, db.projects.c.brand == brand_key,
             db.projects.c.status.in_(("confirmed", "rendered")))).mappings().first()
+        # per-post cross-platform matches (the source of truth, written by
+        # crosscheck) joined with each matched post's LIVE url/date — so
+        # xhs hydration and re-pulls are picked up automatically
+        cand = db.posts.alias("cand")
+        match_rows = list(conn.execute(
+            select(db.post_matches, cand.c.url, cand.c.created_at)
+            .join(cand, cand.c.post_id == db.post_matches.c.cand_post_id)
+            .where(db.post_matches.c.month == month,
+                   cand.c.brand == brand_key)).mappings())
+    post_hits: dict[str, list[dict]] = {}
+    for r in match_rows:
+        post_hits.setdefault(r["ref_post_id"], []).append({
+            "post_id": r["cand_post_id"], "platform": r["platform"],
+            "url": r["url"], "date": r["created_at"],
+            "confidence": r["confidence"] or 0, "why": r["reason"]})
     if not posts:
         return {"projects": 0, "note": "no kept posts"}
     if existing_confirmed:
@@ -329,14 +344,19 @@ def enrich_brand(engine, llm: LLM, cfg: BrandsConfig, month: str, brand_key: str
             if hit:
                 proj_celebs.append(celeb_for_deck(entry))
 
-        # dates across all platforms (weibo members + matched posts)
+        # dates across all platforms (weibo members + matched posts).
+        # matches stay PER POST: every matched cross-platform post joins the
+        # project as role=match; the platform tick just takes the best hit.
         dates = [parse_iso(m["created_at"]) for m in members if m["created_at"]]
-        matches: dict[str, dict] = {}
+        matches: dict[str, dict] = {}        # platform -> best hit (tick)
+        match_posts: dict[str, dict] = {}    # every matched post, by id
         for pid in member_ids:
-            for plat, hit in ((crosscheck_matches or {}).get(pid) or {}).items():
+            for hit in post_hits.get(pid, []):
+                plat = hit["platform"]
                 prev = matches.get(plat)
                 if prev is None or hit["confidence"] > prev["confidence"]:
                     matches[plat] = hit
+                match_posts.setdefault(hit["post_id"], hit)
                 if hit.get("date"):
                     d = parse_iso(hit["date"])
                     if d:
@@ -371,6 +391,7 @@ def enrich_brand(engine, llm: LLM, cfg: BrandsConfig, month: str, brand_key: str
             "member_ids": member_ids,
             "first_member": members[0],
             "matches": matches,
+            "match_posts": list(match_posts.values()),
             "_describe": {
                 "brand_display": brand.display_name,
                 "title": title, "phase_suffix": suffix or "",
@@ -439,13 +460,14 @@ def enrich_brand(engine, llm: LLM, cfg: BrandsConfig, month: str, brand_key: str
                            "matched_post_id": hit.get("post_id"),
                            "confidence": hit["confidence"]},
                           ["project_id", "platform"])
-                # the matched cross-platform post joins the project's post
-                # list (role=match) so review #2 can inspect it and select
-                # its images for the slide
-                if hit.get("post_id"):
-                    db.upsert(conn, db.project_posts,
-                              {"project_id": project_id,
-                               "post_id": hit["post_id"], "role": "match"},
-                              ["project_id", "post_id"])
+            # EVERY matched cross-platform post joins the project's post list
+            # (role=match) — matches belong to member posts, not just the
+            # single best-per-platform hit — so review #2 can inspect each
+            # one and select its images for the slide
+            for hit in item["match_posts"]:
+                db.upsert(conn, db.project_posts,
+                          {"project_id": project_id,
+                           "post_id": hit["post_id"], "role": "match"},
+                          ["project_id", "post_id"])
             n += 1
     return {"projects": n, "celebs": len(celebs)}
