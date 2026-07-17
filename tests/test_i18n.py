@@ -145,6 +145,48 @@ def test_review_tabs_always_in_nav(client, tmp_db):
     assert '/review/2026-06/posts"' in page
 
 
+def _set_phases(mdb, month, phases):
+    with mdb.get_engine().begin() as conn:
+        mdb.get_run(conn, month)
+        for k, v in phases.items():
+            mdb.set_phase(conn, month, k, v)
+
+
+def test_stepper_points_at_the_next_action(client, tmp_db):
+    """Every page shows where the month stands and ONE next action."""
+    _seed_month(tmp_db)
+    # fresh month → start
+    page = client.get("/").text
+    assert 'class="stepper"' in page
+    assert "Start the month" in page
+    # posts waiting → CTA links to review posts everywhere else…
+    _set_phases(tmp_db, "2026-06", {"ingest": "done", "filter": "done",
+                                    "review_posts": "waiting"})
+    page = client.get("/").text
+    assert "Decide keeps &amp; drops" in page or "Decide keeps & drops" in page
+    assert 'href="/review/2026-06/posts"' in page
+    # …but renders as an on-page hint on the posts page itself
+    page = client.get("/review/2026-06/posts").text
+    assert 'next-cta here' in page
+    # projects waiting → CTA to projects; posts step shows done ✓
+    _set_phases(tmp_db, "2026-06", {"review_posts": "confirmed",
+                                    "crosscheck": "done", "enrich": "done",
+                                    "review_projects": "waiting"})
+    page = client.get("/").text
+    assert "Check grouping &amp; images" in page or "Check grouping & images" in page
+    assert page.count('<li class="done">') >= 3
+    # render done → CTA to the decks page
+    _set_phases(tmp_db, "2026-06", {"review_projects": "confirmed",
+                                    "render": "done"})
+    page = client.get("/review/2026-06/projects").text
+    assert 'href="/decks"' in page
+    assert "Download the report" in page
+    # error state points at the fix
+    _set_phases(tmp_db, "2026-06", {"render": "error"})
+    page = client.get("/").text
+    assert "Render failed" in page
+
+
 def test_login_page_translates_too(tmp_db, monkeypatch):
     monkeypatch.setenv("CONSOLE_PASSPHRASE", PASS)
     monkeypatch.setenv("MM_SECRET_KEY", "f" * 64)

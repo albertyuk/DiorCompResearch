@@ -145,6 +145,88 @@ def _render_task(month, visuals_mode):
                                should_stop=_stop_flag(month, "render"))
 
 
+def _workflow(month: str, phases: dict) -> dict:
+    """The month's position in the pipeline, for the stepper + the single
+    'Next' call-to-action every page shows. States: done/active/todo/error."""
+    def p(k):
+        return str(phases.get(k) or "")
+
+    busy = any(k.startswith(f"{month}:") and v.get("state") == "running"
+               for k, v in TASKS.items())
+    posts_done = p("review_posts") == "confirmed"
+    projects_done = p("review_projects") == "confirmed"
+    search_done = (p("filter") == "done"
+                   or p("review_posts") in ("waiting", "confirmed"))
+    consol_done = (p("enrich") == "done"
+                   or p("review_projects") in ("waiting", "confirmed"))
+    render_done = p("render") == "done"
+
+    def err(*keys):
+        return any(p(k).startswith("error") for k in keys)
+
+    steps = [
+        {"label": "Search & filter",
+         "state": "done" if search_done else
+                  "error" if err("ingest", "filter") else
+                  "active" if (p("ingest") or p("filter")) else "todo"},
+        {"label": "Review posts",
+         "state": "done" if posts_done else
+                  "active" if p("review_posts") == "waiting" else "todo"},
+        {"label": "Cross-check & consolidate",
+         "state": "done" if consol_done else
+                  "error" if err("crosscheck", "enrich") else
+                  "active" if posts_done and (p("crosscheck") or p("enrich"))
+                  else "todo"},
+        {"label": "Review projects & grouping",
+         "state": "done" if projects_done else
+                  "active" if p("review_projects") == "waiting" else "todo"},
+        {"label": "Render the report",
+         "state": "done" if render_done else
+                  "error" if err("render") else
+                  "active" if p("render") == "running" else "todo"},
+        {"label": "Download",
+         "state": "done" if render_done else "todo"},
+    ]
+
+    def stopped(*keys):
+        return any(p(k).startswith("stopped") for k in keys)
+
+    if busy:
+        nxt = {"kind": "wait", "href": None, "text":
+               ("The pipeline is running — progress shows below; "
+                "this updates when it pauses.")}
+    elif stopped("ingest", "filter"):
+        nxt = {"kind": "act", "href": "/",
+               "text": "Resume the search (Start month)"}
+    elif err("ingest", "filter"):
+        nxt = {"kind": "act", "href": "/",
+               "text": "The search hit an error — press Start month to retry"}
+    elif p("review_posts") == "waiting":
+        nxt = {"kind": "act", "href": f"/review/{month}/posts",
+               "text": "Decide keeps & drops, then Confirm & continue"}
+    elif posts_done and (stopped("crosscheck", "enrich")
+                         or err("crosscheck", "enrich")
+                         or not (p("crosscheck") or p("enrich"))):
+        nxt = {"kind": "act", "href": f"/review/{month}/posts",
+               "text": "Cross-check was interrupted — re-Confirm posts to resume"}
+    elif p("review_projects") == "waiting":
+        nxt = {"kind": "act", "href": f"/review/{month}/projects",
+               "text": "Check grouping & images, then Confirm & render"}
+    elif err("render") or p("render").startswith("stopped"):
+        nxt = {"kind": "act", "href": f"/review/{month}/projects",
+               "text": "Render failed — Confirm & render again"}
+    elif render_done:
+        nxt = {"kind": "act", "href": "/decks",
+               "text": "Download the report from the Decks page"}
+    elif projects_done:
+        nxt = {"kind": "act", "href": f"/review/{month}/projects",
+               "text": "Render the report (Confirm & render)"}
+    else:
+        nxt = {"kind": "act", "href": "/",
+               "text": "Start the month's search"}
+    return {"steps": steps, "next": nxt}
+
+
 def _record_decision(conn, post_id: str, decision: str, actor: str) -> None:
     """Human keep/drop with the learning-loop bookkeeping — the same
     semantics as the review #1 buttons, reused by grouping-board drags
@@ -324,7 +406,9 @@ def create_app() -> FastAPI:
             for row in conn.execute(select(db.runs).order_by(db.runs.c.month.desc())).mappings():
                 # spend is deliberately NOT shown in the UI (owner request);
                 # `mm costs` remains the place to inspect it
-                months.append({**dict(row), "phases": json.loads(row["phase_status"] or "{}"),
+                phases = json.loads(row["phase_status"] or "{}")
+                months.append({**dict(row), "phases": phases,
+                               "workflow": _workflow(row["month"], phases),
                                "started_by": db.last_audit(conn, "start_month",
                                                            "month", row["month"]),
                                "archives": db.list_archives(conn, row["month"])})
@@ -368,6 +452,7 @@ def create_app() -> FastAPI:
                    for k, v in TASKS.items())
         return TEMPLATES.TemplateResponse(request, "posts.html", {
             "month": month, "groups": groups, "phases": run["phases"],
+            "workflow": _workflow(month, run["phases"]),
             "busy": busy, "started_by": started_by})
 
     @app.get("/review/{month}/projects", response_class=HTMLResponse)
@@ -445,7 +530,9 @@ def create_app() -> FastAPI:
                    for k, v in TASKS.items())
         return TEMPLATES.TemplateResponse(request, "projects.html", {
             "month": month, "groups": groups, "orphans": orphans,
-            "phases": run["phases"], "registry": registry, "tasks": TASKS,
+            "phases": run["phases"],
+            "workflow": _workflow(month, run["phases"]),
+            "registry": registry, "tasks": TASKS,
             "confirmed_by": confirmed_by, "rendered_by": rendered_by,
             "default_visuals": DEFAULT_VISUALS, "busy": busy})
 
@@ -1139,10 +1226,13 @@ def create_app() -> FastAPI:
                 brands.append({"brand": brand, "projects": projects,
                                "orphans": orphans, "dropped": dropped,
                                "unassigned": unassigned})
+        with engine.connect() as conn:
+            run = db.get_run(conn, month)
         busy = any(k.startswith(f"{month}:") and v.get("state") == "running"
                    for k, v in TASKS.items())
         return TEMPLATES.TemplateResponse(request, "board.html", {
-            "month": month, "brands": brands, "busy": busy})
+            "month": month, "brands": brands, "busy": busy,
+            "workflow": _workflow(month, run["phases"])})
 
     @app.post("/review/{month}/board/pool")
     def board_pool(request: Request, month: str, post_id: str = Form(...)):

@@ -112,6 +112,34 @@ form.inline { display:inline; }
 .guide-next { font-size:12px; color:var(--mut); max-width:860px;
   border-top:1px solid var(--line); margin-top:10px; padding-top:8px; }
 .guide-next .micro { display:block; margin-bottom:3px; }
+/* workflow stepper + the single Next call-to-action */
+.stepper { display:flex; flex-wrap:wrap; align-items:center; gap:12px 26px;
+  border:1px solid var(--line); padding:12px 18px; margin:0 0 24px;
+  background:var(--paper); }
+.steps { display:flex; flex-wrap:wrap; gap:6px 20px; list-style:none;
+  margin:0; padding:0; flex:1; min-width:340px; }
+.steps li { display:flex; align-items:center; gap:7px; font-size:9.5px;
+  letter-spacing:1.6px; text-transform:uppercase; color:var(--mut);
+  white-space:nowrap; }
+.steps .dot { width:19px; height:19px; border:1px solid var(--line);
+  border-radius:50%; display:flex; align-items:center; justify-content:center;
+  font-size:9px; flex:none; }
+.steps li.done { color:var(--ink); }
+.steps li.done .dot { border-color:var(--ok); color:var(--ok); }
+.steps li.active { color:var(--ink); font-weight:600; }
+.steps li.active .dot { border-color:var(--ink); background:var(--ink);
+  color:var(--paper); animation:mm-pulse 1.8s ease-in-out infinite; }
+.steps li.error { color:var(--err); }
+.steps li.error .dot { border-color:var(--err); color:var(--err); }
+.next-cta { background:var(--ink); color:var(--paper);
+  border:1px solid var(--ink); font-size:10px; letter-spacing:2px;
+  text-transform:uppercase; padding:9px 18px; text-decoration:none;
+  white-space:nowrap; transition:background .18s ease, color .18s ease; }
+a.next-cta:hover { background:var(--paper); color:var(--ink); }
+.next-cta.wait { background:var(--soft); color:var(--mut);
+  border-color:var(--line); }
+.next-cta.here { background:var(--soft); color:var(--ink);
+  border-color:var(--ink); }
 /* grouping board — split screen, both panes scroll independently */
 .board-tabs { display:flex; gap:8px; flex-wrap:wrap; margin:14px 0 18px; }
 .board-tabs .board-tab.on { border-color:var(--ink); color:var(--ink); }

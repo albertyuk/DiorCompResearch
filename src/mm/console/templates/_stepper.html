@@ -1,0 +1,21 @@
+{% macro stepper(w, here=None) %}
+<div class="stepper">
+  <ol class="steps">
+    {% for s in w.steps %}
+    <li class="{{ s.state }}">
+      <span class="dot">{% if s.state == 'done' %}✓{% else %}{{ loop.index }}{% endif %}</span>
+      <span class="slabel">{{ T(s.label) }}</span>
+    </li>
+    {% endfor %}
+  </ol>
+  {% if w.next %}
+    {% if w.next.kind == 'wait' %}
+    <span class="next-cta wait">⏳ {{ T(w.next.text) }}</span>
+    {% elif w.next.href and w.next.href != here %}
+    <a class="next-cta" href="{{ w.next.href }}">{{ T("Next") }} · {{ T(w.next.text) }} →</a>
+    {% else %}
+    <span class="next-cta here">▸ {{ T("Next") }} · {{ T(w.next.text) }}</span>
+    {% endif %}
+  {% endif %}
+</div>
+{% endmacro %}

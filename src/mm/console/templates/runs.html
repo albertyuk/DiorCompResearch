@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% set active = 'runs' %}
 {% block content %}
+{% from "_stepper.html" import stepper with context %}
 {% from "_guide.html" import guide with context %}
 
 {% if msg %}<div class="banner">{{ msg }}</div>{% endif %}
@@ -63,6 +64,7 @@
       <button type="submit" class="ghost">{{ T("Archive & reset") }}</button>
     </form>
   </div>
+  {{ stepper(m.workflow, here="/") }}
   {% if m.started_by %}
   <div class="micro">{{ T("last started {t} by {who}")
     | replace("{t}", m.started_by.at[:16])

@@ -388,6 +388,31 @@ ZH: dict[str, str] = {
      "Review · Projects and press Confirm & render."):
         "每一次拖拽都会立即生效。分组满意后，前往「审核 · 项目」点击"
         "「确认并生成报告」。",
+    # ── workflow stepper / next-step CTA ─────────────────────────────────
+    "Next": "下一步",
+    "Search & filter": "抓取与筛选",
+    "Review posts": "帖子审核",
+    "Cross-check & consolidate": "核对与整合",
+    "Review projects & grouping": "项目审核与分组",
+    "Render the report": "生成报告",
+    "Download": "下载报告",
+    ("The pipeline is running — progress shows below; this updates when it "
+     "pauses."):
+        "任务正在运行——进度见下方，暂停后此处会自动更新。",
+    "Resume the search (Start month)": "继续搜索（点「开始搜索」）",
+    "The search hit an error — press Start month to retry":
+        "搜索出错——点「开始搜索」重试",
+    "Decide keeps & drops, then Confirm & continue":
+        "审核保留/剔除，然后点「确认并继续」",
+    "Cross-check was interrupted — re-Confirm posts to resume":
+        "核对被中断——重新点「确认并继续」即可恢复",
+    "Check grouping & images, then Confirm & render":
+        "检查分组和配图，然后点「确认并生成报告」",
+    "Render failed — Confirm & render again":
+        "报告生成失败——请再次「确认并生成报告」",
+    "Download the report from the Decks page": "前往「报告」页下载",
+    "Render the report (Confirm & render)": "生成报告（点「确认并生成报告」）",
+    "Start the month's search": "开始本月搜索",
     # ── per-page guides ──────────────────────────────────────────────────
     "How this page works": "操作指南",
     "What happens next": "后续流程",

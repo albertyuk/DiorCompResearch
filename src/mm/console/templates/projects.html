@@ -2,6 +2,7 @@
 {% set active = 'projects' %}
 {% block title %}Review · Projects · {{ month }}{% endblock %}
 {% block content %}
+{% from "_stepper.html" import stepper with context %}
 {% from "_guide.html" import guide with context %}
 {% if busy %}
 <div class="banner info" id="busy-banner">⏳ {{ T("A run is working on {m} right now") | replace("{m}", month) }} — <span id="busy-detail"></span><br>
@@ -14,6 +15,7 @@
   T("Review the Orphans at the bottom — keeps come first. Drag one onto a project, Promote it to its own project, or Ignore it."),
   T("Press Confirm & render and watch the progress bar."),
 ], T("The PPTX deck and the XLSX spreadsheet are generated and appear on the Decks page. Render as often as you like — every edit here is picked up by the next render.")) }}
+{{ stepper(workflow, here="/review/" ~ month ~ "/projects") }}
 <div class="row-flex" style="justify-content:space-between">
   <div>
     <h2 style="margin-top:0">{{ T("Review checkpoint #2 — projects") }} · {{ month }}</h2>

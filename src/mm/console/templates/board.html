@@ -2,6 +2,7 @@
 {% set active = 'board' %}
 {% block title %}Grouping · {{ month }}{% endblock %}
 {% block content %}
+{% from "_stepper.html" import stepper with context %}
 {% from "_guide.html" import guide with context %}
 {{ guide("board", [
   T("Pick a brand tab. Projects sit on the left; every unplaced post sits on the right — orphans from other platforms, dropped weibo posts, and kept posts not yet in any project."),
@@ -10,6 +11,7 @@
   T("Fine-tune titles, dates, celebs and slide images on Review · Projects afterwards."),
 ], T("Every drag saves immediately. When the grouping looks right, go to Review · Projects and press Confirm & render.")) }}
 
+{{ stepper(workflow, here="/review/" ~ month ~ "/board") }}
 <div class="row-flex" style="justify-content:space-between; align-items:baseline">
   <h2 style="margin-top:0">{{ T("Grouping board") }} · {{ month }}</h2>
   <a class="btn" href="/review/{{ month }}/projects">{{ T("Review · Projects") }} →</a>
