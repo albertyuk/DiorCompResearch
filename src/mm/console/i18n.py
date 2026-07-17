@@ -471,7 +471,7 @@ ZH: dict[str, str] = {
     "Cross-check & consolidate": "核对与整合",
     "Review projects & grouping": "项目审核与分组",
     "Render the report": "生成报告",
-    "Download": "下载报告",
+    "Download the report": "下载报告",
     ("The pipeline is running — progress shows below; this updates when it "
      "pauses."):
         "任务正在运行——进度见下方，暂停后此处会自动更新。",
@@ -493,11 +493,14 @@ ZH: dict[str, str] = {
     "How this page works": "操作指南",
     "What happens next": "后续流程",
     # runs
-    ("Enter the month to search (YYYY-MM) and press Start month. The system "
-     "pulls every brand's Weibo timeline for that month, then the AI filter "
-     "marks each post keep or drop."):
-        "输入要搜索的月份（格式 YYYY-MM），点击「开始搜索」。系统会抓取各品牌"
-        "该月发布的全部微博，再由 AI 初步判定每条帖子是保留还是剔除。",
+    ("Enter the month to search (YYYY-MM), untick any brand you want to "
+     "skip, and press Start month. The system pulls each selected brand's "
+     "Weibo timeline for that month, then the AI filter marks each post "
+     "keep or drop."):
+        "输入要搜索的月份（格式 YYYY-MM），把不需要的品牌取消勾选，然后点击"
+        "「开始搜索」。系统会抓取所选品牌该月发布的全部微博，再由 AI 初步判定"
+        "每条帖子是保留还是剔除。",
+    "brands to search:": "搜索品牌：",
     ("While it runs you'll see RUNNING, a progress bar and the activity log "
      "under the month. Stop pauses at the next safe point; Start month "
      "resumes exactly where it left off."):
@@ -586,6 +589,9 @@ ZH: dict[str, str] = {
         "（最新的排在最上面，带 PARTIAL 的表示只生成了部分项目），"
         "直到你手动删除。",
     "Last changed": "最后更新",
+    "deck (PPT)": "PPT 报告",
+    "projects table (Excel)": "Excel 项目表",
+    "Delete file": "删除文件",
     ("Delete {f}? The file is removed from the server — this cannot be "
      "undone."):
         "确定删除 {f}？文件将从服务器移除，无法恢复。",

@@ -17,20 +17,23 @@
 <div class="empty"><span class="micro">{{ T("Nothing rendered yet.") }}</span>
   {{ T("Decks appear here after Confirm & render on Review · Projects.") }}</div>
 {% else %}
-<table class="grid" style="max-width:980px">
-  <tr><th>{{ T("File") }}</th><th style="width:140px">{{ T("Last changed") }}</th>
-      <th style="width:90px">{{ T("Size") }}</th><th style="width:200px"></th></tr>
+<table class="grid" style="max-width:1080px">
+  <tr><th style="width:120px"></th><th>{{ T("File") }}</th>
+      <th style="width:140px">{{ T("Last changed") }}</th>
+      <th style="width:90px">{{ T("Size") }}</th><th style="width:210px"></th></tr>
   {% for f in files %}
   <tr>
+    <td><span class="pill {% if f.kind == 'deck' %}on{% endif %}">
+      {{ T("deck (PPT)") if f.kind == 'deck' else T("projects table (Excel)") }}</span></td>
     <td>{{ f.name }}</td>
     <td class="micro">{{ f.changed }}</td>
-    <td class="micro">{{ f.size_mb }} MB</td>
+    <td class="micro">{{ f.size }}</td>
     <td>
       <a class="btn sm" href="/download/{{ f.name }}">{{ T("Download") }}</a>
       <form class="inline" method="post" action="/decks/delete"
             onsubmit="return confirm('{{ T("Delete {f}? The file is removed from the server — this cannot be undone.") | replace("{f}", f.name) }}')">
         <input type="hidden" name="name" value="{{ f.name }}">
-        <button type="submit" class="danger sm">{{ T("Delete") }}</button>
+        <button type="submit" class="danger sm">{{ T("Delete file") }}</button>
       </form>
     </td>
   </tr>

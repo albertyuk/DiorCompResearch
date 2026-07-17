@@ -118,23 +118,34 @@ def _stop_flag(month: str, name: str):
     return ev.is_set if ev is not None else (lambda: False)
 
 
-def _ingest_and_filter(month):
+def _ingest_and_filter(month, brand_keys=None):
     note = _task_note(month, "ingest_filter")
     stop = _stop_flag(month, "ingest_filter")
-    r1 = pipeline.run_ingest(month, progress=note, should_stop=stop)
+    r1 = pipeline.run_ingest(month, brand_keys, progress=note,
+                             should_stop=stop)
     if stop():
         return {"ingest": r1, "stopped": True}
-    r2 = pipeline.run_filter(month, progress=note, should_stop=stop)
+    r2 = pipeline.run_filter(month, brand_keys, progress=note,
+                             should_stop=stop)
     return {"ingest": r1, "filter": r2}
 
 
 def _crosscheck_and_enrich(month):
     note = _task_note(month, "crosscheck_enrich")
     stop = _stop_flag(month, "crosscheck_enrich")
-    r1 = pipeline.run_crosscheck(month, progress=note, should_stop=stop)
+    # a brand-limited search must stay limited downstream: cross-check pulls
+    # four PAID platform timelines per brand, so only brands that actually
+    # have posts this month go through cross-check + enrichment
+    with db.get_engine().connect() as conn:
+        present = [r[0] for r in conn.execute(
+            select(db.posts.c.brand).where(db.posts.c.month == month)
+            .distinct())]
+    r1 = pipeline.run_crosscheck(month, brand_keys=present or None,
+                                 progress=note, should_stop=stop)
     if stop():
         return {"crosscheck": r1, "stopped": True}
-    r2 = pipeline.run_enrich(month, progress=note, should_stop=stop)
+    r2 = pipeline.run_enrich(month, brand_keys=present or None,
+                             progress=note, should_stop=stop)
     return {"crosscheck": r1, "enrich": r2}
 
 
@@ -186,7 +197,7 @@ def _workflow(month: str, phases: dict) -> dict:
          "state": "done" if render_done else
                   "error" if err("render") else
                   "active" if p("render") == "running" else "todo"},
-        {"label": "Download",
+        {"label": "Download the report",
          "state": "done" if render_done else "todo"},
     ]
 
@@ -495,6 +506,7 @@ def create_app() -> FastAPI:
                                "archives": db.list_archives(conn, row["month"])})
         return TEMPLATES.TemplateResponse(request, "runs.html", {
             "months": months, "default_month": previous_month(),
+            "brands": cfg.brands,
             "unresolved": unresolved_accounts(cfg), "msg": msg, "tasks": TASKS})
 
     @app.get("/review/{month}", response_class=HTMLResponse)
@@ -734,9 +746,15 @@ def create_app() -> FastAPI:
         # newest first, so older renders of the same month stay reachable
         files = sorted([*OUTPUT_DIR.glob("*.pptx"), *OUTPUT_DIR.glob("*.xlsx")],
                        key=lambda f: f.stat().st_mtime, reverse=True)
+
+        def human(n):     # spreadsheets are a few KB — never show "0.0 MB"
+            return (f"{n / 1e6:.1f} MB" if n >= 1e6
+                    else f"{max(1, round(n / 1e3))} KB")
         return TEMPLATES.TemplateResponse(request, "decks.html", {
             "files": [{"name": f.name,
-                       "size_mb": round(f.stat().st_size / 1e6, 1),
+                       "size": human(f.stat().st_size),
+                       "kind": ("deck" if f.suffix == ".pptx"
+                                else "spreadsheet"),
                        "changed": datetime.fromtimestamp(
                            f.stat().st_mtime, CST).strftime("%Y-%m-%d %H:%M")}
                       for f in files]})
@@ -756,18 +774,29 @@ def create_app() -> FastAPI:
     # ---------- actions ----------
 
     @app.post("/runs/{month}/start")
-    def start_run(request: Request, month: str):
+    def start_run(request: Request, month: str,
+                  brands: list[str] = Form(default=[])):
         from urllib.parse import quote
         cfg = BrandsConfig.load()
-        blockers = weibo_blockers(cfg)
+        known = [b.key for b in cfg.brands]
+        picked = [k for k in brands if k in known]
+        # no boxes rendered/ticked = search everything; a full selection is
+        # the same as no selection
+        keys = picked if picked and len(picked) < len(known) else None
+        if not picked and brands:
+            msg = quote("No valid brand selected — tick at least one brand.")
+            return RedirectResponse(f"/?msg={msg}", status_code=303)
+        # only the brands being searched need a verified Weibo account
+        blockers = [b for b in weibo_blockers(cfg)
+                    if keys is None or b["brand"] in keys]
         if blockers:
             names = ", ".join(b["brand_display"] for b in blockers)
             msg = quote(f"Can't start {month} yet — confirm the Weibo account "
                         f"for {names} in the list below, then Start again.")
             return RedirectResponse(f"/?msg={msg}", status_code=303)
-        if _spawn(month, "ingest_filter", _ingest_and_filter, month):
-            db.audit(db.get_engine(), _actor(request), "start_month",
-                     "month", month)
+        if _spawn(month, "ingest_filter", _ingest_and_filter, month, keys):
+            db.audit(db.get_engine(), _actor(request), "start_month", "month",
+                     month if keys is None else f"{month} ({','.join(keys)})")
         return RedirectResponse("/", status_code=303)
 
     @app.post("/runs/{month}/stop")

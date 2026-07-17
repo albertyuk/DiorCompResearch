@@ -585,6 +585,27 @@ each is easy to revisit.
     with a 90s TTL, so normal navigation never jumps. Side bonus: the
     language/theme toggles keep the reading position too.
 
+75. **Decks page: the "0.0 MB" files are the XLSX project spreadsheets (owner
+    question)** — one row per project (title, dates, celebs, platforms,
+    description), a deliverable, not junk; they're a few KB so the MB
+    rounding lied. Sizes now show KB under 1 MB, every row carries a type
+    pill (deck (PPT) / projects table (Excel)), and two ZH label collisions
+    are fixed: the stepper's step-6 source string became "Download the
+    report" so the Download button translates as 下载 (a duplicate dict key
+    had made every Download button say 下载报告), and file deletion uses its
+    own "Delete file"/删除文件 key instead of inheriting the post-review
+    "Delete"/剔除.
+
+76. **Brand selection before the search (owner request)**: the Start month
+    form lists every brand with a checkbox (all ticked by default). Only
+    ticked brands are ingested and filtered; ticking all (or none rendered)
+    means no restriction. Only selected brands need a verified Weibo
+    account to start. Downstream stays limited automatically: cross-check +
+    enrichment run only for brands that actually HAVE posts in the month —
+    a brand-limited search never pays for four platform pulls per untouched
+    brand. Re-running Start with more brands ticked adds them (ingest is
+    idempotent per brand).
+
 ## Testing
 
 25. The ~15 caption fixtures test the deterministic layers (@-tag extraction,
