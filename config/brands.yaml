@@ -267,10 +267,12 @@ brands:
       and 卓凡尼华伦天奴/GIOVANNI VALENTINO (unrelated company).
     verified_date: '2026-07-17'
   douyin:
-    status: resolve
+    status: absent
     lookup_query: VALENTINO 华伦天奴
-    note: only Valentino华伦天奴美妆 (beauty, out of scope) surfaced in search —
-      no official fashion account found 2026-07-17.
+    note: 'CONFIRMED ABSENT 2026-07-17: searched 3 query variants, verified
+      every plausible candidate via douyin_user_profile — none carries
+      enterprise verification (the only verified ones are the L''Oréal 美妆
+      flagship and an unrelated menswear store). Re-check occasionally.'
   xhs:
     status: verified
     lookup_query: VALENTINO
@@ -298,9 +300,11 @@ brands:
     note: 蓝V "Bottega Veneta官方微博", 93k followers.
     verified_date: '2026-07-17'
   douyin:
-    status: resolve
+    status: absent
     lookup_query: Bottega Veneta 葆蝶家
-    note: no official account surfaced in search 2026-07-17.
+    note: 'CONFIRMED ABSENT 2026-07-17: searched 3 query variants — every
+      candidate is an unverified shell under 20 followers (consistent with
+      BV''s social-media-quiet strategy). Re-check occasionally.'
   xhs:
     status: verified
     lookup_query: Bottega Veneta
@@ -335,10 +339,13 @@ brands:
     note: 1.77M followers.
     verified_date: '2026-07-17'
   xhs:
-    status: resolve
+    status: verified
     lookup_query: Cartier 卡地亚
-    note: no official account surfaced in search 2026-07-17 (only boutique /
-      reseller accounts).
+    uid: 595654bb6a6a696bf631333d
+    screen_name: 卡地亚Cartier
+    note: 263k fans, official verification 珠宝饰品 (found via query variant
+      "Cartier" + xhs_user_info check).
+    verified_date: '2026-07-17'
   wechat_mp:
     status: resolve
     lookup_query: 卡地亚
@@ -361,10 +368,11 @@ brands:
       if it surfaces as a separate account.
     verified_date: '2026-07-17'
   douyin:
-    status: resolve
+    status: absent
     lookup_query: Hermes 爱马仕
-    note: no official account surfaced in search 2026-07-17 (top hits are
-      resellers).
+    note: 'CONFIRMED ABSENT 2026-07-17: searched 3 query variants, verified
+      plausible candidates via douyin_user_profile — all are personal or
+      reseller accounts, none enterprise-verified. Re-check occasionally.'
   xhs:
     status: verified
     lookup_query: 爱马仕

@@ -142,6 +142,10 @@ def unresolved_accounts(cfg: BrandsConfig) -> list[dict]:
     out = []
     for brand in cfg.brands:
         for platform, acct in brand.accounts.items():
+            if acct.status == "absent":
+                # confirmed: the brand has no official account on this
+                # platform — nothing to resolve, keep it out of the list
+                continue
             if not (acct.status == "verified" and acct.uid):
                 out.append({"brand": brand.key, "brand_display": brand.display_name,
                             "platform": platform,
@@ -151,6 +155,111 @@ def unresolved_accounts(cfg: BrandsConfig) -> list[dict]:
                             "blocking": platform == "weibo"
                                         and not can_ingest_weibo(acct)})
     return out
+
+
+# -- owner-authorized automatic resolution ---------------------------------------
+
+_NORM_RE = re.compile(r"[\s\-_·•.。,，/|]+")
+
+
+def _norm_name(s: str | None) -> str:
+    return _NORM_RE.sub("", (s or "")).lower()
+
+
+def _accept_names(brand) -> set[str]:
+    """Normalized names a candidate must EXACTLY match to be auto-bound:
+    the display name, the verified Weibo screen name, each lookup-query
+    token, and two-token combinations in both orders (Prada普拉达 /
+    普拉达Prada). Anything fuzzier stays for a human."""
+    names = {brand.display_name}
+    wb = brand.account("weibo")
+    if wb and wb.screen_name:
+        names.add(wb.screen_name)
+    tokens: list[str] = []
+    for acct in brand.accounts.values():
+        if acct.lookup_query:
+            tokens.extend(acct.lookup_query.split())
+    out = {_norm_name(n) for n in names}
+    toks = [_norm_name(t) for t in tokens if _norm_name(t)]
+    out.update(toks)
+    for a in toks:
+        for b in toks:
+            if a != b:
+                out.add(a + b)
+    return {x for x in out if len(x) >= 2}
+
+
+def _is_official(client: TikHubClient, platform: str, cand: dict,
+                 conn=None) -> bool:
+    """A candidate may only auto-bind when the platform itself marks it as a
+    verified organization — never on name similarity alone."""
+    import json as _json
+    try:
+        if platform == "weibo":
+            d = client.call("weibo_user_info", conn=conn, uid=cand["uid"])
+            u = ((d.get("data") or {}).get("user")) or {}
+            return bool(u.get("verified")) and u.get("verified_type") == 2
+        if platform == "douyin":
+            d = client.call("douyin_user_profile", conn=conn,
+                            sec_user_id=cand["uid"])
+            s = _json.dumps(d.get("data") or {}, ensure_ascii=False)
+            return bool(re.search(
+                r'"(?:enterprise_verify_reason|custom_verify)":\s*"[^"]+"', s))
+        if platform == "xhs":
+            d = client.call("xhs_user_info", conn=conn, user_id=cand["uid"])
+            s = _json.dumps(d.get("data") or {}, ensure_ascii=False)
+            return bool(re.search(
+                r'"red_official_verify_content":\s*"[^"]+"', s))
+        if platform in ("wechat_mp", "wechat_channels"):
+            # the search payload carries the account's verification text
+            return bool((cand.get("verified_reason") or "").strip())
+    except Exception:
+        return False
+    return False
+
+
+def auto_resolve_pending(client: TikHubClient, cfg: BrandsConfig,
+                         engine=None, note=None) -> dict:
+    """Resolve every account still at status=resolve WITHOUT a human in the
+    loop — pre-authorized by the owner (2026-07-17) for the brand roster.
+    Binding rules are deliberately strict: the platform search must yield
+    exactly ONE candidate whose normalized name exactly matches the brand's
+    known official names AND that the platform marks as a verified
+    organization. Anything else stays pending for the Console's Resolve
+    flow. Safe to call repeatedly (e.g. every cross-check run) — it no-ops
+    once nothing is pending."""
+    resolved, pending = [], []
+    for brand in cfg.brands:
+        for platform, acct in brand.accounts.items():
+            if acct.status != "resolve":
+                continue
+            query = (acct.lookup_query or acct.screen_name
+                     or brand.display_name)
+            try:
+                cands = lookup_candidates(client, platform, query, engine)
+            except Exception:
+                pending.append(f"{brand.key}:{platform}")
+                continue
+            accept = _accept_names(brand)
+            hits: dict[str, dict] = {}
+            for c in cands:
+                if _norm_name(c.get("name")) not in accept:
+                    continue
+                if _is_official(client, platform, c, engine):
+                    hits.setdefault(str(c["uid"]), c)
+            if len(hits) == 1:
+                c = next(iter(hits.values()))
+                cfg.save_account_resolution(
+                    brand.key, platform, str(c["uid"]), c.get("name"),
+                    datetime.now(CST).date().isoformat())
+                resolved.append({"brand": brand.key, "platform": platform,
+                                 "uid": str(c["uid"]), "name": c.get("name")})
+                if note:
+                    note(f"auto-resolved {brand.key}·{platform} "
+                         f"→ {c.get('name')}")
+            else:
+                pending.append(f"{brand.key}:{platform}")
+    return {"resolved": resolved, "pending": pending}
 
 
 def can_ingest_weibo(acct) -> bool:

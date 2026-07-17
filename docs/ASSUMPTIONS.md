@@ -655,6 +655,32 @@ each is easy to revisit.
     tab per brand with a post-count badge plus a ⚠ needs-review count,
     remembered per month under its own key.
 
+80. **Auto-resolution of the remaining accounts (owner request: "auto
+    resolve all of these")**: outcomes by group. (a) cartier·xhs — FOUND
+    via query variant "Cartier" + xhs_user_info verification (卡地亚Cartier,
+    263k, official 珠宝饰品) and bound. (b) valentino/bottega/hermes douyin —
+    CONFIRMED ABSENT: 3 query variants each, every plausible candidate
+    checked via douyin_user_profile, none enterprise-verified (Valentino:
+    only the L'Oréal beauty flagship; BV: sub-20-follower shells; Hermès:
+    personal/reseller accounts). New account status "absent" records this
+    and drops them from the unresolved list; notes say re-check
+    occasionally. (c) all 14 wechat_mp/wechat_channels — BLOCKED by a
+    TikHub outage: the whole wechat_search/v2 family (account, video,
+    fetch_search_videos) returns zero items on 2026-07-17 for every
+    keyword including ones that resolved fine on 07-16; verified against
+    the live OpenAPI schema (our params are correct) and cursor pages.
+    wechat_mp_profile requires gh_… so no alternate discovery path exists.
+    (d) resolve.auto_resolve_pending: owner-pre-authorized automatic
+    binding with deliberately strict rules — the search must yield exactly
+    ONE candidate whose normalized name EXACTLY matches the brand's known
+    official names (display/weibo screen name/lookup-token combos) AND the
+    platform must mark it verified (weibo user-info 蓝V; douyin
+    enterprise_verify_reason; xhs red_official_verify_content; wechat
+    authInfo). Runs at the start of every cross-check (never blocks the
+    run) and via the Runs page "Auto-resolve all" button (audited), so the
+    wechat accounts bind on the endpoint's first day back. Ambiguous or
+    unverified candidates always stay for manual Resolve.
+
 ## Testing
 
 25. The ~15 caption fixtures test the deterministic layers (@-tag extraction,

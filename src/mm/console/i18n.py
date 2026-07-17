@@ -501,6 +501,13 @@ ZH: dict[str, str] = {
         "「开始搜索」。系统会抓取所选品牌该月发布的全部微博，再由 AI 初步判定"
         "每条帖子是保留还是剔除。",
     "brands to search:": "搜索品牌：",
+    "Auto-resolve all": "自动确认全部账号",
+    ("Bind every pending account the platform search can identify "
+     "unambiguously (exact official name + verification mark); the rest "
+     "stay here for manual Resolve. Also retried automatically on every "
+     "cross-check run."):
+        "自动绑定平台搜索能唯一确定的官方账号（名称完全一致且带官方认证）；"
+        "无法唯一确定的仍留在这里手动确认。每次跨平台核对时也会自动重试。",
     ("confirm this brand’s Weibo account in the Accounts list below before "
      "it can be searched"):
         "该品牌的微博账号尚未确认——请先在下方账号列表中确认，才能搜索",

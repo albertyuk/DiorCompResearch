@@ -776,6 +776,33 @@ def create_app() -> FastAPI:
 
     # ---------- actions ----------
 
+    @app.post("/accounts/auto_resolve")
+    def accounts_auto_resolve(request: Request):
+        """Owner-authorized bulk resolution: bind every pending account the
+        platform searches can identify unambiguously (exact official name +
+        platform verification mark); the rest stay for manual Resolve."""
+        from urllib.parse import quote
+        from ..resolve import auto_resolve_pending
+        cfg = BrandsConfig.load()
+        if not any(a.status == "resolve" for b in cfg.brands
+                   for a in b.accounts.values()):
+            return RedirectResponse(
+                f"/?msg={quote('No accounts are pending resolution.')}",
+                status_code=303)
+        client = TikHubClient(Settings.load())
+        try:
+            res = auto_resolve_pending(client, cfg, db.get_engine())
+        finally:
+            client.close()
+        db.audit(db.get_engine(), _actor(request), "auto_resolve", "accounts",
+                 ",".join(f"{r['brand']}:{r['platform']}"
+                          for r in res["resolved"]) or "none")
+        msg = (f"Auto-resolved {len(res['resolved'])} account(s); "
+               f"{len(res['pending'])} still pending — their searches gave "
+               f"no unambiguous verified match (retried automatically on "
+               f"every cross-check run).")
+        return RedirectResponse(f"/?msg={quote(msg)}", status_code=303)
+
     @app.post("/runs/{month}/start")
     def start_run(request: Request, month: str,
                   brands: list[str] = Form(default=[])):

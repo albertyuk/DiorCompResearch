@@ -217,6 +217,23 @@ def run_crosscheck(month: str, brand_keys: list[str] | None = None,
     results = {}
     _set_phase(engine, month, "crosscheck", "running")
 
+    # owner-authorized auto-resolution: accounts still pending (e.g. the
+    # 2026-07-17 wechat_search outage) are retried at the start of every
+    # cross-check run and bind the moment the platform search recovers —
+    # strict rules (exact official name + platform verification mark) live
+    # in resolve.auto_resolve_pending
+    if any(a.status == "resolve" for b in cfg.brands
+           for a in b.accounts.values()):
+        from .resolve import auto_resolve_pending
+        try:
+            if progress:
+                progress("crosscheck · auto-resolving pending accounts…")
+            ar = auto_resolve_pending(client, cfg, engine, note=progress)
+            if ar["resolved"]:
+                cfg = BrandsConfig.load()          # pick up the new bindings
+        except Exception:
+            pass                                    # never blocks the run
+
     brand_state: dict[str, str] = {}
     note_lock = threading.Lock()
 

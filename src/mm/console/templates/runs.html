@@ -36,7 +36,14 @@
 ], T("The run waits at Review · Posts for your keep/drop decisions — nothing continues until you confirm there. Archive & reset moves a finished month into Archives so a fresh search can start from scratch.")) }}
 
 {% if unresolved %}
-<h2>{{ T("Accounts") }}</h2>
+<div class="row-flex" style="justify-content:space-between; align-items:baseline">
+  <h2>{{ T("Accounts") }}</h2>
+  <form method="post" action="/accounts/auto_resolve">
+    <button type="submit"
+            title="{{ T('Bind every pending account the platform search can identify unambiguously (exact official name + verification mark); the rest stay here for manual Resolve. Also retried automatically on every cross-check run.') }}">
+      {{ T("Auto-resolve all") }}</button>
+  </form>
+</div>
 <p class="note">{{ T("Accounts marked required must be confirmed before a run can start (Weibo is the ingestion source). The rest are optional — resolve them to populate the SOCIAL column, or skip them.") }}</p>
 <table class="grid" style="max-width:900px">
   <tr><th>{{ T("Brand") }}</th><th>{{ T("Platform") }}</th><th></th>
