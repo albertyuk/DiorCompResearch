@@ -537,6 +537,18 @@ each is easy to revisit.
     card"). Ticking images keeps overriding everything, as before. This
     supersedes #49's "nothing ticked = automatic post card".
 
+71. **First-visit welcome card (owner request)**: opening the Console for
+    the first time in a browser shows a workflow overview overlay — the
+    four steps (pick the year/month → confirm the Weibo filter → check
+    grouping/names/platform coverage/photos → render) with honest
+    confidence cues: the filter step is tagged "AI: highly reliable — a
+    quick skim is enough", the grouping/cross-platform step "AI:
+    double-check its work", and step 3 explicitly tells users to verify
+    photos and upload HQ originals. Dismissal persists per browser
+    (localStorage, like the page guides); a Guide button in the masthead
+    reopens it any time. Fully translated, dark-mode aware, Esc/backdrop
+    close.
+
 ## Testing
 
 25. The ~15 caption fixtures test the deterministic layers (@-tag extraction,

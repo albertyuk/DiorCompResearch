@@ -165,6 +165,37 @@ def test_every_page_shares_one_anatomy(client, tmp_db):
     assert "every correction lands here" in learning
 
 
+def test_first_visit_welcome_card_explains_the_workflow(client, tmp_db):
+    """Every page carries the welcome overlay (JS shows it once per browser,
+    the Guide button reopens it) with the four workflow steps and honest
+    confidence cues."""
+    _seed_month(tmp_db)
+    for path in ("/", "/decks", "/review/2026-06/posts"):
+        page = client.get(path).text
+        assert 'id="mmwelcome"' in page, path
+        assert 'id="mm-guide-btn"' in page, path
+    page = client.get("/").text
+    assert "Welcome to Maison Monitor" in page
+    assert "Pick the year and month" in page
+    assert "Confirm the Weibo filter" in page
+    assert "Check grouping, names, platforms &amp; photos" in page \
+        or "Check grouping, names, platforms & photos" in page
+    assert "Render the deck" in page
+    # confidence cues: trust the filter, double-check the grouping
+    assert "AI: highly reliable" in page
+    assert "AI: double-check its work" in page
+    assert "upload HQ originals" in page
+    # and the whole card translates
+    client.post("/lang", data={"lang": "zh", "next": "/"})
+    page = client.get("/").text
+    assert "欢迎使用 Maison Monitor" in page
+    assert "选择年份和月份" in page and "确认微博筛选结果" in page
+    assert "核对归组、命名、平台覆盖与配图" in page and "生成报告" in page
+    assert "AI 判断：非常可靠" in page and "AI 判断：需要人工核对" in page
+    assert "使用指南</button>" in page
+    client.post("/lang", data={"lang": "en", "next": "/"})
+
+
 def _set_phases(mdb, month, phases):
     with mdb.get_engine().begin() as conn:
         mdb.get_run(conn, month)

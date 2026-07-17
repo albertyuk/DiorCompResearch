@@ -224,6 +224,31 @@ a.next-cta:hover { background:var(--paper); color:var(--ink); }
 .proj-card.dropt { outline:2px solid var(--ok); outline-offset:2px; }
 .drag-handle { cursor:grab; user-select:none; }
 .drag-handle:active { cursor:grabbing; }
+/* first-visit welcome — the whole workflow on one card, reopenable from
+   the Guide button in the masthead */
+#mmwelcome { position:fixed; inset:0; background:rgba(12,11,10,.55);
+  z-index:75; display:flex; align-items:center; justify-content:center; }
+#mmwelcome[hidden] { display:none; }
+.welcome-card { background:var(--paper); border:1px solid var(--ink);
+  width:min(680px, 94vw); max-height:88vh; overflow-y:auto;
+  padding:30px 36px 26px; }
+.welcome-title { font-family:var(--serif); font-size:20px; letter-spacing:4px;
+  text-transform:uppercase; font-weight:400; line-height:1.25;
+  border-bottom:1px solid var(--ink); padding-bottom:14px; }
+.welcome-card > .note { margin-top:12px; max-width:none; }
+.wstep { display:flex; gap:16px; margin-top:18px; align-items:flex-start; }
+.wstep .dot { width:26px; height:26px; border:1px solid var(--ink);
+  border-radius:50%; display:flex; align-items:center; justify-content:center;
+  font-size:12px; flex:none; margin-top:1px; }
+.wstep strong { font-size:12.5px; letter-spacing:1.5px;
+  text-transform:uppercase; }
+.wstep .pill { margin-left:8px; vertical-align:1px; }
+.wstep p { font-size:12.5px; color:var(--mut); line-height:1.6;
+  margin-top:4px; }
+.welcome-foot { border-top:1px solid var(--line); margin-top:22px;
+  padding-top:14px; display:flex; justify-content:space-between;
+  align-items:center; gap:16px; flex-wrap:wrap; }
+.welcome-foot .note { font-size:11px; }
 /* destination picker — click-based alternative to drag & drop */
 #mmpick { position:fixed; inset:0; background:rgba(12,11,10,.55); z-index:70;
   display:flex; align-items:center; justify-content:center; }
@@ -281,6 +306,10 @@ img.zoom { cursor:zoom-in; }
               title="{{ T('Toggle dark mode') }}">
         {{ T('Light') if request.state.theme == 'dark' else T('Dark') }}</button>
     </form>
+    <button type="button" class="ghost sm" id="mm-guide-btn"
+            style="margin-left:6px"
+            title="{{ T('How the monthly workflow works') }}">
+      {{ T("Guide") }}</button>
   </span>
   <div class="wordmark"><a href="/">Maison&nbsp;Monitor</a></div>
   {% if request.state.actor and request.state.actor != 'local' %}
@@ -308,6 +337,31 @@ img.zoom { cursor:zoom-in; }
     <a href="/learning" {% if active == 'learning' %}class="active"{% endif %}>{{ T("Learning") }}</a>
   </nav>
 </header>
+<div id="mmwelcome" hidden>
+  <div class="welcome-card">
+    <h2 class="welcome-title" style="margin:0">{{ T("Welcome to Maison Monitor") }}</h2>
+    <p class="note">{{ T("One month of competitor social activity goes in; the finished monthly competitive deck comes out. You review at two checkpoints — everything else runs by itself. The whole flow:") }}</p>
+    <div class="wstep"><span class="dot">1</span>
+      <div><strong>{{ T("Pick the year and month") }}</strong>
+        <p>{{ T("On the Runs page, enter the month to search (like 2026-07) and press Start month. The system pulls every brand's Weibo posts for that month and the AI filter sorts them.") }}</p></div></div>
+    <div class="wstep"><span class="dot">2</span>
+      <div><strong>{{ T("Confirm the Weibo filter") }}</strong>
+        <span class="pill ok">{{ T("AI: highly reliable") }}</span>
+        <p>{{ T("On Review · Posts the AI has marked every post keep or drop — it is very dependable at this, so a quick skim is usually enough. Overrule anything odd (each correction teaches next month's filter), then press Confirm & continue.") }}</p></div></div>
+    <div class="wstep"><span class="dot">3</span>
+      <div><strong>{{ T("Check grouping, names, platforms & photos") }}</strong>
+        <span class="pill warn">{{ T("AI: double-check its work") }}</span>
+        <p>{{ T("Posts are grouped into projects and matched across Xiaohongshu, Douyin and WeChat automatically — this is the step that most needs your eye. On Review · Projects: fix the grouping (drag posts, or use the Move to… buttons), correct each project's title, and verify the platform ticks against their evidence links. Also make sure the photos are right — click to preview, tick the ones that should reach the slide, and upload HQ originals whenever you have better.") }}</p></div></div>
+    <div class="wstep"><span class="dot">4</span>
+      <div><strong>{{ T("Render the deck") }}</strong>
+        <p>{{ T("Press Confirm & render and watch the progress bar. The PPTX deck and the XLSX spreadsheet appear on the Decks page — render as often as you like; every edit is picked up by the next render.") }}</p></div></div>
+    <div class="welcome-foot">
+      <span class="note">{{ T("Reopen this any time with the Guide button at the top — and every page explains itself in its own How this page works box.") }}</span>
+      <button type="button" class="primary" id="mm-welcome-close">
+        {{ T("Got it — start") }}</button>
+    </div>
+  </div>
+</div>
 <div id="mmtoast"></div>
 <div id="mmpick" hidden>
   <div class="mmpick-card">
@@ -562,6 +616,20 @@ document.querySelectorAll('details.guide').forEach(g => {
   g.addEventListener('toggle', () =>
     localStorage.setItem(k, g.open ? 'open' : 'closed'));
 });
+// welcome card: first visit in this browser only; Guide reopens it anytime
+(function () {
+  const wc = document.getElementById('mmwelcome');
+  const close = () => { wc.hidden = true;
+                        localStorage.setItem('mm_welcome', 'seen'); };
+  if (!localStorage.getItem('mm_welcome')) wc.hidden = false;
+  document.getElementById('mm-welcome-close').addEventListener('click', close);
+  wc.addEventListener('click', e => { if (e.target === wc) close(); });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && !wc.hidden) close();
+  });
+  document.getElementById('mm-guide-btn').addEventListener('click',
+    () => { wc.hidden = false; });
+})();
 </script>
 {% block scripts %}{% endblock %}
 </body>

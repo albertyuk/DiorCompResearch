@@ -36,6 +36,55 @@ ZH: dict[str, str] = {
     "Dark": "深色",
     "Light": "浅色",
     "Toggle dark mode": "切换深色模式",
+    # ── first-visit welcome card ─────────────────────────────────────────
+    "Guide": "使用指南",
+    "How the monthly workflow works": "每月工作流程说明",
+    "Welcome to Maison Monitor": "欢迎使用 Maison Monitor",
+    ("One month of competitor social activity goes in; the finished monthly "
+     "competitive deck comes out. You review at two checkpoints — everything "
+     "else runs by itself. The whole flow:"):
+        "输入一个月的竞品社媒动态，产出当月的竞品分析报告。你只需在两个审核"
+        "节点把关，其余环节全部自动完成。完整流程如下：",
+    "Pick the year and month": "选择年份和月份",
+    ("On the Runs page, enter the month to search (like 2026-07) and press "
+     "Start month. The system pulls every brand's Weibo posts for that month "
+     "and the AI filter sorts them."):
+        "在「任务」页输入要搜索的月份（如 2026-07），点击「开始搜索」。系统会"
+        "抓取各品牌当月的全部微博，并由 AI 自动筛选。",
+    "Confirm the Weibo filter": "确认微博筛选结果",
+    "AI: highly reliable": "AI 判断：非常可靠",
+    ("On Review · Posts the AI has marked every post keep or drop — it is "
+     "very dependable at this, so a quick skim is usually enough. Overrule "
+     "anything odd (each correction teaches next month's filter), then press "
+     "Confirm & continue."):
+        "在「帖子审核」页，AI 已把每条帖子标为保留或删除——这一步它非常可靠，"
+        "快速浏览一遍即可。发现不对就手动改判（每次纠正都会让下个月的筛选更准），"
+        "然后点击「确认并继续」。",
+    "Check grouping, names, platforms & photos": "核对归组、命名、平台覆盖与配图",
+    "AI: double-check its work": "AI 判断：需要人工核对",
+    ("Posts are grouped into projects and matched across Xiaohongshu, Douyin "
+     "and WeChat automatically — this is the step that most needs your eye. "
+     "On Review · Projects: fix the grouping (drag posts, or use the Move "
+     "to… buttons), correct each project's title, and verify the platform "
+     "ticks against their evidence links. Also make sure the photos are "
+     "right — click to preview, tick the ones that should reach the slide, "
+     "and upload HQ originals whenever you have better."):
+        "系统会自动把帖子归组成项目，并在小红书、抖音、微信中寻找对应内容——"
+        "这是最需要人工把关的一步。在「项目审核」页：调整归组（拖拽帖子，或用"
+        "「移动到…」按钮）、改正每个项目的标题、并对照证据链接核实各平台的勾选。"
+        "同时确认配图无误——点击可预览大图，勾选要放进报告的图片；有更好的图就"
+        "直接上传高清原图。",
+    "Render the deck": "生成报告",
+    ("Press Confirm & render and watch the progress bar. The PPTX deck and "
+     "the XLSX spreadsheet appear on the Decks page — render as often as you "
+     "like; every edit is picked up by the next render."):
+        "点击「确认并生成报告」，通过进度条查看进度。PPT 报告和 Excel 表格会"
+        "出现在「报告」页——可以反复生成，本页的每次修改都会体现在新文件里。",
+    ("Reopen this any time with the Guide button at the top — and every page "
+     "explains itself in its own How this page works box."):
+        "随时可点顶部的「使用指南」重新打开本说明；每个页面也都有自己的"
+        "「操作指南」。",
+    "Got it — start": "明白了，开始吧",
     # ── shared bits ──────────────────────────────────────────────────────
     "Save": "保存",
     "Confirm": "确认",
