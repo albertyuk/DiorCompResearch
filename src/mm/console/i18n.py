@@ -72,6 +72,9 @@ ZH: dict[str, str] = {
         "等待人工审核。",
     "Months": "各月任务",
     "No runs yet.": "还没有任务记录。",
+    ("Enter a month above and press Start month — the search appears here "
+     "with live progress."):
+        "在上方输入月份并点击「开始搜索」——任务会出现在这里，并实时显示进度。",
     "Open review": "进入审核",
     "Stop": "停止",
     "Archive & reset": "归档并重置",
@@ -295,6 +298,8 @@ ZH: dict[str, str] = {
         "这些数据一旦丢失无法找回。图片可以重新抓取，报告可以重新生成，"
         "唯独这些不行，请定期备份。",
     "Nothing rendered yet.": "还没有生成过报告。",
+    "Decks appear here after Confirm & render on Review · Projects.":
+        "在「项目审核」页点击「确认并生成」后，报告就会出现在这里。",
     "File": "文件",
     "Size": "大小",
     # ── archives ─────────────────────────────────────────────────────────
@@ -307,6 +312,8 @@ ZH: dict[str, str] = {
         "项目——原样封存，并清空当前工作区，下次搜索该月时从零开始。"
         "所有数据都还在，可在下方随时查看。",
     "No archives yet.": "暂无归档。",
+    "Use Archive & reset on the Runs page to move a finished month here.":
+        "在「任务」页对已完成的月份执行「归档并重置」，记录就会出现在这里。",
     "Month": "月份",
     "Archived": "归档时间",
     "By": "操作人",
@@ -348,6 +355,8 @@ ZH: dict[str, str] = {
     "Correction catalogue": "纠正记录",
     "— last {n}": "— 最近 {n} 条",
     "No human decisions recorded yet.": "还没有人工审核记录。",
+    "Keep or drop posts on Review · Posts — every correction lands here.":
+        "在「帖子审核」页做出保留/删除的判断后，每一次纠正都会记录在这里。",
     "When / who": "时间 / 操作人",
     "LLM → human": "AI → 人工",
     "Post caption": "帖子内容",

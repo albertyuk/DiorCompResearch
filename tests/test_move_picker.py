@@ -84,7 +84,7 @@ def test_projects_page_offers_click_movers(client, tmp_db):
     # orphans get a primary "Move to project…" button (no data-from → no
     # discard option in the picker; Ignore already covers that)
     assert "Move to project…" in page
-    assert 'class="move-post" data-post="douyin:O1"' in page
+    assert 'move-post" data-post="douyin:O1"' in page
     # member posts get "Move to…" with enough context for the discard leg
     assert "Move to…" in page
     assert (f'data-post="weibo:M1"\n                data-from="{p1}"'

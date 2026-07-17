@@ -2,10 +2,11 @@
 {% set active = 'runs' %}
 {% block title %}Resolve · {{ brand.display_name }} · {{ platform }}{% endblock %}
 {% block content %}
-<h2>{{ T("Confirm {b} — {p}") | replace("{b}", brand.display_name) | replace("{p}", platform) }}</h2>
-<p class="note">{{ T("Candidates for") }} “{{ query }}”. {{ T("Confirming freezes the internal ID into config/brands.yaml and flips the account to verified.") }}</p>
-{% if manual_note %}<p class="note" style="color:#a37b00">{{ manual_note }}</p>{% endif %}
-{% if error %}<p class="note" style="color:#b3261e">{{ T("Lookup failed: ") }}{{ error }}</p>{% endif %}
+{% from "_pagehead.html" import pagehead with context %}
+{{ pagehead(T("Confirm {b} — {p}") | replace("{b}", brand.display_name) | replace("{p}", platform),
+            T("Candidates for") ~ " “" ~ (query | e) ~ "”. " ~ T("Confirming freezes the internal ID into config/brands.yaml and flips the account to verified.")) }}
+{% if manual_note %}<p class="note" style="color:var(--warn)">{{ manual_note }}</p>{% endif %}
+{% if error %}<p class="note" style="color:var(--err)">{{ T("Lookup failed: ") }}{{ error }}</p>{% endif %}
 
 {% if candidates %}
 <table class="grid" style="max-width:1000px">

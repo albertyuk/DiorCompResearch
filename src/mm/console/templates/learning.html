@@ -3,23 +3,21 @@
 {% block title %}Filter · Learning{% endblock %}
 {% block content %}
 {% from "_guide.html" import guide with context %}
+{% from "_pagehead.html" import pagehead with context %}
 {% if msg %}<div class="banner">{{ msg }}</div>{% endif %}
 
+{% call pagehead(T("Filter learning"),
+                 T("Every keep/drop you make in review is catalogued below with what the LLM had decided. Before each filter run — or on demand here — the corrections are distilled into learned guidance appended to the filter prompt, so the filter gets more accurate over time. The core rubric (China-market test, perfume/beauty excluded) never changes.")) %}
+  <form method="post" action="/learning/update"
+        onsubmit="return confirm('{{ T("Distill the corrections into updated filter guidance now?") }}')">
+    <button type="submit" class="primary">{{ T("Update learned rules now") }}</button>
+    {% if pending %}<div class="micro" style="margin-top:4px">{{ T("{n} new corrections since last update") | replace("{n}", pending | string) }}</div>{% endif %}
+  </form>
+{% endcall %}
 {{ guide("learning", [
   T("Read the correction catalogue — every human keep/drop beside what the AI had decided."),
   T("Press Update learned rules now to distill fresh corrections immediately (this also happens automatically before every filter run)."),
 ], T("The updated guidance is appended to the filter prompt, so next month's filtering starts smarter. The core rules (China-market test, no perfume/beauty) never change.")) }}
-<div class="row-flex" style="justify-content:space-between">
-  <div>
-    <h2 style="margin-top:0">{{ T("Filter learning") }}</h2>
-    <p class="note">{{ T("Every keep/drop you make in review is catalogued below with what the LLM had decided. Before each filter run — or on demand here — the corrections are distilled into learned guidance appended to the filter prompt, so the filter gets more accurate over time. The core rubric (China-market test, perfume/beauty excluded) never changes.") }}</p>
-  </div>
-  <form method="post" action="/learning/update"
-        onsubmit="return confirm('{{ T("Distill the corrections into updated filter guidance now?") }}')">
-    <button type="submit">{{ T("Update learned rules now") }}</button>
-    {% if pending %}<div class="micro" style="margin-top:4px">{{ T("{n} new corrections since last update") | replace("{n}", pending | string) }}</div>{% endif %}
-  </form>
-</div>
 <hr class="rule">
 
 <h2>{{ T("Current learned guidance") }}</h2>
@@ -42,7 +40,10 @@
 {% endif %}
 
 <h2>{{ T("Correction catalogue") }} <span class="micro">{{ T("— last {n}") | replace("{n}", feedback|length|string) }}</span></h2>
-{% if not feedback %}<p class="note">{{ T("No human decisions recorded yet.") }}</p>{% endif %}
+{% if not feedback %}
+<div class="empty"><span class="micro">{{ T("No human decisions recorded yet.") }}</span>
+  {{ T("Keep or drop posts on Review · Posts — every correction lands here.") }}</div>
+{% endif %}
 {% if feedback %}
 <table class="grid">
   <tr><th style="width:120px">{{ T("When / who") }}</th><th style="width:90px">{{ T("Brand") }}</th>
@@ -60,7 +61,7 @@
         {{ T(f.human_decision) }}</span>
       {% if f.llm_keep is not none and f.human_decision in ('keep','drop')
             and (f.human_decision == 'keep') != f.llm_keep %}
-      <div class="micro" style="color:#b3261e">{{ T("override") }}</div>
+      <div class="micro" style="color:var(--err)">{{ T("override") }}</div>
       {% endif %}
     </td>
     <td class="caption-cn" style="font-size:12px">{{ (f.caption or '')[:200] }}</td>

@@ -3,22 +3,23 @@
 {% block title %}Celebs{% endblock %}
 {% block content %}
 {% from "_guide.html" import guide with context %}
-<h2 style="margin-top:0">{{ T("Celebrity registry") }}</h2>
+{% from "_pagehead.html" import pagehead with context %}
+{% call pagehead(T("Celebrity registry"),
+                 T("Names, brand relationships and photo libraries compound across months. Relations verified from a caption or a source keep their label; unverified ones render with a trailing ? on the deck. Photos uploaded here are used on slides when a project's celeb has no labeled post image — the first photo wins; click any photo to preview the library.")) %}
+  <form method="post" action="/celebs/new" class="row-flex"
+        style="gap:8px; flex-wrap:nowrap">
+    <input type="text" name="name_cn" placeholder="中文名 (required)"
+           style="width:150px" required>
+    <input type="text" name="name_en" placeholder="Latin name" style="width:130px">
+    <button type="submit">{{ T("Add celeb") }}</button>
+  </form>
+{% endcall %}
 {{ guide("celebs", [
   T("Correct names (中文 + Latin) and each brand relationship. Tick verified only when a source confirms it — unverified labels render with a trailing ? on the deck."),
   T("Upload photos per celeb — the first one is used on slides whenever a project's celeb has no labeled post image."),
   T("Press Save on the card you edited."),
 ], T("Changes apply to the next enrichment run and the next render, and the registry carries over to every future month.")) }}
-
-<p class="note">{{ T("Names, brand relationships and photo libraries compound across months. Relations verified from a caption or a source keep their label; unverified ones render with a trailing ? on the deck. Photos uploaded here are used on slides when a project's celeb has no labeled post image — the first photo wins; click any photo to preview the library.") }}</p>
 {% if msg %}<div class="banner info">{{ msg }}</div>{% endif %}
-
-<form method="post" action="/celebs/new" class="row-flex"
-      style="gap:8px; margin:14px 0 6px; max-width:560px">
-  <input type="text" name="name_cn" placeholder="中文名 (required)" style="flex:1" required>
-  <input type="text" name="name_en" placeholder="Latin name" style="flex:1">
-  <button type="submit">{{ T("Add celeb") }}</button>
-</form>
 <hr class="rule">
 
 {% for c in celebs %}
@@ -81,7 +82,7 @@
 </div>
 {% endfor %}
 {% if not celebs %}
-<p class="note">{{ T("No celebs yet — the registry fills itself as enrichment runs, or add one above.") }}</p>
+<div class="empty">{{ T("No celebs yet — the registry fills itself as enrichment runs, or add one above.") }}</div>
 {% endif %}
 {% endblock %}
 
@@ -95,7 +96,7 @@ function celebUpload(celebId, fileList) {
       if (!r.ok) throw new Error((await r.json()).error || r.status);
       location.reload();
     })
-    .catch(err => alert({{ T('Upload failed: ') | tojson }} + err.message));
+    .catch(err => mmToast({{ T('Upload failed: ') | tojson }} + err.message, 'err'));
 }
 document.querySelectorAll('.celeb-drop').forEach(dz => {
   dz.addEventListener('click', () => {
@@ -105,7 +106,7 @@ document.querySelectorAll('.celeb-drop').forEach(dz => {
     inp.click();
   });
   dz.addEventListener('dragover', e => {
-    e.preventDefault(); dz.style.borderColor = '#2e7d32';
+    e.preventDefault(); dz.style.borderColor = 'var(--ok)';
   });
   dz.addEventListener('dragleave', () => dz.style.borderColor = '');
   dz.addEventListener('drop', e => {
@@ -124,7 +125,7 @@ document.querySelectorAll('.celeb-img-del').forEach(btn => {
       });
       if (!r.ok) throw new Error((await r.json()).error || r.status);
       location.reload();
-    } catch (err) { alert({{ T('Delete failed: ') | tojson }} + err.message); }
+    } catch (err) { mmToast({{ T('Delete failed: ') | tojson }} + err.message, 'err'); }
   });
 });
 </script>

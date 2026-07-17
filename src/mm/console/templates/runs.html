@@ -3,8 +3,19 @@
 {% block content %}
 {% from "_stepper.html" import stepper with context %}
 {% from "_guide.html" import guide with context %}
+{% from "_pagehead.html" import pagehead with context %}
 
 {% if msg %}<div class="banner">{{ msg }}</div>{% endif %}
+
+{% call pagehead(T("Runs"),
+                 T("Runs ingest (Weibo) then the LLM relevance filter, then pauses at Review · Posts.")) %}
+  <form method="post" id="start-form" class="row-flex" style="gap:8px"
+        onsubmit="this.action='/runs/'+document.getElementById('m').value+'/start'">
+    <input type="text" id="m" name="month" value="{{ default_month }}"
+           pattern="\d{4}-\d{2}" style="width:120px">
+    <button type="submit" class="primary">{{ T("Start month") }}</button>
+  </form>
+{% endcall %}
 
 {{ guide("runs", [
   T("Enter the month to search (YYYY-MM) and press Start month. The system pulls every brand's Weibo timeline for that month, then the AI filter marks each post keep or drop."),
@@ -32,16 +43,11 @@
 <hr class="rule">
 {% endif %}
 
-<h2>{{ T("Start a month") }}</h2>
-<form method="post" id="start-form" class="row-flex" onsubmit="this.action='/runs/'+document.getElementById('m').value+'/start'">
-  <input type="text" id="m" name="month" value="{{ default_month }}"
-         pattern="\d{4}-\d{2}" style="width:130px">
-  <button type="submit">{{ T("Start month") }}</button>
-  <span class="note">{{ T("Runs ingest (Weibo) then the LLM relevance filter, then pauses at Review · Posts.") }}</span>
-</form>
-
 <h2>{{ T("Months") }}</h2>
-{% if not months %}<p class="note">{{ T("No runs yet.") }}</p>{% endif %}
+{% if not months %}
+<div class="empty"><span class="micro">{{ T("No runs yet.") }}</span>
+  {{ T("Enter a month above and press Start month — the search appears here with live progress.") }}</div>
+{% endif %}
 {% for m in months %}
 <div style="margin-bottom:26px" data-month="{{ m.month }}">
   <div class="row-flex" style="align-items:baseline">
@@ -61,7 +67,7 @@
     <form method="post" action="/runs/{{ m.month }}/archive" class="inline"
           id="archive-{{ m.month }}"
           onsubmit="return confirm('{{ T("Archive {m}? All posts, decisions and projects move to the archive (kept in the database, listed below) and the next Start month searches completely from scratch.") | replace("{m}", m.month) }}')">
-      <button type="submit" class="ghost">{{ T("Archive & reset") }}</button>
+      <button type="submit" class="danger">{{ T("Archive & reset") }}</button>
     </form>
   </div>
   {{ stepper(m.workflow, here="/") }}

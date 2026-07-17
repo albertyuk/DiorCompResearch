@@ -4,18 +4,17 @@
 {% block content %}
 {% from "_stepper.html" import stepper with context %}
 {% from "_guide.html" import guide with context %}
+{% from "_pagehead.html" import pagehead with context %}
+{{ stepper(workflow, here="/review/" ~ month ~ "/board") }}
+{% call pagehead(T("Grouping board") ~ " · " ~ month) %}
+  <a class="btn" href="/review/{{ month }}/projects">{{ T("Review · Projects") }} →</a>
+{% endcall %}
 {{ guide("board", [
   T("Pick a brand tab. Projects sit on the left; every unplaced post sits on the right — orphans from other platforms, dropped weibo posts, and kept posts not yet in any project."),
   T("Drag a post from the right onto a project to place it there. Dragging a dropped post in also marks it kept; dragging an orphan in resolves it."),
   T("Drag a post onto the New project zone to start a fresh project from it. Drag a post from a project back to the right side to un-place it (weibo posts are marked dropped, platform posts return to orphans)."),
   T("Fine-tune titles, dates, celebs and slide images on Review · Projects afterwards."),
 ], T("Every drag saves immediately. When the grouping looks right, go to Review · Projects and press Confirm & render.")) }}
-
-{{ stepper(workflow, here="/review/" ~ month ~ "/board") }}
-<div class="row-flex" style="justify-content:space-between; align-items:baseline">
-  <h2 style="margin-top:0">{{ T("Grouping board") }} · {{ month }}</h2>
-  <a class="btn" href="/review/{{ month }}/projects">{{ T("Review · Projects") }} →</a>
-</div>
 <div class="board-tabs">
   {% for b in brands %}
   <button class="ghost board-tab" data-brand="{{ b.brand.key }}">
@@ -150,7 +149,7 @@ async function bPost(url, body) {
       headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body});
     if (!r.ok) throw new Error((await r.json()).error || r.status);
     location.reload();
-  } catch (err) { alert({{ T("Move failed: ") | tojson }} + err.message); }
+  } catch (err) { mmToast({{ T("Move failed: ") | tojson }} + err.message, 'err'); }
 }
 document.addEventListener('dragstart', e => {
   const chip = e.target.closest && e.target.closest('.chip');

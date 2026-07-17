@@ -2,10 +2,12 @@
 {% set active = 'archives' %}
 {% block title %}Archive #{{ meta.id }} · {{ meta.month }}{% endblock %}
 {% block content %}
-<h2 style="margin-top:0">{{ T("Archive #{id} — {m}") | replace("{id}", meta.id | string) | replace("{m}", meta.month) }}
-  <span class="micro">{{ T("archived {t} by {who}") | replace("{t}", meta.archived_at[:16]) | replace("{who}", meta.archived_by) }}</span></h2>
-<p class="note">{{ T("Read-only snapshot of the search as it was when archived. Greyed posts were dropped (by the filter or a reviewer) at the time.") }}</p>
-<a class="btn" href="/archives">{{ T("← All archives") }}</a>
+{% from "_pagehead.html" import pagehead with context %}
+{% call pagehead(T("Archive #{id} — {m}") | replace("{id}", meta.id | string) | replace("{m}", meta.month),
+                 T("Read-only snapshot of the search as it was when archived. Greyed posts were dropped (by the filter or a reviewer) at the time.")) %}
+  <a class="btn" href="/archives">{{ T("← All archives") }}</a>
+{% endcall %}
+<div class="micro" style="margin:-14px 0 18px">{{ T("archived {t} by {who}") | replace("{t}", meta.archived_at[:16]) | replace("{who}", meta.archived_by) }}</div>
 <hr class="rule">
 
 {% for g in groups %}

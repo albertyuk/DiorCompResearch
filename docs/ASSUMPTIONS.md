@@ -481,6 +481,28 @@ each is easy to revisit.
     on Review · Projects (orphan rows, member posts, project cards) and on
     the Grouping board (chips + cards); drag & drop stays.
 
+68. **UI cohesion pass (owner request: apply design principles for new
+    users)**: (a) hierarchy — every page opens with one serif `.page-title`
+    (via the shared _pagehead macro: title + one-line description + THE
+    page's primary action pinned right); section h2s now sit visibly below
+    it. (b) consistency — one page anatomy everywhere: banner → stepper →
+    page head → guide → content (celebs/archives had the title above the
+    guide, posts/projects had the guide above the stepper, runs had no
+    title). (c) affordance — a button grammar: `.primary` solid ink for the
+    single next action per page (Start month / Confirm & continue / Confirm
+    & render / Update learned rules), plain outline for normal actions,
+    `.ghost` tertiary, `.danger` red for destructive (Delete, Archive &
+    reset, Drop project, ✕ remove), `.sm` for in-table sizes. (d) feedback —
+    mmToast() replaces every JS alert(); .grid rows highlight on hover;
+    global :focus-visible outline; prefers-reduced-motion disables the
+    pulse/sweep animations. (e) guidance — empty states are dashed `.empty`
+    boxes that name the action that fills them. (f) proximity — the
+    wordmark links home and a `.nav-sep` splits workflow tabs from the
+    library (Celebs/Archives/Learning); empty tables no longer render
+    orphaned header rows. (g) dark-mode hygiene — the last hardcoded hex
+    colors (learning override, resolve notes, dropzone drag highlight)
+    became palette variables.
+
 ## Testing
 
 25. The ~15 caption fixtures test the deterministic layers (@-tag extraction,

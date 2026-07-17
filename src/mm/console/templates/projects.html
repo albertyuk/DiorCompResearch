@@ -4,10 +4,24 @@
 {% block content %}
 {% from "_stepper.html" import stepper with context %}
 {% from "_guide.html" import guide with context %}
+{% from "_pagehead.html" import pagehead with context %}
 {% if busy %}
 <div class="banner info" id="busy-banner">⏳ {{ T("A run is working on {m} right now") | replace("{m}", month) }} — <span id="busy-detail"></span><br>
   {{ T("Projects below are the last completed state; the list refreshes itself when cross-check / enrichment / render finishes.") }}</div>
 {% endif %}
+{{ stepper(workflow, here="/review/" ~ month ~ "/projects") }}
+{% call pagehead(T("Review checkpoint #2 — projects") ~ " · " ~ month,
+                 T("Each project lists the posts consolidated into it — tick the images that should render on the slide (or drop an HQ original). Drag the ⠿ handle of a project onto another project to merge them; drag a post's ⠿ handle to move just that post. Celeb names, relations and photo libraries live on the")
+                 ~ ' <a href="/celebs">' ~ T("Celebs page") ~ "</a>.") %}
+  <form method="post" action="/review/{{ month }}/render"
+        onsubmit="return confirm('{{ T("Confirm projects and render the deck?") }}')">
+    <select name="visuals" style="width:auto; display:inline-block">
+      <option value="live" {% if default_visuals == 'live' %}selected{% endif %}>{{ T("visuals: live screenshots (weibo) + cards") }}</option>
+      <option value="card" {% if default_visuals == 'card' %}selected{% endif %}>{{ T("visuals: cards only") }}</option>
+    </select>
+    <button type="submit" class="primary">{{ T("Confirm & render →") }}</button>
+  </form>
+{% endcall %}
 {{ guide("projects", [
   T("Check each project's grouping — read Why these posts are grouped. Fix mistakes by dragging the ⠿ handles (merge two projects, or move a single post), with ✕ remove, or with Ungroup."),
   T("Tick the images that should appear on the slide (click any image to preview it full-size; drag an HQ original onto the dashed box). Nothing ticked = an automatic post card is used."),
@@ -15,21 +29,6 @@
   T("Review the Orphans at the bottom — keeps come first. Drag one onto a project, Promote it to its own project, or Ignore it."),
   T("Press Confirm & render and watch the progress bar."),
 ], T("The PPTX deck and the XLSX spreadsheet are generated and appear on the Decks page. Render as often as you like — every edit here is picked up by the next render.")) }}
-{{ stepper(workflow, here="/review/" ~ month ~ "/projects") }}
-<div class="row-flex" style="justify-content:space-between">
-  <div>
-    <h2 style="margin-top:0">{{ T("Review checkpoint #2 — projects") }} · {{ month }}</h2>
-    <p class="note">{{ T("Each project lists the posts consolidated into it — tick the images that should render on the slide (or drop an HQ original). Drag the ⠿ handle of a project onto another project to merge them; drag a post's ⠿ handle to move just that post. Celeb names, relations and photo libraries live on the") }} <a href="/celebs">{{ T("Celebs page") }}</a>.</p>
-  </div>
-  <form method="post" action="/review/{{ month }}/render"
-        onsubmit="return confirm('{{ T("Confirm projects and render the deck?") }}')">
-    <select name="visuals" style="width:auto; display:inline-block">
-      <option value="live" {% if default_visuals == 'live' %}selected{% endif %}>{{ T("visuals: live screenshots (weibo) + cards") }}</option>
-      <option value="card" {% if default_visuals == 'card' %}selected{% endif %}>{{ T("visuals: cards only") }}</option>
-    </select>
-    <button type="submit">{{ T("Confirm & render →") }}</button>
-  </form>
-</div>
 <div class="micro">
   {% if confirmed_by %}{{ T("posts confirmed by {who} · {t}") | replace("{who}", confirmed_by.actor_name) | replace("{t}", confirmed_by.at[:16]) }}{% endif %}
   {% if rendered_by %} — {{ T("last render by {who} · {t}") | replace("{who}", rendered_by.actor_name) | replace("{t}", rendered_by.at[:16]) }}{% endif %}
@@ -161,14 +160,14 @@
               action="/review/{{ month }}/projects/{{ p.id }}/eject"
               onsubmit="return confirm('{% if mp.role == 'match' %}{{ T("Detach this matched {p} post from the group? It returns to the orphan list.") | replace("{p}", mp.platform) }}{% else %}{{ T("Remove just this post from the group? It becomes its own project.") }}{% endif %}')">
           <input type="hidden" name="post_id" value="{{ mp.post_id }}">
-          <button class="ghost" type="submit" style="padding:2px 8px; margin-top:4px"
+          <button class="danger sm" type="submit" style="margin-top:4px"
                   title="{{ T('Remove only this post from the group — the rest stay together') }}">
             {{ T("✕ remove") }}</button>
         </form>
-        <button type="button" class="ghost move-post" data-post="{{ mp.post_id }}"
+        <button type="button" class="ghost sm move-post" data-post="{{ mp.post_id }}"
                 data-from="{{ p.id }}" data-brand="{{ g.brand.key }}"
                 data-platform="{{ mp.platform }}"
-                style="padding:2px 8px; margin-top:4px"
+                style="margin-top:4px"
                 title="{{ T('Choose a destination for this post') }}">
           {{ T("Move to…") }}</button>
       </div>
@@ -202,21 +201,21 @@
   </div>
 </div>
 <div class="row-flex" style="margin:-10px 0 18px; gap:8px">
-  <button type="button" class="ghost merge-proj" data-proj="{{ p.id }}"
+  <button type="button" class="ghost sm merge-proj" data-proj="{{ p.id }}"
           data-brand="{{ g.brand.key }}" data-status="{{ p.status }}"
           title="{{ T('Choose a destination for this project') }}">
     {{ T("Merge into…") }}</button>
   <form class="inline" method="post" action="/review/{{ month }}/projects/{{ p.id }}/status">
     <input type="hidden" name="value"
            value="{{ 'draft' if p.status == 'dropped' else 'dropped' }}">
-    <button class="ghost" type="submit">
+    <button class="{{ 'ghost sm' if p.status == 'dropped' else 'danger sm' }}" type="submit">
       {{ T('Restore project') if p.status == 'dropped' else T('Drop project') }}</button>
   </form>
   {% set weibo_members = p.member_posts | selectattr('platform', 'equalto', 'weibo') | list %}
   {% if weibo_members | length > 1 %}
   <form class="inline" method="post" action="/review/{{ month }}/projects/{{ p.id }}/ungroup"
         onsubmit="return confirm('{{ T("Split this project into {n} single-post projects? Matched cross-platform posts return to the orphan list.") | replace("{n}", weibo_members | length | string) }}')">
-    <button class="ghost" type="submit">{{ T("Ungroup ({n} posts)") | replace("{n}", weibo_members | length | string) }}</button>
+    <button class="ghost sm" type="submit">{{ T("Ungroup ({n} posts)") | replace("{n}", weibo_members | length | string) }}</button>
   </form>
   {% endif %}
 </div>
@@ -261,19 +260,19 @@
       {% else %}<span class="micro">{{ T("not filtered yet") }}</span>{% endif %}
     </td>
     <td>
-      <button type="button" class="move-post" data-post="{{ o.post_id }}"
+      <button type="button" class="sm move-post" data-post="{{ o.post_id }}"
               data-brand="{{ o.brand }}"
               title="{{ T('Choose a destination for this post') }}">
         {{ T("Move to project…") }}</button>
       <form class="inline" method="post"
             action="/review/{{ month }}/orphans/{{ o.post_id | urlencode }}/resolve">
         <input type="hidden" name="action" value="promote">
-        <button type="submit">{{ T("Promote to project") }}</button>
+        <button class="sm" type="submit">{{ T("Promote to project") }}</button>
       </form>
       <form class="inline" method="post"
             action="/review/{{ month }}/orphans/{{ o.post_id | urlencode }}/resolve">
         <input type="hidden" name="action" value="ignore">
-        <button class="ghost" type="submit">{{ T("Ignore") }}</button>
+        <button class="ghost sm" type="submit">{{ T("Ignore") }}</button>
       </form>
     </td>
   </tr>
@@ -314,7 +313,8 @@ document.addEventListener('change', async e => {
     if (!r.ok) throw new Error(await r.text());
     t.parentElement.querySelector('img').style.outline =
       t.checked ? '3px solid var(--sel)' : '';
-  } catch (err) { t.checked = !t.checked; alert({{ T('Could not save selection: ') | tojson }} + err); }
+  } catch (err) { t.checked = !t.checked;
+                  mmToast({{ T('Could not save selection: ') | tojson }} + err, 'err'); }
 });
 
 // HQ drop zone: drag an original image (downloaded from the post) or click
@@ -327,7 +327,7 @@ function uploadTo(postId, fileList) {
       if (!r.ok) throw new Error((await r.json()).error || r.status);
       location.reload();
     })
-    .catch(err => alert({{ T('Upload failed: ') | tojson }} + err.message));
+    .catch(err => mmToast({{ T('Upload failed: ') | tojson }} + err.message, 'err'));
 }
 document.querySelectorAll('.dropzone').forEach(dz => {
   dz.addEventListener('click', () => {
@@ -337,7 +337,7 @@ document.querySelectorAll('.dropzone').forEach(dz => {
     inp.click();
   });
   dz.addEventListener('dragover', e => {
-    e.preventDefault(); dz.style.borderColor = '#2e7d32';
+    e.preventDefault(); dz.style.borderColor = 'var(--ok)';
   });
   dz.addEventListener('dragleave', () => dz.style.borderColor = '');
   dz.addEventListener('drop', e => {
@@ -387,7 +387,7 @@ document.querySelectorAll('.proj-card').forEach(card => {
         headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body});
       if (!r.ok) throw new Error((await r.json()).error || r.status);
       location.reload();
-    } catch (err) { alert({{ T('Move failed: ') | tojson }} + err.message); }
+    } catch (err) { mmToast({{ T('Move failed: ') | tojson }} + err.message, 'err'); }
   });
 });
 

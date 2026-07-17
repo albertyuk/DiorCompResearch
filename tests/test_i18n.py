@@ -145,6 +145,26 @@ def test_review_tabs_always_in_nav(client, tmp_db):
     assert '/review/2026-06/posts"' in page
 
 
+def test_every_page_shares_one_anatomy(client, tmp_db):
+    """Cohesion contract: exactly one serif page title per page, the shared
+    toast container, the nav workflow/library separator — and empty lists
+    that say which action fills them."""
+    _seed_month(tmp_db)
+    for path in ("/", "/review/2026-06/posts", "/review/2026-06/projects",
+                 "/review/2026-06/board", "/decks", "/celebs", "/archives",
+                 "/learning"):
+        page = client.get(path).text
+        assert page.count('class="page-title"') == 1, path
+        assert 'id="mmtoast"' in page, path
+        assert 'class="nav-sep"' in page, path
+    archives = client.get("/archives").text
+    assert 'class="empty"' in archives
+    assert "move a finished month here" in archives
+    learning = client.get("/learning").text
+    assert 'class="empty"' in learning
+    assert "every correction lands here" in learning
+
+
 def _set_phases(mdb, month, phases):
     with mdb.get_engine().begin() as conn:
         mdb.get_run(conn, month)

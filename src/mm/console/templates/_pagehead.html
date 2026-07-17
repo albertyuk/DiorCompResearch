@@ -1,0 +1,12 @@
+{# one page title per page: serif headline, optional one-line description,
+   and the page's PRIMARY action pinned right (pass it via {% call %}) #}
+{% macro pagehead(title, desc=None) %}
+<div class="page-head">
+  <div class="page-head-text">
+    <h1 class="page-title">{{ title }}</h1>
+    {# descs are our own static T() strings — trusted, may carry a link #}
+    {% if desc %}<p class="note">{{ desc | safe }}</p>{% endif %}
+  </div>
+  {% if caller %}<div class="page-head-act">{{ caller() }}</div>{% endif %}
+</div>
+{% endmacro %}

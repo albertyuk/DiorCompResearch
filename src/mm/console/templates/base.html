@@ -29,13 +29,27 @@ header .wordmark { font-family:var(--serif); font-size:30px; font-weight:400;
 header .actor { position:absolute; top:16px; right:24px; font-size:9px;
   letter-spacing:2px; text-transform:uppercase; color:var(--mut); }
 .lang-switch { position:absolute; top:16px; left:24px; }
-nav { display:flex; justify-content:center; gap:34px; padding:20px 0 16px;
-      flex-wrap:wrap; }
+nav { display:flex; justify-content:center; align-items:center; gap:34px;
+      padding:20px 0 16px; flex-wrap:wrap; }
 nav a { text-decoration:none; font-size:10px; letter-spacing:3px;
         color:var(--ink); text-transform:uppercase; padding-bottom:3px;
         border-bottom:1px solid transparent; }
 nav a.active, nav a:hover { border-bottom-color:var(--ink); }
+/* workflow tabs left of the separator, reference library right of it */
+.nav-sep { width:1px; height:14px; background:var(--line);
+  margin:0 -10px 2px; }
+header .wordmark a { text-decoration:none; color:inherit; }
 main { padding:44px 56px 100px; max-width:1500px; margin:0 auto; }
+/* type hierarchy: one serif page title per page, h2 for sections below it */
+.page-head { display:flex; justify-content:space-between; gap:24px;
+  align-items:flex-end; flex-wrap:wrap; margin:0 0 22px; }
+.page-title { font-family:var(--serif); font-size:24px; letter-spacing:5px;
+  text-transform:uppercase; font-weight:400; line-height:1.25; }
+.page-title .micro { font-family:-apple-system,"Helvetica Neue",sans-serif;
+  letter-spacing:2px; }
+.page-head .note { margin-top:6px; }
+.page-head-act { display:flex; gap:10px; align-items:flex-end;
+  flex-wrap:wrap; text-align:right; }
 h2 { font-family:var(--serif); font-size:17px; letter-spacing:3px;
      text-transform:uppercase; font-weight:400; margin:44px 0 16px; }
 h2:first-child { margin-top:0; }
@@ -43,20 +57,34 @@ h2 .micro { font-family:-apple-system,"Helvetica Neue",sans-serif; }
 .micro { font-size:9.5px; letter-spacing:2px; text-transform:uppercase;
          color:var(--mut); }
 .rule { border:0; border-top:1px solid var(--line); margin:28px 0; }
+summary { cursor:pointer; }
 table.grid { width:100%; border-collapse:collapse; }
 table.grid th { text-align:left; font-size:9.5px; letter-spacing:2.5px;
   text-transform:uppercase; color:var(--mut); font-weight:500;
   border-bottom:1px solid var(--ink); padding:8px 12px 10px; }
 table.grid td { border-bottom:1px solid var(--line); padding:14px 12px;
   vertical-align:top; }
+table.grid tr:hover td { background:var(--soft); }
+/* button grammar: .primary = THE next action (one per page) · default =
+   outlined normal action · .ghost = tertiary · .danger = destructive.
+   .sm shrinks any of them for use inside tables and cards. */
 button, .btn { background:var(--paper); border:1px solid var(--ink);
   color:var(--ink); font-size:10px; letter-spacing:2.5px;
   text-transform:uppercase; padding:9px 22px; cursor:pointer;
   text-decoration:none; display:inline-block;
-  transition:background .18s ease, color .18s ease; }
+  transition:background .18s ease, color .18s ease, border-color .18s ease; }
 button:hover, .btn:hover { background:var(--ink); color:var(--paper); }
+button.primary, .btn.primary { background:var(--ink); color:var(--paper); }
+button.primary:hover, .btn.primary:hover { background:var(--paper);
+  color:var(--ink); }
 button.ghost { border-color:var(--line); color:var(--mut); }
 button.ghost:hover { background:var(--soft); color:var(--ink); }
+button.danger, .btn.danger { border-color:var(--err); color:var(--err);
+  background:var(--paper); }
+button.danger:hover, .btn.danger:hover { background:var(--err);
+  color:var(--paper); }
+button.sm, .btn.sm { padding:4px 12px; letter-spacing:1.8px; font-size:9px; }
+:focus-visible { outline:2px solid var(--sel); outline-offset:2px; }
 input[type=text], input[type=date], select, textarea {
   border:1px solid var(--line); padding:8px 10px; font:inherit; width:100%;
   background:var(--paper); border-radius:0; }
@@ -83,6 +111,21 @@ form.inline { display:inline; }
   margin-bottom:26px; font-size:13px; max-width:900px; background:var(--paper); }
 .banner.info { border-color:var(--line); border-left:2px solid var(--warn);
   color:var(--banner-info); background:var(--soft); }
+/* guided empty state: says what fills the list, not just "no X yet" */
+.empty { border:1px dashed var(--line); background:var(--soft);
+  color:var(--mut); font-size:12.5px; text-align:center;
+  padding:30px 24px; max-width:900px; }
+.empty .micro { display:block; margin-bottom:6px; }
+/* toast — quiet inline feedback instead of browser alert() popups */
+#mmtoast { position:fixed; bottom:26px; left:50%; transform:translateX(-50%);
+  z-index:80; display:flex; flex-direction:column; gap:8px;
+  align-items:center; pointer-events:none; }
+.toast { background:var(--ink); color:var(--paper); font-size:12px;
+  letter-spacing:.4px; padding:10px 22px; max-width:min(620px, 90vw);
+  box-shadow:0 4px 24px rgba(0,0,0,.25); opacity:0;
+  transition:opacity .25s ease; }
+.toast.on { opacity:1; }
+.toast.err { background:var(--err); color:#fff; }
 .hero-strip img { height:64px; border:1px solid var(--line); margin-right:6px; }
 /* progress bars — determinate (with % and ETA on the right) when a task
    reports "n/m", indeterminate sweep otherwise */
@@ -216,6 +259,9 @@ img.zoom { cursor:zoom-in; }
 #mmlb .mmlb-bar { position:absolute; bottom:26px; left:0; right:0;
   display:flex; gap:18px; align-items:center; justify-content:center; }
 #mmlb .mmlb-bar .micro { color:rgba(255,255,255,.75); }
+@media (prefers-reduced-motion: reduce) {
+  * { animation:none !important; transition:none !important; }
+}
 </style>
 </head>
 <body>
@@ -224,25 +270,24 @@ img.zoom { cursor:zoom-in; }
     <form method="post" action="/lang" style="display:inline">
       <input type="hidden" name="next" value="{{ request.url.path }}">
       <button name="lang" value="{{ 'en' if request.state.lang == 'zh' else 'zh' }}"
-              class="ghost" style="padding:2px 10px"
-              title="Switch language / 切换语言">
+              class="ghost sm" title="Switch language / 切换语言">
         {{ 'EN' if request.state.lang == 'zh' else '中文' }}</button>
     </form>
     <form method="post" action="/theme" style="display:inline">
       <input type="hidden" name="next" value="{{ request.url.path }}">
       <button name="theme"
               value="{{ 'light' if request.state.theme == 'dark' else 'dark' }}"
-              class="ghost" style="padding:2px 10px; margin-left:6px"
+              class="ghost sm" style="margin-left:6px"
               title="{{ T('Toggle dark mode') }}">
         {{ T('Light') if request.state.theme == 'dark' else T('Dark') }}</button>
     </form>
   </span>
-  <div class="wordmark">Maison&nbsp;Monitor</div>
+  <div class="wordmark"><a href="/">Maison&nbsp;Monitor</a></div>
   {% if request.state.actor and request.state.actor != 'local' %}
   <span class="actor">
     {{ request.state.actor }}
     <form method="post" action="/logout" style="display:inline">
-      <button class="ghost" style="padding:2px 8px; margin-left:8px">{{ T("Sign out") }}</button>
+      <button class="ghost sm" style="margin-left:8px">{{ T("Sign out") }}</button>
     </form>
   </span>
   {% endif %}
@@ -257,16 +302,18 @@ img.zoom { cursor:zoom-in; }
     <a href="/review/{{ nav_month }}/board" {% if active == 'board' %}class="active"{% endif %}>{{ T("Grouping") }}</a>
     {% endif %}
     <a href="/decks" {% if active == 'decks' %}class="active"{% endif %}>{{ T("Decks") }}</a>
+    <span class="nav-sep" aria-hidden="true"></span>
     <a href="/celebs" {% if active == 'celebs' %}class="active"{% endif %}>{{ T("Celebs") }}</a>
     <a href="/archives" {% if active == 'archives' %}class="active"{% endif %}>{{ T("Archives") }}</a>
     <a href="/learning" {% if active == 'learning' %}class="active"{% endif %}>{{ T("Learning") }}</a>
   </nav>
 </header>
+<div id="mmtoast"></div>
 <div id="mmpick" hidden>
   <div class="mmpick-card">
     <div class="mmpick-title micro"></div>
     <div class="mmpick-list"></div>
-    <button type="button" class="ghost mmpick-cancel">{{ T("Cancel") }}</button>
+    <button type="button" class="ghost sm mmpick-cancel">{{ T("Cancel") }}</button>
   </div>
 </div>
 <div id="mmlb" hidden>
@@ -297,6 +344,18 @@ const MM_T = {
   pickEmpty: {{ T("No other project yet — create one first.") | tojson }},
   moveFailed: {{ T("Move failed: ") | tojson }},
 };
+/* toast: quiet feedback that doesn't hijack the keyboard like alert() */
+function mmToast(msg, kind) {
+  const holder = document.getElementById('mmtoast');
+  const t = document.createElement('div');
+  t.className = 'toast' + (kind === 'err' ? ' err' : '');
+  t.setAttribute('role', 'alert');
+  t.textContent = msg;
+  holder.appendChild(t);
+  requestAnimationFrame(() => t.classList.add('on'));
+  setTimeout(() => { t.classList.remove('on');
+                     setTimeout(() => t.remove(), 400); }, 5200);
+}
 /* destination picker: mmOpenPicker(title, [{label, url, body, kind}]) —
    each option POSTs and reloads; the click-based sibling of drag & drop */
 function mmOpenPicker(title, options) {
@@ -322,7 +381,7 @@ function mmOpenPicker(title, options) {
           body: o.body});
         if (!r.ok) throw new Error((await r.json()).error || r.status);
         location.reload();
-      } catch (err) { alert(MM_T.moveFailed + err.message); }
+      } catch (err) { mmToast(MM_T.moveFailed + err.message, 'err'); }
     });
     list.appendChild(b);
   }
