@@ -192,18 +192,32 @@ brands:
   display_name: PRADA
   order: 6
   weibo:
-    status: resolve
+    status: verified
     lookup_query: PRADA 普拉达
-    note: Exclude Prada Beauty if it surfaces as a separate account.
+    screen_name: Prada普拉达
+    uid: '5813211408'
+    vanity_url: https://weibo.com/pradaofficial
+    note: 蓝V verified to 普拉达时装商业（上海）有限公司, 4.7M followers. Exclude Prada普拉达香水美妆
+      (L'Oréal-licensed beauty account) — beauty is out of scope.
+    verified_date: '2026-07-17'
   douyin:
-    status: resolve
+    status: verified
     lookup_query: PRADA 普拉达
+    uid: MS4wLjABAAAAeQwCw6g8uhKkKjvUuEhCVRxH92u1U6tNz4q0NJTsKkk
+    screen_name: PRADA
+    note: 1.17M followers; the separate 香水美妆 account is excluded.
+    verified_date: '2026-07-17'
   xhs:
-    status: resolve
+    status: verified
     lookup_query: PRADA
+    uid: 5bdd17b66c202a000160f944
+    screen_name: Prada普拉达
+    verified_date: '2026-07-17'
   wechat_mp:
     status: resolve
     lookup_query: PRADA
+    note: wechat_search returned no items (2026-07-17) — resolve via the Console
+      when the endpoint recovers.
   wechat_channels:
     status: resolve
     lookup_query: PRADA
@@ -212,17 +226,30 @@ brands:
   display_name: LOEWE
   order: 7
   weibo:
-    status: resolve
+    status: verified
     lookup_query: LOEWE 罗意威
+    screen_name: LOEWE罗意威
+    uid: '2727735071'
+    vanity_url: https://weibo.com/loewe
+    note: 蓝V "LOEWE罗意威 官方微博", 788k followers.
+    verified_date: '2026-07-17'
   douyin:
-    status: resolve
+    status: verified
     lookup_query: LOEWE 罗意威
+    uid: MS4wLjABAAAAlIvnITnzbZwvhP4IusXYyMFwe87y5jvwqmBJ2_iarxRKAkI93RG7KycvAQexyDEU
+    screen_name: LOEWE罗意威
+    verified_date: '2026-07-17'
   xhs:
-    status: resolve
+    status: verified
     lookup_query: LOEWE
+    uid: 5b3c450a4eacab3bee672027
+    screen_name: LOEWE罗意威
+    verified_date: '2026-07-17'
   wechat_mp:
     status: resolve
     lookup_query: LOEWE
+    note: wechat_search returned no items (2026-07-17) — resolve via the Console
+      when the endpoint recovers.
   wechat_channels:
     status: resolve
     lookup_query: LOEWE
@@ -231,18 +258,30 @@ brands:
   display_name: VALENTINO
   order: 8
   weibo:
-    status: resolve
+    status: verified
     lookup_query: VALENTINO 华伦天奴
-    note: Exclude Valentino Beauty if it surfaces as a separate account.
+    screen_name: VALENTINO华伦天奴
+    uid: '2082922603'
+    vanity_url: https://weibo.com/valentinoofficial
+    note: 蓝V "Valentino官方微博", 653k followers. Exclude Valentino美妆 (L'Oréal)
+      and 卓凡尼华伦天奴/GIOVANNI VALENTINO (unrelated company).
+    verified_date: '2026-07-17'
   douyin:
     status: resolve
     lookup_query: VALENTINO 华伦天奴
+    note: only Valentino华伦天奴美妆 (beauty, out of scope) surfaced in search —
+      no official fashion account found 2026-07-17.
   xhs:
-    status: resolve
+    status: verified
     lookup_query: VALENTINO
+    uid: 5d9dbbba0000000001002ef0
+    screen_name: VALENTINO华伦天奴
+    verified_date: '2026-07-17'
   wechat_mp:
     status: resolve
     lookup_query: VALENTINO
+    note: wechat_search returned no items (2026-07-17) — resolve via the Console
+      when the endpoint recovers.
   wechat_channels:
     status: resolve
     lookup_query: VALENTINO
@@ -251,17 +290,28 @@ brands:
   display_name: BOTTEGA VENETA
   order: 9
   weibo:
-    status: resolve
+    status: verified
     lookup_query: Bottega Veneta 葆蝶家
+    screen_name: BottegaVeneta葆蝶家
+    uid: '7821671028'
+    vanity_url: https://weibo.com/officialbottega
+    note: 蓝V "Bottega Veneta官方微博", 93k followers.
+    verified_date: '2026-07-17'
   douyin:
     status: resolve
     lookup_query: Bottega Veneta 葆蝶家
+    note: no official account surfaced in search 2026-07-17.
   xhs:
-    status: resolve
+    status: verified
     lookup_query: Bottega Veneta
+    uid: 5e7d5dea000000000100bfaa
+    screen_name: Bottega Veneta
+    verified_date: '2026-07-17'
   wechat_mp:
     status: resolve
     lookup_query: Bottega Veneta
+    note: wechat_search returned no items (2026-07-17) — resolve via the Console
+      when the endpoint recovers.
   wechat_channels:
     status: resolve
     lookup_query: Bottega Veneta
@@ -270,17 +320,30 @@ brands:
   display_name: CARTIER
   order: 10
   weibo:
-    status: resolve
+    status: verified
     lookup_query: Cartier 卡地亚
+    screen_name: 卡地亚
+    uid: '2142012291'
+    vanity_url: https://weibo.com/cartierchina
+    note: 蓝V "卡地亚品牌官方账号", 2.1M followers.
+    verified_date: '2026-07-17'
   douyin:
-    status: resolve
+    status: verified
     lookup_query: Cartier 卡地亚
+    uid: MS4wLjABAAAAw4ICHsI6UaBg9-pw49gX-wHV3VXNiEoxT4Ca2sH9z3_HrkUb-48vd5b41GW0sg6N
+    screen_name: 卡地亚Cartier
+    note: 1.77M followers.
+    verified_date: '2026-07-17'
   xhs:
     status: resolve
     lookup_query: Cartier 卡地亚
+    note: no official account surfaced in search 2026-07-17 (only boutique /
+      reseller accounts).
   wechat_mp:
     status: resolve
     lookup_query: 卡地亚
+    note: wechat_search returned no items (2026-07-17) — resolve via the Console
+      when the endpoint recovers.
   wechat_channels:
     status: resolve
     lookup_query: 卡地亚
@@ -289,18 +352,30 @@ brands:
   display_name: HERMÈS
   order: 11
   weibo:
-    status: resolve
+    status: verified
     lookup_query: Hermes 爱马仕
-    note: Exclude 爱马仕美妆 (Hermès Beauty) if it surfaces as a separate account.
+    screen_name: HERMES
+    uid: '5223423947'
+    vanity_url: https://weibo.com/hermesofficial
+    note: 蓝V "爱马仕中国", 1.45M followers. Exclude 爱马仕美妆 (Hermès Beauty)
+      if it surfaces as a separate account.
+    verified_date: '2026-07-17'
   douyin:
     status: resolve
     lookup_query: Hermes 爱马仕
+    note: no official account surfaced in search 2026-07-17 (top hits are
+      resellers).
   xhs:
-    status: resolve
+    status: verified
     lookup_query: 爱马仕
+    uid: 5cd43904000000001203ef1c
+    screen_name: HERMES
+    verified_date: '2026-07-17'
   wechat_mp:
     status: resolve
     lookup_query: 爱马仕
+    note: wechat_search returned no items (2026-07-17) — resolve via the Console
+      when the endpoint recovers.
   wechat_channels:
     status: resolve
     lookup_query: 爱马仕
@@ -309,18 +384,32 @@ brands:
   display_name: BVLGARI
   order: 12
   weibo:
-    status: resolve
+    status: verified
     lookup_query: BVLGARI 宝格丽
-    note: Exclude BVLGARI fragrance/hotel accounts if they surface separately.
+    screen_name: BVLGARI宝格丽
+    uid: '2090537982'
+    vanity_url: https://weibo.com/bulgari
+    note: 蓝V "宝格丽BVLGARI", 2.95M followers. Exclude BVLGARI宝格丽香氛
+      (fragrance, 932k) and 宝格丽酒店及度假村 (hotels) — separate 蓝V accounts.
+    verified_date: '2026-07-17'
   douyin:
-    status: resolve
+    status: verified
     lookup_query: BVLGARI 宝格丽
+    uid: MS4wLjABAAAA_RA0Q2GcIb095xnpczn-ikgUzVj6GMfUU-SGIRS186s
+    screen_name: BVLGARI宝格丽
+    note: 400k followers; the 香氛 fragrance account is excluded.
+    verified_date: '2026-07-17'
   xhs:
-    status: resolve
+    status: verified
     lookup_query: 宝格丽
+    uid: 5ea953c20000000001009739
+    screen_name: BVLGARI宝格丽
+    verified_date: '2026-07-17'
   wechat_mp:
     status: resolve
     lookup_query: 宝格丽
+    note: wechat_search returned no items (2026-07-17) — resolve via the Console
+      when the endpoint recovers.
   wechat_channels:
     status: resolve
     lookup_query: 宝格丽

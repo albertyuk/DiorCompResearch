@@ -623,6 +623,26 @@ each is easy to revisit.
     wordmark label until a logo PNG lands in template/logos/ (+ optional
     LOGO_SIZES entry).
 
+78. **New-brand accounts resolved on owner request (2026-07-17)**: the
+    owner asked for the account info to be filled in, so the bindings were
+    made via the app's own Phase-R tooling — TikHub user search plus a
+    weibo user-info check per candidate (蓝V corporate verification record,
+    real follower count, vanity domain). All 7 Weibo accounts are verified
+    bindings (e.g. Prada普拉达 ← 普拉达时装商业（上海）有限公司 4.7M;
+    卡地亚 ← 卡地亚品牌官方账号 2.1M; HERMES ← 爱马仕中国 1.45M;
+    BVLGARI宝格丽 2.95M). Douyin/XHS were bound only where the official
+    account was unambiguous (name + scale); left status=resolve with a
+    dated note otherwise: valentino/bottega/hermes douyin (no official
+    surfaced — only beauty/reseller accounts) and cartier xhs. ALL
+    wechat_mp/wechat_channels stay resolve — wechat_search returned zero
+    items on 2026-07-17 (endpoint regression; channels need in-app
+    confirmation anyway). Fixed alongside: _candidates_weibo now parses
+    the live weibo_user_search shape (data.parsed_data.users[] with
+    uid/name/fans) with the old shape as first preference — the Console's
+    weibo Resolve flow had silently broken when TikHub changed the schema.
+    Note the parsed fans field is a truncated display number (78 ≡ 78.8万);
+    the user-info endpoint has real counts.
+
 ## Testing
 
 25. The ~15 caption fixtures test the deterministic layers (@-tag extraction,

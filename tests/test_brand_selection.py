@@ -108,15 +108,23 @@ def test_start_with_a_subset_limits_ingest_and_filter(client, tmp_db,
     assert got["filter_keys"] == ["lv", "gucci"]
 
 
-def test_bare_start_searches_every_ready_brand(client, tmp_db, monkeypatch):
-    """No checkboxes posted (or the default form state) = every brand whose
-    Weibo account is confirmed. Newly added, unconfirmed brands never block
-    a search unless explicitly ticked."""
+def _fake_blockers(monkeypatch, keys):
+    """Simulate brands whose Weibo account still needs confirmation."""
+    import mm.console as console_mod
+    monkeypatch.setattr(
+        console_mod, "weibo_blockers",
+        lambda cfg: [{"brand": k, "brand_display": k.upper(),
+                      "lookup_query": k} for k in keys])
+
+
+def test_bare_start_skips_brands_awaiting_confirmation(client, tmp_db,
+                                                       monkeypatch):
+    """No checkboxes posted = every brand whose Weibo account is confirmed.
+    A brand still awaiting confirmation never blocks a search unless
+    explicitly ticked."""
     from mm.config import BrandsConfig
-    from mm.resolve import weibo_blockers
-    cfg = BrandsConfig.load()
-    blocked = {b["brand"] for b in weibo_blockers(cfg)}
-    ready = [b.key for b in cfg.brands if b.key not in blocked]
+    _fake_blockers(monkeypatch, ["prada"])
+    ready = [b.key for b in BrandsConfig.load().brands if b.key != "prada"]
     got = {}
     _wire_capture(monkeypatch, got)
     r = client.post("/runs/2026-07/start", follow_redirects=False)
@@ -125,8 +133,20 @@ def test_bare_start_searches_every_ready_brand(client, tmp_db, monkeypatch):
     assert got["ingest_keys"] == ready
 
 
+def test_bare_start_with_everything_ready_means_no_restriction(client, tmp_db,
+                                                               monkeypatch):
+    _fake_blockers(monkeypatch, [])
+    got = {}
+    _wire_capture(monkeypatch, got)
+    r = client.post("/runs/2026-10/start", follow_redirects=False)
+    assert r.status_code == 303 and "msg=" not in r.headers["location"]
+    _wait(got, "filter_keys")
+    assert got["ingest_keys"] is None
+
+
 def test_ticking_an_unconfirmed_brand_blocks_with_guidance(client, tmp_db,
                                                            monkeypatch):
+    _fake_blockers(monkeypatch, ["prada"])
     got = {}
     _wire_capture(monkeypatch, got)
     r = client.post("/runs/2026-09/start", data={"brands": ["lv", "prada"]},

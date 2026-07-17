@@ -24,14 +24,21 @@ def _candidates_weibo(client: TikHubClient, query: str, conn=None) -> list[dict]
     data = client.call("weibo_user_search", conn=conn, query=query, page=1,
                        auth="org_vip")
     users = normalize.find_post_list(data, {"screen_name", "followers_count"})
+    if not users:
+        # live shape (2026-07): data.parsed_data.users[] carries uid/name/
+        # fans/profile_url (fans is the truncated display number — the
+        # user-info endpoint has the real count, checked at confirmation)
+        users = normalize.find_post_list(data, {"uid", "profile_url"})
     out = []
     for u in users[:8]:
+        uid = u.get("idstr") or u.get("id") or u.get("uid") or ""
         out.append({
-            "uid": str(u.get("idstr") or u.get("id") or ""),
-            "name": u.get("screen_name"),
-            "followers": u.get("followers_count"),
-            "verified_reason": u.get("verified_reason") or u.get("description"),
-            "profile_url": f"https://weibo.com/u/{u.get('idstr') or u.get('id')}",
+            "uid": str(uid),
+            "name": u.get("screen_name") or u.get("name"),
+            "followers": u.get("followers_count") or u.get("fans"),
+            "verified_reason": u.get("verified_reason")
+                               or u.get("description") or "",
+            "profile_url": f"https://weibo.com/u/{uid}",
         })
     return [c for c in out if c["uid"]]
 
