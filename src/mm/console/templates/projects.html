@@ -16,15 +16,15 @@
   <form method="post" action="/review/{{ month }}/render"
         onsubmit="return confirm('{{ T("Confirm projects and render the deck?") }}')">
     <select name="visuals" style="width:auto; display:inline-block">
-      <option value="live" {% if default_visuals == 'live' %}selected{% endif %}>{{ T("visuals: live screenshots (weibo) + cards") }}</option>
-      <option value="card" {% if default_visuals == 'card' %}selected{% endif %}>{{ T("visuals: cards only") }}</option>
+      <option value="live" {% if default_visuals == 'live' %}selected{% endif %}>{{ T("image-less posts: live weibo screenshot") }}</option>
+      <option value="card" {% if default_visuals == 'card' %}selected{% endif %}>{{ T("image-less posts: post card") }}</option>
     </select>
     <button type="submit" class="primary">{{ T("Confirm & render →") }}</button>
   </form>
 {% endcall %}
 {{ guide("projects", [
   T("Check each project's grouping — read Why these posts are grouped. Fix mistakes by dragging the ⠿ handles (merge two projects, or move a single post), with ✕ remove, or with Ungroup."),
-  T("Tick the images that should appear on the slide (click any image to preview it full-size; drag an HQ original onto the dashed box). Nothing ticked = an automatic post card is used."),
+  T("Tick the images that should appear on the slide (click any image to preview it full-size; drag an HQ original onto the dashed box). Nothing ticked = the post's first photo is used, exactly as you see it in the preview — never a screenshot of the whole post."),
   T("Edit the title, dates, description line, celebs and platform ticks, then press Save on that project."),
   T("Review the Orphans at the bottom — keeps come first. Drag one onto a project, Promote it to its own project, or Ignore it."),
   T("Press Confirm & render and watch the progress bar."),

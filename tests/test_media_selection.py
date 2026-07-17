@@ -173,6 +173,62 @@ def test_project_visuals_prefer_selected_images(tmp_db, tmp_path):
     assert v1["label_name"] == "WANG YIBO" and v2["label_name"] is None
 
 
+def test_unticked_posts_render_their_own_photo_not_a_card(tmp_db, tmp_path):
+    """Owner report: decks embedded whole-post cards (caption baked in).
+    Nothing ticked now means the post's FIRST photo — identical to the
+    review-2 preview; cards survive only for posts with no image file."""
+    from mm.pipeline import _project_visuals
+    p1, p2 = tmp_path / "p1.jpg", tmp_path / "p2.jpg"
+    for f in (p1, p2):
+        f.write_bytes(b"\xff\xd8\xff")
+    _seed(tmp_db, post_id="weibo:U1", media=[
+        {"kind": "image", "local_path": str(p1)},
+        {"kind": "image", "local_path": str(p2)}])
+    with tmp_db.get_engine().begin() as conn:
+        pid = conn.execute(tmp_db.projects.insert().values(
+            month="2026-06", brand="lv", title="T2", status="confirmed",
+            assets="PHOTO", celebs="[]",
+            hero_media="[]")).inserted_primary_key[0]
+        conn.execute(tmp_db.project_posts.insert().values(
+            project_id=pid, post_id="weibo:U1"))
+
+    class NeverCardFactory:
+        def visual_for_post(self, brand, post):
+            raise AssertionError("no card may render when the post has photos")
+
+    with tmp_db.get_engine().connect() as conn:
+        vis = _project_visuals(conn, NeverCardFactory(), "lv",
+                               {"id": pid, "assets": "PHOTO"}, [])
+    assert [v["image"] for v in vis] == [str(p1)]    # first photo, raw
+    assert vis[0]["kind"] == "photo"
+
+
+def test_video_project_uses_raw_cover_not_card(tmp_db, tmp_path):
+    from mm.pipeline import _project_visuals
+    cover = tmp_path / "cover.jpg"
+    cover.write_bytes(b"\xff\xd8\xff")
+    _seed(tmp_db, post_id="weibo:U3", media=[
+        {"kind": "video_cover", "local_path": str(cover)}])
+    with tmp_db.get_engine().begin() as conn:
+        pid = conn.execute(tmp_db.projects.insert().values(
+            month="2026-06", brand="lv", title="T3", status="confirmed",
+            assets="VIDEO", celebs="[]",
+            hero_media="[]")).inserted_primary_key[0]
+        conn.execute(tmp_db.project_posts.insert().values(
+            project_id=pid, post_id="weibo:U3"))
+
+    class NeverCardFactory:
+        def visual_for_post(self, brand, post):
+            raise AssertionError("no card may render when a cover exists")
+
+    with tmp_db.get_engine().connect() as conn:
+        vis = _project_visuals(conn, NeverCardFactory(), "lv",
+                               {"id": pid, "assets": "VIDEO"}, [])
+    assert [v["image"] for v in vis] == [str(cover)]
+    assert vis[0]["kind"] == "video_still"
+    assert vis[0]["link"] == "https://weibo.com/1/x"  # stills stay clickable
+
+
 # ── owner font specs ─────────────────────────────────────────────────────────
 
 def test_xlsx_font_is_futura_lt_bt_11(tmp_path):

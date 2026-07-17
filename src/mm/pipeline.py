@@ -394,22 +394,32 @@ def _project_visuals(conn, factory, brand_key: str, project: dict,
             if c.get("name_cn") and c["name_cn"] in caption:
                 label_top, label_name = c["relation_display"], c["display"]
                 break
-        # human-selected images (review checkboxes / HQ uploads) always win
-        # over the automatic card/screenshot; label goes on the first one
-        chosen = [m for m in json.loads(post.get("media") or "[]")
+        # human-selected images (review checkboxes / HQ uploads) always win;
+        # label goes on the first one
+        media_list = json.loads(post.get("media") or "[]")
+        chosen = [m for m in media_list
                   if m.get("selected") and m.get("local_path")
                   and Path(m["local_path"]).exists()]
         images = [Path(m["local_path"]) for m in chosen]
         if not images:
             # cross-platform members (role=match) only render what a human
-            # ticked — auto cards are built from Weibo posts alone
+            # ticked — automatic visuals come from Weibo posts alone
             if post.get("platform") != "weibo":
                 continue
+
+            def first(kind):
+                return next((Path(m["local_path"]) for m in media_list
+                             if m.get("kind") == kind and m.get("local_path")
+                             and Path(m["local_path"]).exists()), None)
+            # nothing ticked → the post's OWN photo (what the review-2
+            # lightbox shows), never a whole-post card with the caption
+            # baked in; the card/live screenshot survives only as the last
+            # resort for posts with no usable image file at all
             if is_video:
-                img = factory.video_cover_for_post(brand_key, post) \
-                      or factory.visual_for_post(brand_key, post)
+                img = first("video_cover") or first("image")
             else:
-                img = factory.visual_for_post(brand_key, post)
+                img = first("image") or first("video_cover")
+            img = img or factory.visual_for_post(brand_key, post)
             if img is None:
                 continue
             images = [img]

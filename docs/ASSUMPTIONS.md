@@ -525,6 +525,18 @@ each is easy to revisit.
     Projects names the weibo post it was verified against with confidence
     and reason ("placed by a reviewer" when a human attached it by hand).
 
+70. **Slides embed the post's PHOTOS, not whole-post captures (owner
+    report: decks showed the entire weibo post, caption included)**: when
+    nothing is ticked at review #2, the renderer now uses the post's first
+    downloaded photo — byte-identical to what the review-2 lightbox shows —
+    instead of a card/live screenshot of the whole post. Video projects use
+    the raw video cover (still clickable). The whole-post card / live
+    screenshot / pushed laptop screenshot survives ONLY as the fallback for
+    posts with no usable image file, and the review-2 visuals dropdown now
+    says exactly that ("image-less posts: live weibo screenshot / post
+    card"). Ticking images keeps overriding everything, as before. This
+    supersedes #49's "nothing ticked = automatic post card".
+
 ## Testing
 
 25. The ~15 caption fixtures test the deterministic layers (@-tag extraction,

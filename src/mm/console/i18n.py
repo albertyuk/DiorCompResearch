@@ -172,8 +172,8 @@ ZH: dict[str, str] = {
         "高清原图）。拖动项目的 ⠿ 手柄到另一个项目上可将两者合并；拖动某条帖子的"
         " ⠿ 手柄可以只移动这一条。明星的姓名、代言关系和照片库统一在",
     "Celebs page": "「明星」页管理",
-    "visuals: live screenshots (weibo) + cards": "配图：微博实拍截图 + 卡片",
-    "visuals: cards only": "配图：仅卡片",
+    "image-less posts: live weibo screenshot": "无图帖子的兜底：微博实拍截图",
+    "image-less posts: post card": "无图帖子的兜底：帖子卡片",
     "Confirm & render →": "确认并生成报告 →",
     "Confirm projects and render the deck?": "确认所有项目并生成报告？",
     "posts confirmed by {who} · {t}": "帖子已由 {who} 确认 · {t}",
@@ -492,9 +492,11 @@ ZH: dict[str, str] = {
         "（合并两个项目，或移动单条帖子），也可以用「✕ 移出」或「拆分该组」。",
     ("Tick the images that should appear on the slide (click any image to "
      "preview it full-size; drag an HQ original onto the dashed box). "
-     "Nothing ticked = an automatic post card is used."):
+     "Nothing ticked = the post's first photo is used, exactly as you see "
+     "it in the preview — never a screenshot of the whole post."):
         "勾选要放进报告的图片（点击可看大图；高清原图可直接拖入虚线框）。"
-        "一张都不勾时，报告会使用自动生成的帖子卡片。",
+        "一张都不勾时，报告会使用该帖子的第一张照片——和预览里看到的一模一样，"
+        "不会截取整条帖子。",
     ("Edit the title, dates, description line, celebs and platform ticks, "
      "then press Save on that project."):
         "修改标题、日期、项目简介、参与明星和发布平台后，记得点该项目的「保存」。",
