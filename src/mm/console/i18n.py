@@ -518,10 +518,11 @@ ZH: dict[str, str] = {
         "任务会停在「审核 · 帖子」，等你审核完并确认后才继续后面的步骤。"
         "「归档并重置」会把整个月的结果封存进归档，之后可以重新搜索这个月。",
     # posts
-    ("Work brand by brand. Greyed rows are dropped; everything else goes "
-     "forward. Posts flagged needs review are listed first — decide those."):
-        "按品牌逐一检查。灰色的帖子是已剔除的，其余都会进入后续步骤。"
-        "标着「待人工确认」的排在最前，请优先处理。",
+    ("Pick a brand tab (⚠ counts posts flagged needs review — they're "
+     "listed first; decide those). Greyed rows are dropped; everything "
+     "else goes forward."):
+        "先选一个品牌标签（⚠ 后的数字是「待人工确认」的帖子数——它们排在最前，"
+        "请优先处理）。灰色的帖子是已剔除的，其余都会进入后续步骤。",
     ("Click any thumbnail to preview the images full-size. Open why? to see "
      "the AI's reasoning for each verdict."):
         "点击缩略图可查看大图；点开「判定依据」可以看到 AI 为什么这样判。",

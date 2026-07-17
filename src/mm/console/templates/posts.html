@@ -20,14 +20,26 @@
   </form>
 {% endcall %}
 {{ guide("posts", [
-  T("Work brand by brand. Greyed rows are dropped; everything else goes forward. Posts flagged needs review are listed first — decide those."),
+  T("Pick a brand tab (⚠ counts posts flagged needs review — they're listed first; decide those). Greyed rows are dropped; everything else goes forward."),
   T("Click any thumbnail to preview the images full-size. Open why? to see the AI's reasoning for each verdict."),
   T("Use Delete / Keep / Restore to overrule the filter. Every correction is remembered and makes the filter more accurate next month (see Learning)."),
   T("When the keeps look right, press Confirm & continue."),
 ], T("Cross-platform verification (Douyin / RED / WeChat) and grouping into projects run automatically — usually a few minutes. When the run pauses again, continue on Review · Projects. If you change decisions here afterwards, press Confirm & continue again to regroup.")) }}
 <hr class="rule">
 
+{# one tab per brand — same pattern as review #2 and the grouping board #}
+<div class="board-tabs">
+  {% for g in groups %}
+  {% set nr = g.posts | selectattr("needs_review") | list | length %}
+  <button class="ghost board-tab" data-brand="{{ g.brand.key }}">
+    {{ g.brand.display_name }}
+    <span class="micro">{{ g.posts|length }}{% if nr %} · ⚠ {{ nr }}{% endif %}</span>
+  </button>
+  {% endfor %}
+</div>
+
 {% for g in groups %}
+<div data-brand-pane="{{ g.brand.key }}" hidden>
 <h2>{{ g.brand.display_name }} <span class="micro">— {{ g.posts|length }} {{ T("weibo posts") }}</span></h2>
 {% if not g.posts %}<p class="note">{{ T("Nothing ingested.") }}</p>{% else %}
 <table class="grid">
@@ -105,10 +117,29 @@
   {% endfor %}
 </table>
 {% endif %}
+</div>
 {% endfor %}
 {% endblock %}
 
 {% block scripts %}
+<script>
+// brand tabs — same pattern as review #2 / the board, remembered per month
+const postTabs = document.querySelectorAll('.board-tab');
+function showBrandPane(key) {
+  document.querySelectorAll('[data-brand-pane]').forEach(p =>
+    p.hidden = p.dataset.brandPane !== key);
+  postTabs.forEach(t => t.classList.toggle('on', t.dataset.brand === key));
+  localStorage.setItem('mm_posts_brand_{{ month }}', key);
+}
+postTabs.forEach(t =>
+  t.addEventListener('click', () => showBrandPane(t.dataset.brand)));
+(function () {
+  const stored = localStorage.getItem('mm_posts_brand_{{ month }}');
+  const valid = [...postTabs].some(t => t.dataset.brand === stored);
+  showBrandPane(valid ? stored
+                      : (postTabs[0] && postTabs[0].dataset.brand));
+})();
+</script>
 {% if busy %}
 <script>
 // while a run is working on this month, narrate it and reload when it pauses

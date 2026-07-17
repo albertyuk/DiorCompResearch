@@ -651,6 +651,9 @@ each is easy to revisit.
     (localStorage, invalid stored keys fall back to the first tab). All
     content still renders server-side in hidden panes, so drag & drop, the
     Move to… pickers, MM_PROJECTS and scroll restoration are untouched.
+    Review #1 (posts) got the same treatment on a follow-up request — one
+    tab per brand with a post-count badge plus a ⚠ needs-review count,
+    remembered per month under its own key.
 
 ## Testing
 

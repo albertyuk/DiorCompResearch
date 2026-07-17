@@ -123,7 +123,7 @@ def test_every_page_carries_a_guide(client, tmp_db):
     client.post("/lang", data={"lang": "zh", "next": "/"})
     page = client.get("/review/2026-06/posts").text
     assert "操作指南" in page and "后续流程" in page
-    assert "按品牌逐一检查" in page
+    assert "先选一个品牌标签" in page
     client.post("/lang", data={"lang": "en", "next": "/"})
 
 
@@ -169,6 +169,19 @@ def test_every_page_shares_one_anatomy(client, tmp_db):
     learning = client.get("/learning").text
     assert 'class="empty"' in learning
     assert "every correction lands here" in learning
+
+
+def test_posts_review_has_brand_tabs(client, tmp_db):
+    """Review #1 is organized by brand tab like review #2 and the board —
+    every brand gets a tab and a pane; the tab wiring is on the page."""
+    from mm.config import BrandsConfig
+    _seed_month(tmp_db)
+    page = client.get("/review/2026-06/posts").text
+    for b in BrandsConfig.load().brands:
+        assert f'class="ghost board-tab" data-brand="{b.key}"' in page, b.key
+        assert f'data-brand-pane="{b.key}"' in page, b.key
+    assert "mm_posts_brand_2026-06" in page        # remembered per month
+    assert "showBrandPane(" in page
 
 
 def test_first_visit_welcome_card_explains_the_workflow(client, tmp_db):
