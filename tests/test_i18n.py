@@ -127,6 +127,24 @@ def test_every_page_carries_a_guide(client, tmp_db):
     client.post("/lang", data={"lang": "en", "next": "/"})
 
 
+def test_review_tabs_always_in_nav(client, tmp_db):
+    """The review tabs must not appear only on review pages — every page
+    links them to the latest run's month (default month when none exist)."""
+    _seed_month(tmp_db)
+    for path in ("/", "/decks", "/celebs", "/archives", "/learning"):
+        page = client.get(path).text
+        assert '/review/2026-06/posts"' in page, path
+        assert '/review/2026-06/projects"' in page, path
+        assert '/review/2026-06/board"' in page, path
+    # a month-scoped page keeps linking to its OWN month
+    with tmp_db.get_engine().begin() as conn:
+        tmp_db.get_run(conn, "2026-05")
+    page = client.get("/review/2026-05/posts").text
+    assert '/review/2026-05/projects"' in page
+    page = client.get("/decks").text                # latest run wins elsewhere
+    assert '/review/2026-06/posts"' in page
+
+
 def test_login_page_translates_too(tmp_db, monkeypatch):
     monkeypatch.setenv("CONSOLE_PASSPHRASE", PASS)
     monkeypatch.setenv("MM_SECRET_KEY", "f" * 64)

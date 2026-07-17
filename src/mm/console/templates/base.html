@@ -201,11 +201,14 @@ img.zoom { cursor:zoom-in; }
   </span>
   {% endif %}
   <nav>
+    {# review tabs are ALWAYS visible: month-scoped pages link to their own
+       month, every other page links to the latest run's month #}
+    {% set nav_month = month if (month is defined and month) else NAV_MONTH() %}
     <a href="/" {% if active == 'runs' %}class="active"{% endif %}>{{ T("Runs") }}</a>
-    {% if month is defined and month %}
-    <a href="/review/{{ month }}/posts" {% if active == 'posts' %}class="active"{% endif %}>{{ T("Review · Posts") }}</a>
-    <a href="/review/{{ month }}/projects" {% if active == 'projects' %}class="active"{% endif %}>{{ T("Review · Projects") }}</a>
-    <a href="/review/{{ month }}/board" {% if active == 'board' %}class="active"{% endif %}>{{ T("Grouping") }}</a>
+    {% if nav_month %}
+    <a href="/review/{{ nav_month }}/posts" {% if active == 'posts' %}class="active"{% endif %}>{{ T("Review · Posts") }}</a>
+    <a href="/review/{{ nav_month }}/projects" {% if active == 'projects' %}class="active"{% endif %}>{{ T("Review · Projects") }}</a>
+    <a href="/review/{{ nav_month }}/board" {% if active == 'board' %}class="active"{% endif %}>{{ T("Grouping") }}</a>
     {% endif %}
     <a href="/decks" {% if active == 'decks' %}class="active"{% endif %}>{{ T("Decks") }}</a>
     <a href="/celebs" {% if active == 'celebs' %}class="active"{% endif %}>{{ T("Celebs") }}</a>

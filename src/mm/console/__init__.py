@@ -29,6 +29,24 @@ TEMPLATES = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 from .i18n import T as _T                                    # noqa: E402
 TEMPLATES.env.globals["T"] = _T
 
+
+def _nav_month() -> str | None:
+    """Month the nav's review tabs link to when the current page is not
+    month-scoped (Runs, Decks, Celebs, …) — the latest run, else the default
+    reporting month. Called lazily by base.html only on such pages."""
+    from ..dates import previous_month
+    try:
+        with db.get_engine().connect() as conn:
+            row = conn.execute(
+                select(db.runs.c.month)
+                .order_by(db.runs.c.month.desc()).limit(1)).first()
+        return row[0] if row else previous_month()
+    except Exception:
+        return None
+
+
+TEMPLATES.env.globals["NAV_MONTH"] = _nav_month
+
 # background task registry: {(month, phase): {"state": .., "detail": ..}}
 TASKS: dict = {}
 # posts.media is a JSON blob edited read-modify-write by media_select and
