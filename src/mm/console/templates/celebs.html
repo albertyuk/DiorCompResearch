@@ -94,6 +94,7 @@ function celebUpload(celebId, fileList) {
   fetch(`/celebs/${celebId}/images/upload`, {method: 'POST', body: fd})
     .then(async r => {
       if (!r.ok) throw new Error((await r.json()).error || r.status);
+      mmSaveScroll();
       location.reload();
     })
     .catch(err => mmToast({{ T('Upload failed: ') | tojson }} + err.message, 'err'));
@@ -124,6 +125,7 @@ document.querySelectorAll('.celeb-img-del').forEach(btn => {
         body: `idx=${btn.dataset.idx}`,
       });
       if (!r.ok) throw new Error((await r.json()).error || r.status);
+      mmSaveScroll();
       location.reload();
     } catch (err) { mmToast({{ T('Delete failed: ') | tojson }} + err.message, 'err'); }
   });

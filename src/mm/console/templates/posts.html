@@ -117,7 +117,7 @@ async function watchRun() {
     const r = await fetch(`/api/runs/{{ month }}/status`);
     const j = await r.json();
     const live = Object.entries(j.tasks || {}).filter(([, v]) => v.state === 'running');
-    if (!live.length) { location.reload(); return; }
+    if (!live.length) { mmSaveScroll(); location.reload(); return; }
     const d = live.map(([, v]) => v.detail).filter(Boolean).join(' · ');
     document.getElementById('busy-detail').textContent =
       d || {{ T('working…') | tojson }};

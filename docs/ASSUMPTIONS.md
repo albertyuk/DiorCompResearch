@@ -574,6 +574,17 @@ each is easy to revisit.
     Rows written before this change keep their old UTC strings — history
     is not rewritten.
 
+74. **Review actions keep the scroll position (owner report: every change
+    snapped the page back to the top)**: the console's save-then-reload
+    pattern (form POST → redirect and fetch → location.reload()) now
+    stashes the window scroll — plus the inner offsets of the board's
+    [data-scroll-keep] panes — in sessionStorage keyed by path right before
+    any submit (skipping cancelled confirm()s) or scripted reload, and the
+    next load of the same path restores it (applied at parse AND after the
+    load event so lazy images can't shift it away). Entries are single-use
+    with a 90s TTL, so normal navigation never jumps. Side bonus: the
+    language/theme toggles keep the reading position too.
+
 ## Testing
 
 25. The ~15 caption fixtures test the deterministic layers (@-tag extraction,

@@ -434,6 +434,7 @@ function mmOpenPicker(title, options) {
           headers: {'Content-Type': 'application/x-www-form-urlencoded'},
           body: o.body});
         if (!r.ok) throw new Error((await r.json()).error || r.status);
+        mmSaveScroll();
         location.reload();
       } catch (err) { mmToast(MM_T.moveFailed + err.message, 'err'); }
     });
@@ -609,6 +610,41 @@ function mmProgress(el, tasks) {
 {% block content %}{% endblock %}
 </main>
 <script>
+/* stay where you were: the console's save-then-reload pattern (form POSTs
+   and fetch+location.reload()) used to snap the page back to the top.
+   Before any submit or scripted reload we stash the window scroll — plus
+   the inner offset of any [data-scroll-keep] pane — for THIS path, and the
+   next load of the same path restores it. Entries are single-use and
+   expire quickly, so ordinary navigation never jumps. */
+function mmSaveScroll() {
+  const panes = {};
+  document.querySelectorAll('[data-scroll-keep]').forEach(el => {
+    panes[el.dataset.scrollKeep] = el.scrollTop;
+  });
+  sessionStorage.setItem('mm_scroll_' + location.pathname,
+    JSON.stringify({y: window.scrollY, panes, t: Date.now()}));
+}
+document.addEventListener('submit', e => {
+  if (!e.defaultPrevented) mmSaveScroll();   // skip cancelled confirm()s
+});
+(function () {
+  const key = 'mm_scroll_' + location.pathname;
+  const raw = sessionStorage.getItem(key);
+  if (!raw) return;
+  sessionStorage.removeItem(key);            // single use
+  let s;
+  try { s = JSON.parse(raw); } catch (e) { return; }
+  if (!s || Date.now() - (s.t || 0) > 90000) return;
+  const apply = () => {
+    window.scrollTo(0, s.y || 0);
+    document.querySelectorAll('[data-scroll-keep]').forEach(el => {
+      const v = (s.panes || {})[el.dataset.scrollKeep];
+      if (v !== undefined) el.scrollTop = v;
+    });
+  };
+  apply();                                   // now (DOM is parsed)…
+  window.addEventListener('load', apply);    // …and after images/scripts settle
+})();
 // guides start open; a user who collapses one keeps it collapsed (per page)
 document.querySelectorAll('details.guide').forEach(g => {
   const k = 'mm_guide_' + g.dataset.guide;

@@ -157,6 +157,12 @@ def test_every_page_shares_one_anatomy(client, tmp_db):
         assert page.count('class="page-title"') == 1, path
         assert 'id="mmtoast"' in page, path
         assert 'class="nav-sep"' in page, path
+        # saves/restores the reading position across the reload-after-save
+        # pattern so review actions never snap the page back to the top
+        assert "function mmSaveScroll" in page, path
+    board = client.get("/review/2026-06/board").text
+    assert 'data-scroll-keep="proj-' in board    # inner panes restore too
+    assert 'data-scroll-keep="pool-' in board
     archives = client.get("/archives").text
     assert 'class="empty"' in archives
     assert "move a finished month here" in archives
