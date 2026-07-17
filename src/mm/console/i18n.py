@@ -501,6 +501,9 @@ ZH: dict[str, str] = {
         "「开始搜索」。系统会抓取所选品牌该月发布的全部微博，再由 AI 初步判定"
         "每条帖子是保留还是剔除。",
     "brands to search:": "搜索品牌：",
+    ("confirm this brand’s Weibo account in the Accounts list below before "
+     "it can be searched"):
+        "该品牌的微博账号尚未确认——请先在下方账号列表中确认，才能搜索",
     ("While it runs you'll see RUNNING, a progress bar and the activity log "
      "under the month. Stop pauses at the next safe point; Start month "
      "resumes exactly where it left off."):

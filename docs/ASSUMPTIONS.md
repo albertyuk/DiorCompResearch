@@ -606,6 +606,23 @@ each is easy to revisit.
     brand. Re-running Start with more brands ticked adds them (ingest is
     idempotent per brand).
 
+77. **Seven brands added + a 10-brand concurrency cap (owner request)**:
+    PRADA, LOEWE, VALENTINO, BOTTEGA VENETA, CARTIER, HERMÈS, BVLGARI join
+    brands.yaml (12 total) with status=resolve and CN+Latin lookup queries —
+    each needs its one-time Weibo confirmation in the Accounts list before
+    it can be searched (Phase R human-confirmation rule; beauty/fragrance
+    side-accounts flagged in notes to exclude). The Runs form default-ticks
+    only READY brands (⚠ marks unconfirmed ones), and a bare Start (no
+    checkboxes) searches every ready brand, so a new brand never blocks the
+    next run unless explicitly ticked. BRAND_WORKERS=10 (MM_BRAND_WORKERS
+    overrides) caps concurrent brand processing in ingest / cross-check /
+    enrichment — each brand thread fans out its own TikHub + LLM calls, so
+    one-thread-per-brand would blow through rate limits past ten. New brand
+    Latin tokens joined the cross-check keyword stoplist; new brands have
+    no logo files yet, so their deck slides render the display name as a
+    wordmark label until a logo PNG lands in template/logos/ (+ optional
+    LOGO_SIZES entry).
+
 ## Testing
 
 25. The ~15 caption fixtures test the deterministic layers (@-tag extraction,

@@ -65,7 +65,9 @@ def _keywords(text: str) -> set[str]:
     """Latin words plus CJK bigrams (whole CJK runs are punctuation-delimited
     phrases and almost never match across platforms)."""
     stop = {"the", "and", "with", "for", "chanel", "gucci", "fendi", "tiffany",
-            "louis", "vuitton", "weibo", "video", "photo", "品牌", "全新",
+            "louis", "vuitton", "prada", "loewe", "valentino", "bottega",
+            "veneta", "cartier", "hermes", "bvlgari",
+            "weibo", "video", "photo", "品牌", "全新",
             "系列", "查看", "点击", "官方"}
     words = {w.lower() for w in _LATIN_RE.findall(text or "")}
     for run in _CJK_RE.findall(text or ""):

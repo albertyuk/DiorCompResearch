@@ -507,6 +507,9 @@ def create_app() -> FastAPI:
         return TEMPLATES.TemplateResponse(request, "runs.html", {
             "months": months, "default_month": previous_month(),
             "brands": cfg.brands,
+            # brands whose Weibo account still needs confirming start
+            # unticked, so a fresh brand never blocks the next search
+            "blocked_brands": {b["brand"] for b in weibo_blockers(cfg)},
             "unresolved": unresolved_accounts(cfg), "msg": msg, "tasks": TASKS})
 
     @app.get("/review/{month}", response_class=HTMLResponse)
@@ -779,13 +782,22 @@ def create_app() -> FastAPI:
         from urllib.parse import quote
         cfg = BrandsConfig.load()
         known = [b.key for b in cfg.brands]
-        picked = [k for k in brands if k in known]
-        # no boxes rendered/ticked = search everything; a full selection is
-        # the same as no selection
-        keys = picked if picked and len(picked) < len(known) else None
-        if not picked and brands:
-            msg = quote("No valid brand selected — tick at least one brand.")
-            return RedirectResponse(f"/?msg={msg}", status_code=303)
+        blocked = {b["brand"] for b in weibo_blockers(cfg)}
+        ready = [k for k in known if k not in blocked]
+        if brands:
+            # explicit selection from the form checkboxes
+            picked = [k for k in brands if k in known]
+            if not picked:
+                msg = quote("No valid brand selected — tick at least one "
+                            "brand.")
+                return RedirectResponse(f"/?msg={msg}", status_code=303)
+            keys = picked if len(picked) < len(known) else None
+            narrowed = keys is not None
+        else:
+            # bare POST (no checkboxes submitted): every ready brand — a
+            # newly added, not-yet-confirmed brand must never block a search
+            keys = None if len(ready) == len(known) else ready
+            narrowed = False
         # only the brands being searched need a verified Weibo account
         blockers = [b for b in weibo_blockers(cfg)
                     if keys is None or b["brand"] in keys]
@@ -794,9 +806,13 @@ def create_app() -> FastAPI:
             msg = quote(f"Can't start {month} yet — confirm the Weibo account "
                         f"for {names} in the list below, then Start again.")
             return RedirectResponse(f"/?msg={msg}", status_code=303)
+        if not keys and not ready:
+            msg = quote("No brand is ready to search — confirm a Weibo "
+                        "account below first.")
+            return RedirectResponse(f"/?msg={msg}", status_code=303)
         if _spawn(month, "ingest_filter", _ingest_and_filter, month, keys):
             db.audit(db.get_engine(), _actor(request), "start_month", "month",
-                     month if keys is None else f"{month} ({','.join(keys)})")
+                     f"{month} ({','.join(keys)})" if narrowed else month)
         return RedirectResponse("/", status_code=303)
 
     @app.post("/runs/{month}/stop")

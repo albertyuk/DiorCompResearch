@@ -46,8 +46,10 @@ def test_run_enrich_brands_in_parallel(tmp_db, monkeypatch, tmp_path):
 
     monkeypatch.setattr(enrich_mod, "enrich_brand", fake_brand)
     notes = []
-    res = pipeline.run_enrich("2026-06", progress=notes.append)
-    assert set(res) == {"chanel", "lv", "tiffany", "gucci", "fendi"}
+    five = ["chanel", "lv", "tiffany", "gucci", "fendi"]
+    res = pipeline.run_enrich("2026-06", brand_keys=five,
+                              progress=notes.append)
+    assert set(res) == set(five)
     with tmp_db.get_engine().connect() as conn:
         phases = tmp_db.get_run(conn, "2026-06")["phases"]
     assert phases["enrich"] == "done"

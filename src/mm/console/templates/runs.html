@@ -16,12 +16,14 @@
              pattern="\d{4}-\d{2}" style="width:120px">
       <button type="submit" class="primary">{{ T("Start month") }}</button>
     </div>
-    <div class="micro" style="margin-top:8px; text-align:right">
+    <div class="micro" style="margin-top:8px; text-align:right; max-width:640px">
       {{ T("brands to search:") }}
       {% for b in brands %}
-      <label style="cursor:pointer; margin-left:10px; white-space:nowrap">
-        <input type="checkbox" name="brands" value="{{ b.key }}" checked>
-        {{ b.display_name }}</label>
+      <label style="cursor:pointer; margin-left:10px; white-space:nowrap"
+             {% if b.key in blocked_brands %}title="{{ T('confirm this brand’s Weibo account in the Accounts list below before it can be searched') }}"{% endif %}>
+        <input type="checkbox" name="brands" value="{{ b.key }}"
+               {% if b.key not in blocked_brands %}checked{% endif %}>
+        {{ b.display_name }}{% if b.key in blocked_brands %} ⚠{% endif %}</label>
       {% endfor %}
     </div>
   </form>

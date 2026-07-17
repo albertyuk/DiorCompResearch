@@ -452,8 +452,9 @@ def test_run_ingest_is_parallel_across_brands(tmp_db, monkeypatch):
     monkeypatch.setattr(pipeline, "Settings",
                         type("S", (), {"load": staticmethod(lambda: None)}))
     notes = []
-    res = pipeline.run_ingest("2026-06", progress=notes.append)
-    assert set(res) == {"chanel", "lv", "tiffany", "gucci", "fendi"}
+    five = ["chanel", "lv", "tiffany", "gucci", "fendi"]
+    res = pipeline.run_ingest("2026-06", five, progress=notes.append)
+    assert set(res) == set(five)
     assert all(r["posts"] == 2 for r in res.values())
     with tmp_db.get_engine().connect() as conn:
         assert tmp_db.get_run(conn, "2026-06")["phases"]["ingest"] == "done"

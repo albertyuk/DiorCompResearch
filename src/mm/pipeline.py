@@ -25,6 +25,18 @@ from .tikhub import TikHubClient
 # overrides.
 RENDER_WORKERS = 4
 
+# at most this many brands are processed concurrently in ingest / cross-check
+# / enrichment — each brand thread fans out its own TikHub and LLM calls, so
+# an unbounded one-thread-per-brand pool would blow through API rate limits
+# as the brand list grows past ten. MM_BRAND_WORKERS overrides.
+BRAND_WORKERS = 10
+
+
+def _brand_pool(n: int) -> int:
+    import os
+    return max(1, min(int(os.environ.get("MM_BRAND_WORKERS",
+                                         BRAND_WORKERS)), n))
+
 
 def _matches_path(month: str, brand_key: str) -> Path:
     p = RUNS_DIR / month / brand_key
@@ -120,7 +132,7 @@ def run_ingest(month: str, brand_keys: list[str] | None = None,
     wanted = [b for b in cfg.brands
               if not brand_keys or b.key in brand_keys]
     try:
-        with ThreadPoolExecutor(max_workers=max(1, len(wanted))) as ex:
+        with ThreadPoolExecutor(max_workers=_brand_pool(len(wanted))) as ex:
             for key, res in ex.map(one, wanted):
                 if res is not None:
                     results[key] = res
@@ -275,7 +287,7 @@ def run_crosscheck(month: str, brand_keys: list[str] | None = None,
 
     wanted = [b for b in cfg.brands if not brand_keys or b.key in brand_keys]
     try:
-        with ThreadPoolExecutor(max_workers=max(1, len(wanted))) as ex:
+        with ThreadPoolExecutor(max_workers=_brand_pool(len(wanted))) as ex:
             for key, res in ex.map(one, wanted):
                 if res is not None:
                     results[key] = res
@@ -333,7 +345,7 @@ def run_enrich(month: str, brand_keys: list[str] | None = None,
             return brand.key, {"error": str(e)}
 
     wanted = [b for b in cfg.brands if not brand_keys or b.key in brand_keys]
-    with ThreadPoolExecutor(max_workers=max(1, len(wanted))) as ex:
+    with ThreadPoolExecutor(max_workers=_brand_pool(len(wanted))) as ex:
         for key, res in ex.map(one, wanted):
             if res is not None:
                 results[key] = res

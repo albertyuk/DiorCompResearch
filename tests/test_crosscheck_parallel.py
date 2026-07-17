@@ -60,8 +60,10 @@ def test_run_crosscheck_brands_in_parallel(tmp_db, monkeypatch):
                         type("S", (), {"load": staticmethod(lambda: None)}))
 
     notes = []
-    res = pipeline.run_crosscheck("2026-06", progress=notes.append)
-    assert set(res) == {"chanel", "lv", "tiffany", "gucci", "fendi"}
+    five = ["chanel", "lv", "tiffany", "gucci", "fendi"]
+    res = pipeline.run_crosscheck("2026-06", brand_keys=five,
+                                  progress=notes.append)
+    assert set(res) == set(five)
     assert all("pulls" in r for r in res.values())
     with tmp_db.get_engine().connect() as conn:
         assert tmp_db.get_run(conn, "2026-06")["phases"]["crosscheck"] == "done"

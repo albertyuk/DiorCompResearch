@@ -188,3 +188,140 @@ brands:
     uid: v2_060000231003b20faec8c7e68a1ecad2cd02ea31b077cf436cb09158b9750193798aa6ae28b9@finder
     screen_name: FENDI
     verified_date: '2026-07-16'
+- key: prada
+  display_name: PRADA
+  order: 6
+  weibo:
+    status: resolve
+    lookup_query: PRADA 普拉达
+    note: Exclude Prada Beauty if it surfaces as a separate account.
+  douyin:
+    status: resolve
+    lookup_query: PRADA 普拉达
+  xhs:
+    status: resolve
+    lookup_query: PRADA
+  wechat_mp:
+    status: resolve
+    lookup_query: PRADA
+  wechat_channels:
+    status: resolve
+    lookup_query: PRADA
+    note: confirm in-app
+- key: loewe
+  display_name: LOEWE
+  order: 7
+  weibo:
+    status: resolve
+    lookup_query: LOEWE 罗意威
+  douyin:
+    status: resolve
+    lookup_query: LOEWE 罗意威
+  xhs:
+    status: resolve
+    lookup_query: LOEWE
+  wechat_mp:
+    status: resolve
+    lookup_query: LOEWE
+  wechat_channels:
+    status: resolve
+    lookup_query: LOEWE
+    note: confirm in-app
+- key: valentino
+  display_name: VALENTINO
+  order: 8
+  weibo:
+    status: resolve
+    lookup_query: VALENTINO 华伦天奴
+    note: Exclude Valentino Beauty if it surfaces as a separate account.
+  douyin:
+    status: resolve
+    lookup_query: VALENTINO 华伦天奴
+  xhs:
+    status: resolve
+    lookup_query: VALENTINO
+  wechat_mp:
+    status: resolve
+    lookup_query: VALENTINO
+  wechat_channels:
+    status: resolve
+    lookup_query: VALENTINO
+    note: confirm in-app
+- key: bottega
+  display_name: BOTTEGA VENETA
+  order: 9
+  weibo:
+    status: resolve
+    lookup_query: Bottega Veneta 葆蝶家
+  douyin:
+    status: resolve
+    lookup_query: Bottega Veneta 葆蝶家
+  xhs:
+    status: resolve
+    lookup_query: Bottega Veneta
+  wechat_mp:
+    status: resolve
+    lookup_query: Bottega Veneta
+  wechat_channels:
+    status: resolve
+    lookup_query: Bottega Veneta
+    note: confirm in-app
+- key: cartier
+  display_name: CARTIER
+  order: 10
+  weibo:
+    status: resolve
+    lookup_query: Cartier 卡地亚
+  douyin:
+    status: resolve
+    lookup_query: Cartier 卡地亚
+  xhs:
+    status: resolve
+    lookup_query: Cartier 卡地亚
+  wechat_mp:
+    status: resolve
+    lookup_query: 卡地亚
+  wechat_channels:
+    status: resolve
+    lookup_query: 卡地亚
+    note: confirm in-app
+- key: hermes
+  display_name: HERMÈS
+  order: 11
+  weibo:
+    status: resolve
+    lookup_query: Hermes 爱马仕
+    note: Exclude 爱马仕美妆 (Hermès Beauty) if it surfaces as a separate account.
+  douyin:
+    status: resolve
+    lookup_query: Hermes 爱马仕
+  xhs:
+    status: resolve
+    lookup_query: 爱马仕
+  wechat_mp:
+    status: resolve
+    lookup_query: 爱马仕
+  wechat_channels:
+    status: resolve
+    lookup_query: 爱马仕
+    note: confirm in-app
+- key: bvlgari
+  display_name: BVLGARI
+  order: 12
+  weibo:
+    status: resolve
+    lookup_query: BVLGARI 宝格丽
+    note: Exclude BVLGARI fragrance/hotel accounts if they surface separately.
+  douyin:
+    status: resolve
+    lookup_query: BVLGARI 宝格丽
+  xhs:
+    status: resolve
+    lookup_query: 宝格丽
+  wechat_mp:
+    status: resolve
+    lookup_query: 宝格丽
+  wechat_channels:
+    status: resolve
+    lookup_query: 宝格丽
+    note: confirm in-app

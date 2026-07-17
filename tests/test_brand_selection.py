@@ -59,11 +59,41 @@ def _wait(got, key, timeout=5.0):
 
 
 def test_runs_page_offers_a_checkbox_per_brand(client, tmp_db):
+    """Every configured brand gets a checkbox; ready brands (verified Weibo)
+    start ticked, brands still awaiting account confirmation start unticked
+    so they never block a search by default."""
     from mm.config import BrandsConfig
+    from mm.resolve import weibo_blockers
+    cfg = BrandsConfig.load()
+    blocked = {b["brand"] for b in weibo_blockers(cfg)}
     page = client.get("/").text
     assert "brands to search:" in page
-    for b in BrandsConfig.load().brands:
-        assert f'name="brands" value="{b.key}" checked' in page, b.key
+    for b in cfg.brands:
+        assert f'name="brands" value="{b.key}"' in page, b.key
+        row = page.split(f'value="{b.key}"')[1][:40]
+        if b.key in blocked:
+            assert "checked" not in row, b.key
+        else:
+            assert "checked" in row, b.key
+
+
+def test_new_brands_are_configured_and_pool_is_capped():
+    from mm import pipeline
+    from mm.config import BrandsConfig
+    keys = [b.key for b in BrandsConfig.load().brands]
+    for k in ("prada", "loewe", "valentino", "bottega", "cartier",
+              "hermes", "bvlgari"):
+        assert k in keys
+    assert len(keys) == 12
+    # concurrent brand processing is capped at 10 (MM_BRAND_WORKERS overrides)
+    assert pipeline._brand_pool(len(keys)) == 10
+    assert pipeline._brand_pool(3) == 3
+    import os
+    os.environ["MM_BRAND_WORKERS"] = "4"
+    try:
+        assert pipeline._brand_pool(12) == 4
+    finally:
+        del os.environ["MM_BRAND_WORKERS"]
 
 
 def test_start_with_a_subset_limits_ingest_and_filter(client, tmp_db,
@@ -78,17 +108,32 @@ def test_start_with_a_subset_limits_ingest_and_filter(client, tmp_db,
     assert got["filter_keys"] == ["lv", "gucci"]
 
 
-def test_start_with_all_brands_means_no_restriction(client, tmp_db,
-                                                    monkeypatch):
+def test_bare_start_searches_every_ready_brand(client, tmp_db, monkeypatch):
+    """No checkboxes posted (or the default form state) = every brand whose
+    Weibo account is confirmed. Newly added, unconfirmed brands never block
+    a search unless explicitly ticked."""
     from mm.config import BrandsConfig
+    from mm.resolve import weibo_blockers
+    cfg = BrandsConfig.load()
+    blocked = {b["brand"] for b in weibo_blockers(cfg)}
+    ready = [b.key for b in cfg.brands if b.key not in blocked]
     got = {}
     _wire_capture(monkeypatch, got)
-    everything = [b.key for b in BrandsConfig.load().brands]
-    r = client.post("/runs/2026-07/start", data={"brands": everything},
-                    follow_redirects=False)
-    assert r.status_code == 303
+    r = client.post("/runs/2026-07/start", follow_redirects=False)
+    assert r.status_code == 303 and "msg=" not in r.headers["location"]
     _wait(got, "filter_keys")
-    assert got["ingest_keys"] is None and got["filter_keys"] is None
+    assert got["ingest_keys"] == ready
+
+
+def test_ticking_an_unconfirmed_brand_blocks_with_guidance(client, tmp_db,
+                                                           monkeypatch):
+    got = {}
+    _wire_capture(monkeypatch, got)
+    r = client.post("/runs/2026-09/start", data={"brands": ["lv", "prada"]},
+                    follow_redirects=False)
+    assert r.status_code == 303 and "msg=" in r.headers["location"]
+    time.sleep(0.3)
+    assert "ingest_keys" not in got            # nothing started
 
 
 def test_start_with_only_unknown_brands_is_rejected(client, tmp_db,
