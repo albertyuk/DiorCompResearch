@@ -84,8 +84,9 @@ def test_board_page_shows_both_panes(client, tmp_db):
     assert "orphan douyin" in page and "dropped 香水" in page
     assert "kept unassigned" in page
     assert "data-pool" in page and "pool-filter" in page
-    # member post is placed → not in the pool
-    assert page.count('data-post="weibo:M1"') == 1     # chip inside project only
+    # member post is placed → not in the pool (its chip + the chip's
+    # "Move to…" button are the only carriers of the id)
+    assert page.count('data-post="weibo:M1"') == 2
 
 
 def test_pool_drag_out_weibo_marks_dropped(client, tmp_db):

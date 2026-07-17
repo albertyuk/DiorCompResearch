@@ -467,6 +467,20 @@ each is easy to revisit.
     after this change judges more pairs (the former auto-matches), then the
     cache absorbs everything.
 
+67. **Click-based destination picker (owner request: a button alternative to
+    drag & drop)**: every movable thing now carries a button that opens a
+    modal listing destinations by name — orphans get "Move to project…"
+    (projects + New project), posts inside a project get "Move to…" (other
+    projects + New project + Discard for weibo / Return to the orphan list
+    for platform posts), and each project gets "Merge into…" (other
+    projects + Drop this project). The picker is shared chrome in base.html
+    (mmOpenPicker/mmWireMovers over a per-brand window.MM_PROJECTS map the
+    page emits) and reuses the existing adopt / new_project / pool / merge /
+    status endpoints, so every click keeps the board's review semantics
+    (keep-on-adopt, learning feedback, match evidence cleanup). Buttons live
+    on Review · Projects (orphan rows, member posts, project cards) and on
+    the Grouping board (chips + cards); drag & drop stays.
+
 ## Testing
 
 25. The ~15 caption fixtures test the deterministic layers (@-tag extraction,

@@ -36,8 +36,13 @@
          data-proj="{{ p.id }}" data-brand="{{ b.brand.key }}">
       <div class="row-flex" style="justify-content:space-between; align-items:baseline; gap:8px">
         <strong style="font-size:12.5px; letter-spacing:.5px">{{ p.title }}{% if p.phase_suffix %} — {{ p.phase_suffix }}{% endif %}</strong>
-        <span class="micro">{{ (p.date_start or '')[5:] }}{% if p.date_end and p.date_end != p.date_start %}–{{ p.date_end[5:] }}{% endif %}
-          · {{ T(p.status) }}</span>
+        <span class="micro" style="white-space:nowrap">{{ (p.date_start or '')[5:] }}{% if p.date_end and p.date_end != p.date_start %}–{{ p.date_end[5:] }}{% endif %}
+          · {{ T(p.status) }}
+          <button type="button" class="ghost merge-proj" data-proj="{{ p.id }}"
+                  data-brand="{{ b.brand.key }}" data-status="{{ p.status }}"
+                  style="padding:0 6px; font-size:10px"
+                  title="{{ T('Choose a destination for this project') }}">
+            {{ T("Merge into…") }}</button></span>
       </div>
       <div class="chiprow">
         {% for m in p.members %}
@@ -47,6 +52,12 @@
           {% if m.thumb %}<img loading="lazy" src="/media?path={{ m.thumb | urlencode }}">{% endif %}
           <span class="pill {% if m.role == 'match' %}warn{% endif %}">{{ m.platform }}</span>
           <span class="chip-cap">{{ m.caption[:46] }}</span>
+          <button type="button" class="ghost move-post" data-post="{{ m.post_id }}"
+                  data-brand="{{ b.brand.key }}" data-from="{{ p.id }}"
+                  data-platform="{{ m.platform }}"
+                  style="padding:0 6px; font-size:10px"
+                  title="{{ T('Choose a destination for this post') }}">
+            {{ T("Move to…") }}</button>
         </div>
         {% endfor %}
         {% if not p.members %}<span class="micro">{{ T("empty") }}</span>{% endif %}
@@ -74,6 +85,11 @@
       <span class="chip-cap">{{ o.created_at }} · {{ o.caption }}</span>
       <a href="{{ o.url }}" target="_blank" class="micro"
          onclick="event.stopPropagation()">↗</a>
+      <button type="button" class="ghost move-post" data-post="{{ o.post_id }}"
+              data-brand="{{ b.brand.key }}"
+              style="padding:0 6px; font-size:10px"
+              title="{{ T('Choose a destination for this post') }}">
+        {{ T("Move to project…") }}</button>
     </div>
     {% endfor %}
     {% endfor %}
@@ -87,6 +103,22 @@
 
 {% block scripts %}
 <script>
+// destination list for the click-based "Move to…" pickers, per brand
+window.MM_PROJECTS = {
+{% for b in brands %}
+  {{ b.brand.key | tojson }}: [
+  {% for p in b.projects %}
+    {% set lbl = p.title %}
+    {% if p.phase_suffix %}{% set lbl = lbl ~ " — " ~ p.phase_suffix %}{% endif %}
+    {% if p.date_start %}{% set lbl = lbl ~ " · " ~ p.date_start[5:] %}{% endif %}
+    {% if p.status == "dropped" %}{% set lbl = lbl ~ " · " ~ T(p.status) %}{% endif %}
+    {id: {{ p.id | tojson }}, label: {{ lbl | tojson }}},
+  {% endfor %}
+  ],
+{% endfor %}
+};
+mmWireMovers({{ month | tojson }});
+
 // brand tabs — remember the last one per month
 const tabs = document.querySelectorAll('.board-tab');
 function showBrand(key) {

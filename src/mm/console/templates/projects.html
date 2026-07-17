@@ -165,6 +165,12 @@
                   title="{{ T('Remove only this post from the group — the rest stay together') }}">
             {{ T("✕ remove") }}</button>
         </form>
+        <button type="button" class="ghost move-post" data-post="{{ mp.post_id }}"
+                data-from="{{ p.id }}" data-brand="{{ g.brand.key }}"
+                data-platform="{{ mp.platform }}"
+                style="padding:2px 8px; margin-top:4px"
+                title="{{ T('Choose a destination for this post') }}">
+          {{ T("Move to…") }}</button>
       </div>
       <div class="caption-cn" style="flex:1; max-width:420px; font-size:12px">{{ (mp.caption or '')[:200] }}</div>
       <div class="row-flex" style="gap:6px; align-items:center">
@@ -196,6 +202,10 @@
   </div>
 </div>
 <div class="row-flex" style="margin:-10px 0 18px; gap:8px">
+  <button type="button" class="ghost merge-proj" data-proj="{{ p.id }}"
+          data-brand="{{ g.brand.key }}" data-status="{{ p.status }}"
+          title="{{ T('Choose a destination for this project') }}">
+    {{ T("Merge into…") }}</button>
   <form class="inline" method="post" action="/review/{{ month }}/projects/{{ p.id }}/status">
     <input type="hidden" name="value"
            value="{{ 'draft' if p.status == 'dropped' else 'dropped' }}">
@@ -251,6 +261,10 @@
       {% else %}<span class="micro">{{ T("not filtered yet") }}</span>{% endif %}
     </td>
     <td>
+      <button type="button" class="move-post" data-post="{{ o.post_id }}"
+              data-brand="{{ o.brand }}"
+              title="{{ T('Choose a destination for this post') }}">
+        {{ T("Move to project…") }}</button>
       <form class="inline" method="post"
             action="/review/{{ month }}/orphans/{{ o.post_id | urlencode }}/resolve">
         <input type="hidden" name="action" value="promote">
@@ -270,6 +284,22 @@
 
 {% block scripts %}
 <script>
+// destination list for the click-based "Move to…" pickers, per brand
+window.MM_PROJECTS = {
+{% for g in groups %}
+  {{ g.brand.key | tojson }}: [
+  {% for p in g.projects %}
+    {% set lbl = p.title %}
+    {% if p.phase_suffix %}{% set lbl = lbl ~ " — " ~ p.phase_suffix %}{% endif %}
+    {% if p.date_start %}{% set lbl = lbl ~ " · " ~ p.date_start[5:] %}{% endif %}
+    {% if p.status == "dropped" %}{% set lbl = lbl ~ " · " ~ T(p.status) %}{% endif %}
+    {id: {{ p.id | tojson }}, label: {{ lbl | tojson }}},
+  {% endfor %}
+  ],
+{% endfor %}
+};
+mmWireMovers({{ month | tojson }});
+
 // image checkbox → this image renders on the slide (same endpoint as before,
 // now living at checkpoint #2 where consolidation context exists)
 document.addEventListener('change', async e => {

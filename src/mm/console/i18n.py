@@ -236,6 +236,21 @@ ZH: dict[str, str] = {
         "确定把拖来的项目并入这个项目？它的帖子、明星和平台匹配记录都会一并转移。",
     "Move failed: ": "移动失败：",
     "Drag onto another project to merge": "拖到另一个项目上可合并两个项目",
+    # ── destination picker (click-based move) ────────────────────────────
+    "Cancel": "取消",
+    "Move to project…": "移入项目…",
+    "Move to…": "移动到…",
+    "Merge into…": "并入其他项目…",
+    "Choose a destination for this post": "这条帖子要移到哪里？",
+    "Choose a destination for this project": "这个项目要移到哪里？",
+    "＋ New project (from this post)": "＋ 用这条帖子新建项目",
+    "Discard — mark dropped, leaves the report":
+        "删除 — 标记为「已删除」，不再进入报告",
+    "Drop this project — it leaves the report":
+        "删除该项目 — 不再进入报告",
+    "Return to the orphan list": "退回「未匹配帖子」列表",
+    "No other project yet — create one first.":
+        "还没有其他项目——请先新建一个。",
     "Could not save selection: ": "选择未能保存：",
     "Upload failed: ": "上传失败：",
     "Delete failed: ": "删除失败：",

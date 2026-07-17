@@ -181,6 +181,24 @@ a.next-cta:hover { background:var(--paper); color:var(--ink); }
 .proj-card.dropt { outline:2px solid var(--ok); outline-offset:2px; }
 .drag-handle { cursor:grab; user-select:none; }
 .drag-handle:active { cursor:grabbing; }
+/* destination picker — click-based alternative to drag & drop */
+#mmpick { position:fixed; inset:0; background:rgba(12,11,10,.55); z-index:70;
+  display:flex; align-items:center; justify-content:center; }
+#mmpick[hidden] { display:none; }
+.mmpick-card { background:var(--paper); border:1px solid var(--ink);
+  width:min(440px, 92vw); max-height:76vh; overflow-y:auto;
+  padding:18px 20px 16px; }
+.mmpick-title { border-bottom:1px solid var(--ink); padding-bottom:10px;
+  margin-bottom:12px; }
+.mmpick-list { display:flex; flex-direction:column; gap:6px; }
+.mmpick-opt { text-align:left; width:100%; border:1px solid var(--line);
+  background:var(--paper); color:var(--ink); font-size:12px; padding:10px 12px;
+  cursor:pointer; letter-spacing:.4px; text-transform:none; }
+.mmpick-opt:hover { border-color:var(--ink); background:var(--soft);
+  color:var(--ink); }
+.mmpick-opt.new { border-style:dashed; color:var(--mut); }
+.mmpick-opt.danger { border-color:var(--err); color:var(--err); }
+.mmpick-cancel { margin-top:12px; }
 /* image lightbox — click any .zoom thumbnail to inspect at full size */
 img.zoom { cursor:zoom-in; }
 #mmlb { position:fixed; inset:0; background:rgba(12,11,10,.93); z-index:60;
@@ -244,6 +262,13 @@ img.zoom { cursor:zoom-in; }
     <a href="/learning" {% if active == 'learning' %}class="active"{% endif %}>{{ T("Learning") }}</a>
   </nav>
 </header>
+<div id="mmpick" hidden>
+  <div class="mmpick-card">
+    <div class="mmpick-title micro"></div>
+    <div class="mmpick-list"></div>
+    <button type="button" class="ghost mmpick-cancel">{{ T("Cancel") }}</button>
+  </div>
+</div>
 <div id="mmlb" hidden>
   <button class="mmlb-x" title="{{ T('Close (Esc)') }}">✕</button>
   <button class="mmlb-prev" title="{{ T('Previous (←)') }}">‹</button>
@@ -263,7 +288,96 @@ const MM_T = {
   left: {{ T("~{t} left") | tojson }},
   min: {{ T("min") | tojson }},
   sec: {{ T("s") | tojson }},
+  wherePost: {{ T("Choose a destination for this post") | tojson }},
+  whereProj: {{ T("Choose a destination for this project") | tojson }},
+  newProject: {{ T("＋ New project (from this post)") | tojson }},
+  discard: {{ T("Discard — mark dropped, leaves the report") | tojson }},
+  dropProject: {{ T("Drop this project — it leaves the report") | tojson }},
+  toOrphans: {{ T("Return to the orphan list") | tojson }},
+  pickEmpty: {{ T("No other project yet — create one first.") | tojson }},
+  moveFailed: {{ T("Move failed: ") | tojson }},
 };
+/* destination picker: mmOpenPicker(title, [{label, url, body, kind}]) —
+   each option POSTs and reloads; the click-based sibling of drag & drop */
+function mmOpenPicker(title, options) {
+  const pick = document.getElementById('mmpick');
+  pick.querySelector('.mmpick-title').textContent = title;
+  const list = pick.querySelector('.mmpick-list');
+  list.innerHTML = '';
+  if (!options.length) {
+    const d = document.createElement('div');
+    d.className = 'note';
+    d.textContent = MM_T.pickEmpty;
+    list.appendChild(d);
+  }
+  for (const o of options) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'mmpick-opt' + (o.kind ? ' ' + o.kind : '');
+    b.textContent = o.label;
+    b.addEventListener('click', async () => {
+      try {
+        const r = await fetch(o.url, {method: 'POST',
+          headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+          body: o.body});
+        if (!r.ok) throw new Error((await r.json()).error || r.status);
+        location.reload();
+      } catch (err) { alert(MM_T.moveFailed + err.message); }
+    });
+    list.appendChild(b);
+  }
+  pick.hidden = false;
+}
+document.addEventListener('click', e => {
+  const pick = document.getElementById('mmpick');
+  if (pick.hidden) return;
+  if (e.target === pick || e.target.classList.contains('mmpick-cancel')) {
+    pick.hidden = true;
+  }
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') document.getElementById('mmpick').hidden = true;
+});
+/* shared move-button wiring: any .move-post / .merge-proj button opens the
+   picker over MM_PROJECTS (set by pages that render movable things) */
+function mmWireMovers(month) {
+  const projOpts = (brand, excludeId) =>
+    ((window.MM_PROJECTS || {})[brand] || [])
+      .filter(p => String(p.id) !== String(excludeId));
+  document.querySelectorAll('.move-post').forEach(btn =>
+    btn.addEventListener('click', () => {
+      const d = btn.dataset;
+      const opts = projOpts(d.brand, d.from).map(p => ({
+        label: p.label,
+        url: `/review/${month}/projects/${p.id}/adopt`,
+        body: `post_id=${encodeURIComponent(d.post)}`}));
+      opts.push({label: MM_T.newProject, kind: 'new',
+                 url: `/review/${month}/board/new_project`,
+                 body: `post_id=${encodeURIComponent(d.post)}`});
+      if (d.from) {
+        opts.push({label: d.platform === 'weibo' ? MM_T.discard
+                                                 : MM_T.toOrphans,
+                   kind: 'danger',
+                   url: `/review/${month}/board/pool`,
+                   body: `post_id=${encodeURIComponent(d.post)}`});
+      }
+      mmOpenPicker(MM_T.wherePost, opts);
+    }));
+  document.querySelectorAll('.merge-proj').forEach(btn =>
+    btn.addEventListener('click', () => {
+      const d = btn.dataset;
+      const opts = projOpts(d.brand, d.proj).map(p => ({
+        label: p.label,
+        url: `/review/${month}/projects/${d.proj}/merge`,
+        body: `target_id=${p.id}`}));
+      if (d.status !== 'dropped') {
+        opts.push({label: MM_T.dropProject, kind: 'danger',
+                   url: `/review/${month}/projects/${d.proj}/status`,
+                   body: 'value=dropped'});
+      }
+      mmOpenPicker(MM_T.whereProj, opts);
+    }));
+}
 /* lightbox: any img.zoom inside a [data-gallery] holder opens a full-size
    viewer over the whole gallery; ←/→ navigate, Esc closes, and on review
    pages the toggle button drives the image's slide checkbox directly */
