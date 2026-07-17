@@ -95,7 +95,7 @@ def test_escalations_judged_in_parallel_with_same_semantics(tmp_db):
     # runway, collection} (brand names are stopworded)
     _post(tmp_db, "weibo:K1", "weibo",
           "ANCORA showcase evening premiere runway collection", keep=True)
-    # direct heuristic hit: shares 6 keywords
+    # strong keyword overlap (6) — now LLM-verified like everything else
     _post(tmp_db, "douyin:D1", "douyin",
           "ancora showcase evening premiere runway collection tonight")
     # escalation band (2 shared keywords) on three platforms
@@ -105,7 +105,7 @@ def test_escalations_judged_in_parallel_with_same_semantics(tmp_db):
     # non-candidate: no shared keywords → orphan
     _post(tmp_db, "xhs:X9", "xhs", "totally unrelated brunch spot")
 
-    barrier = threading.Barrier(3, timeout=8)   # 3 escalations concurrent
+    barrier = threading.Barrier(4, timeout=8)   # all 4 pairs judged at once
 
     class BarrierLLM:
         def call_json(self, name, variables, **kw):
@@ -116,7 +116,8 @@ def test_escalations_judged_in_parallel_with_same_semantics(tmp_db):
     res = xc.crosscheck_brand(tmp_db.get_engine(), BarrierLLM(),
                               BrandsConfig.load(), "2026-06", "lv")
     hits = res["matches"]["weibo:K1"]
-    assert hits["douyin"]["confidence"] == 0.9      # LLM 0.9 beats heuristic 0.75
+    assert hits["douyin"]["confidence"] == 0.9
+    assert hits["douyin"]["post_id"] == "douyin:D1"  # first judged wins ties
     assert hits["xhs"]["post_id"] == "xhs:X1"
     assert hits["wechat_mp"]["post_id"] == "wechat_mp:W1"
     assert res["orphans"] == 1                       # only the brunch post

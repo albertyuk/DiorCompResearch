@@ -64,9 +64,10 @@ each is easy to revisit.
     policy DROP: the keyword signal forces `needs_review` when the LLM kept
     such a post, and the recall-bias flip never resurrects a beauty post the
     LLM dropped — the human remains the final decider either way.
-15. **Cross-platform matching heuristics before LLM**: shared celeb name
-    (conf 0.85) or ≥3 shared keywords (conf 0.75) match directly; exactly 2
-    shared keywords escalate to `match.md`. Threshold 0.7 per the handoff.
+15. **Cross-platform matching heuristics before LLM** *(superseded by #66)*:
+    originally shared celeb (0.85) / keyword overlap (0.75) matched directly
+    and only ambiguous pairs reached `match.md`. Owner report 2026-07:
+    matches inconsistent with reality — see #66 for the current design.
 16. **Occupation labels**: relation.md only extracts occupations stated in the
     caption, and the registry compounds them across months. A celeb with no
     known occupation renders as `CELEBRITY ?` and is expected to be fixed at
@@ -447,6 +448,24 @@ each is easy to revisit.
     the house design; collapsing one is remembered per browser/page via
     localStorage so experienced users see them once. Guides are additive —
     the existing contextual notes stay.
+
+66. **Cross-check accuracy rework (owner report: matches inconsistent with
+    reality)**: three root causes fixed. (a) Shared campaign hashtags —
+    the platform-crossing marker in CN brand marketing — were unused; a
+    shared non-brand-generic hashtag (normalized; brand-name tags excluded
+    by equality) now matches deterministically at 0.9. (b) Heuristics no
+    longer decide: a shared ambassador (old auto-0.85 — ambassadors appear
+    across many campaigns in one window) and keyword-bigram overlap (old
+    auto-0.75 — generic CN bigrams collide constantly) only NOMINATE a pair;
+    match.md renders every verdict with rich context (both posts' hashtags,
+    celebs/@-tags, the heuristic evidence to verify) and an explicitly
+    conservative rubric (same brand/ambassador/category ≠ same event;
+    thin captions → false; miss is recoverable, wrong tick is not).
+    (c) Judgments are cached in match_judgments keyed (ref, cand): re-runs
+    are self-consistent (a pair can never flip) and free (no re-billing);
+    archive_month clears judgments referencing archived posts. First run
+    after this change judges more pairs (the former auto-matches), then the
+    cache absorbs everything.
 
 ## Testing
 

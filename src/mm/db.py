@@ -125,6 +125,19 @@ platform_matches = Table(
     Column("confidence", Float),
 )
 
+# cross-platform same-event judgments, cached per (reference, candidate) pair
+# so re-running cross-check is consistent (a pair can never flip between
+# runs) and free (no re-billing the match LLM for pairs already judged)
+match_judgments = Table(
+    "match_judgments", metadata,
+    Column("ref_post_id", String, primary_key=True),
+    Column("cand_post_id", String, primary_key=True),
+    Column("same_event", Boolean),
+    Column("confidence", Float),
+    Column("reason", String),
+    Column("at", String),
+)
+
 orphans = Table(
     "orphans", metadata,
     Column("post_id", String, ForeignKey("posts.post_id"), primary_key=True),
@@ -357,6 +370,10 @@ def archive_month(engine: Engine, month: str, actor: str) -> dict:
         conn.execute(project_posts.delete()
                      .where(project_posts.c.project_id.in_(project_ids)))
         conn.execute(orphans.delete().where(orphans.c.month == month))
+        from sqlalchemy import or_
+        conn.execute(match_judgments.delete().where(or_(
+            match_judgments.c.ref_post_id.in_(post_ids),
+            match_judgments.c.cand_post_id.in_(post_ids))))
         conn.execute(verdicts.delete().where(verdicts.c.post_id.in_(post_ids)))
         conn.execute(projects.delete().where(projects.c.month == month))
         conn.execute(posts.delete().where(posts.c.month == month))

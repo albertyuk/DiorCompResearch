@@ -23,11 +23,40 @@ from .llm import LLM
 from .tikhub import TikHubClient
 
 MATCH_CONFIDENCE = 0.7
+HASHTAG_CONFIDENCE = 0.9  # shared campaign hashtag — the platform-crossing marker
 WINDOW_DAYS = 5
 MATCH_LLM_WORKERS = 4     # concurrent match.md escalations per brand
 
 _LATIN_RE = re.compile(r"[A-Za-z0-9]{3,}")
 _CJK_RE = re.compile(r"[一-鿿]{2,}")
+
+
+def _norm_tags(raw_json) -> set[str]:
+    """Hashtags normalized for cross-platform comparison: strip #, collapse
+    whitespace, lowercase. Campaign tags (#SpeedyP9#, #CocoCrush上海#) are the
+    strongest same-event signal Chinese brand marketing offers."""
+    tags = set()
+    try:
+        raw = json.loads(raw_json or "[]")
+    except (TypeError, ValueError):
+        raw = []
+    for t in raw:
+        t = re.sub(r"\s+", "", str(t)).strip("#").lower()
+        if len(t) >= 2:
+            tags.add(t)
+    return tags
+
+
+def _brand_generic_tags(brand) -> set[str]:
+    """Tags that name the brand itself appear on nearly every post and prove
+    nothing — excluded from the shared-hashtag signal (equality match only,
+    so #lv龙年限定# stays specific while #louisvuitton# is generic)."""
+    generic = {brand.key.lower(),
+               re.sub(r"\s+", "", brand.display_name or "").lower()}
+    acct = brand.account("weibo")
+    if acct and acct.screen_name:
+        generic.add(re.sub(r"\s+", "", acct.screen_name).lower())
+    return {g for g in generic if g}
 
 
 def _keywords(text: str) -> set[str]:
@@ -171,37 +200,68 @@ def crosscheck_brand(engine, llm: LLM, cfg: BrandsConfig, month: str,
                           "confidence": confidence, "why": why}
         matched_other_ids.add(cand["post_id"])
 
+    # judgments already paid for — a pair can never flip between runs and is
+    # never re-billed (owner report: matches inconsistent with reality; part
+    # of the fix is making them at least consistent with themselves)
+    with engine.connect() as conn:
+        judged = {(r["ref_post_id"], r["cand_post_id"]): dict(r)
+                  for r in conn.execute(
+                      select(db.match_judgments).where(
+                          db.match_judgments.c.ref_post_id.in_(
+                              [r["post_id"] for r in kept]))).mappings()}
+
     # candidate features computed once, not once per kept post
+    generic_tags = _brand_generic_tags(brand)
     cand_feats = [(cand, _keywords(cand["caption"]),
                    (cand["caption"] or "").lower(),
-                   parse_iso(cand["created_at"])) for cand in others]
+                   parse_iso(cand["created_at"]),
+                   _norm_tags(cand["hashtags"]) - generic_tags)
+                  for cand in others]
 
-    # pass 1 — cheap heuristics inline; ambiguous pairs queue for the LLM
-    escalations = []          # (kept row, ref_celebs, candidate)
+    # pass 1 — a shared campaign hashtag matches outright (the deterministic
+    # platform-crossing marker); EVERY other signal — shared celeb, keyword
+    # overlap — only nominates the pair for LLM judgment. Heuristics used to
+    # auto-match at 0.85/0.75, which is exactly how a shared ambassador or
+    # generic bigram overlap produced ticks inconsistent with reality.
+    escalations = []          # (kept row, ref_celebs, candidate, evidence)
     for row in kept:
         ref_date = parse_iso(row["created_at"])
         ref_kw = _keywords(row["caption"])
         ref_celebs = _celeb_names(row)
+        ref_tags = _norm_tags(row["hashtags"]) - generic_tags
         hits = {}
-        for cand, ckw, cand_text, cdate in cand_feats:
+        for cand, ckw, cand_text, cdate, ctags in cand_feats:
             if ref_date and cdate and abs((cdate - ref_date).days) > WINDOW_DAYS:
                 continue
+            shared_tags = ref_tags & ctags
             overlap_kw = ref_kw & ckw
             overlap_celeb = {n for n in ref_celebs if n and n in cand_text}
-            if overlap_celeb:
-                record_hit(hits, cand, 0.85,
-                           f"shared celeb: {sorted(overlap_celeb)[:2]}")
-            elif len(overlap_kw) >= 6:
-                record_hit(hits, cand, 0.75,
-                           f"shared keywords: {sorted(overlap_kw)[:4]}")
-            elif len(overlap_kw) >= 2:
-                escalations.append((row, ref_celebs, cand))
+            if shared_tags:
+                record_hit(hits, cand, HASHTAG_CONFIDENCE,
+                           f"shared campaign hashtag: "
+                           f"#{sorted(shared_tags)[0]}#")
+            elif overlap_celeb or len(overlap_kw) >= 2:
+                evidence = []
+                if overlap_celeb:
+                    evidence.append(f"shared celeb: {sorted(overlap_celeb)[:2]}")
+                if overlap_kw:
+                    evidence.append(f"shared keywords: {sorted(overlap_kw)[:6]}")
+                escalations.append((row, ref_celebs, cand,
+                                    "; ".join(evidence)))
         results[row["post_id"]] = hits
 
-    # pass 2 — match.md escalations run concurrently (pairs are independent;
-    # the hit tables only mutate after the pool completes)
+    # pass 2 — match.md judgments run concurrently (pairs are independent;
+    # the hit tables only mutate after the pool completes). Cached verdicts
+    # short-circuit without an LLM call.
     def judge(item):
-        row, ref_celebs, cand = item
+        row, ref_celebs, cand, evidence = item
+        cached = judged.get((row["post_id"], cand["post_id"]))
+        if cached is not None:
+            if cached["same_event"] and \
+                    (cached["confidence"] or 0) >= MATCH_CONFIDENCE:
+                return row, cand, float(cached["confidence"]), \
+                    cached["reason"] or "llm match (cached)"
+            return None
         if should_stop and should_stop():
             return None
         try:
@@ -209,18 +269,32 @@ def crosscheck_brand(engine, llm: LLM, cfg: BrandsConfig, month: str,
                 "brand_display": brand.display_name,
                 "ref_date": row["created_at"] or "",
                 "ref_caption": (row["caption"] or "")[:1500],
+                "ref_hashtags": json.dumps(sorted(_norm_tags(row["hashtags"])),
+                                           ensure_ascii=False),
                 "ref_celebs": json.dumps(sorted(ref_celebs), ensure_ascii=False),
                 "ref_title": "",
                 "candidate_platform": cand["platform"],
                 "candidate_date": cand["created_at"] or "",
                 "candidate_caption": (cand["caption"] or "")[:1500],
+                "candidate_hashtags": json.dumps(
+                    sorted(_norm_tags(cand["hashtags"])), ensure_ascii=False),
+                "candidate_at_tags": cand["at_tags"] or "[]",
+                "heuristic_evidence": evidence,
             }, conn=engine, brand=brand_key, month=month)
         except Exception:
             return None
-        if not j.get("same_event"):
+        same = bool(j.get("same_event"))
+        conf = float(j.get("confidence") or 0)
+        reason = str(j.get("reason") or "llm match")[:300]
+        with engine.begin() as wconn:
+            db.upsert(wconn, db.match_judgments, {
+                "ref_post_id": row["post_id"],
+                "cand_post_id": cand["post_id"],
+                "same_event": same, "confidence": conf, "reason": reason,
+                "at": db.now_iso()}, ["ref_post_id", "cand_post_id"])
+        if not same:
             return None
-        return row, cand, float(j.get("confidence") or 0), \
-            (j.get("reason") or "llm match")
+        return row, cand, conf, reason
 
     if escalations:
         with ThreadPoolExecutor(
