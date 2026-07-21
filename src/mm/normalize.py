@@ -91,7 +91,27 @@ def next_cursor(data, key: str):
 # -- weibo ---------------------------------------------------------------------
 
 def weibo_posts_from_response(data) -> list[dict]:
-    return find_post_list(data, {"mblogid", "mblog_id", "text_raw", "isLongText"})
+    posts = find_post_list(data, {"mblogid", "mblog_id", "text_raw", "isLongText"})
+    if posts:
+        return posts
+    # app-timeline shape (the fallback endpoint): data.items[] wraps each
+    # post in {category, data} — the mblog is item.data (sometimes nested
+    # under "mblog"); header/filter cards in the same list carry no post id
+    items = None
+    if isinstance(data, dict):
+        inner = data.get("data")
+        if isinstance(inner, dict):
+            items = inner.get("items")
+    out = []
+    for it in items or []:
+        if not isinstance(it, dict):
+            continue
+        node = it.get("data") or {}
+        if isinstance(node.get("mblog"), dict):
+            node = node["mblog"]
+        if isinstance(node, dict) and (node.get("mblogid") or node.get("idstr")):
+            out.append(node)
+    return out
 
 
 def _largest_pic_variant(info: dict) -> dict:

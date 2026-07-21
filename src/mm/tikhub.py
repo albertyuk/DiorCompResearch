@@ -29,6 +29,10 @@ EP = {
     # -- weibo (web_v2)
     "weibo_user_info":       ("GET", "/api/v1/weibo/web_v2/fetch_user_info"),
     "weibo_user_posts":      ("GET", "/api/v1/weibo/web_v2/fetch_user_posts"),
+    # fallback timeline — the web_v2 endpoint has upstream outages (first
+    # seen 2026-07-21); the app timeline serves the same posts, paginated by
+    # page number instead of a since_id cursor
+    "weibo_user_timeline_app": ("GET", "/api/v1/weibo/app/fetch_user_timeline"),
     "weibo_post_detail":     ("GET", "/api/v1/weibo/web_v2/fetch_post_detail"),
     "weibo_user_search":     ("GET", "/api/v1/weibo/web_v2/fetch_user_search"),
     "weibo_adv_search":      ("GET", "/api/v1/weibo/web_v2/fetch_advanced_search"),

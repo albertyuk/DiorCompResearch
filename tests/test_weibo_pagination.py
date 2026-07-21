@@ -89,6 +89,58 @@ def test_healthy_pagination_advances_past_echo(engine):
     assert res["posts"] == 6                     # …and stopped on older posts
 
 
+# ── web_v2 outage → app-timeline fallback (live-verified 2026-07-21) ─────────
+
+def _app_envelope(mblogs):
+    """weibo/app/fetch_user_timeline shape: items[] of {category, data} with
+    header cards mixed in; the mblog is item.data (or item.data.mblog)."""
+    items = [{"category": "card", "data": {"card_type": 216}}]
+    for i, m in enumerate(mblogs):
+        # exercise both nestings
+        items.append({"category": "feed",
+                      "data": m if i % 2 else {"mblog": m}})
+    return {"code": 200, "data": {"items": items, "moreInfo": {}}}
+
+
+def test_app_timeline_shape_is_extracted():
+    env = _app_envelope(JUNE[:3])
+    posts = normalize.weibo_posts_from_response(env)
+    assert [p["mblogid"] for p in posts] == ["J0", "J1", "J2"]
+    # the header card contributed nothing
+    assert all("card_type" not in p for p in posts)
+
+
+def test_ingest_falls_back_to_app_timeline_on_outage(engine):
+    from mm.tikhub import TikHubError
+
+    class OutageClient:
+        """web_v2 errors like the 2026-07-21 outage; the app timeline
+        serves the same posts page-numbered."""
+
+        def __init__(self):
+            self.calls = []
+            self.app_pages = {1: _app_envelope(JUNE[:4]),
+                              2: _app_envelope(JUNE[4:]),
+                              3: _app_envelope(MAY)}
+
+        def call(self, key, *, conn=None, brand=None, month=None, **kw):
+            self.calls.append((key, kw.get("page") or kw.get("since_id")))
+            if key == "weibo_user_posts":
+                raise TikHubError("weibo_user_posts: retries exhausted")
+            assert key == "weibo_user_timeline_app"
+            return self.app_pages.get(kw["page"], _app_envelope([]))
+
+    client = OutageClient()
+    res = ingest.ingest_weibo(engine, client, BrandsConfig.load(),
+                              "2026-06", "chanel")
+    assert res["posts"] == 6                     # full June window ingested
+    assert client.calls[0] == ("weibo_user_posts", None)
+    assert ("weibo_user_timeline_app", 1) in client.calls
+    assert ("weibo_user_timeline_app", 3) in client.calls  # stopped on May
+    # web_v2 was not retried after the flip
+    assert [c for c in client.calls[1:] if c[0] == "weibo_user_posts"] == []
+
+
 def test_overlapping_pages_count_unique_posts_only(engine):
     # cursor moves but pages overlap (common in cursor pagination)
     pages = {

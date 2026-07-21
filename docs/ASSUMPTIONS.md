@@ -690,6 +690,23 @@ each is easy to revisit.
     regardless of size — transparency to PNG, the rest to JPEG. Unopenable
     files keep the old fall-back-to-original behavior.
 
+82. **Weibo ingest fallback (owner report: 抓取 error, every brand, HTTP
+    400 retries exhausted)**: TikHub's web_v2 fetch_user_posts started
+    failing upstream on 2026-07-21 ("Request failed… you won't be charged")
+    for every uid — request format verified correct against their live
+    OpenAPI; the old web endpoint is login-walled. The weibo/app/
+    fetch_user_timeline endpoint works and serves the same posts with the
+    same mblogid ids (classic mblog fields: text is HTML → strip_html path;
+    same pic_infos variants; page-numbered pagination instead of since_id).
+    ingest_weibo now flips to it automatically when web_v2 exhausts its
+    retries, restarting that brand from app page 1 (already-stored posts
+    dedupe via the seen-set + idempotent upserts) and paging by number.
+    weibo_posts_from_response learned the app items[]-wrapper shape.
+    Live-verified during the outage: CHANEL July = 37 in-window posts over
+    5 pages through the fallback. Known tradeoff: isLongText posts carry
+    the truncated app text (web_v2's text_raw was full) — acceptable in
+    outage mode; the filter still sees the lead paragraph.
+
 ## Testing
 
 25. The ~15 caption fixtures test the deterministic layers (@-tag extraction,

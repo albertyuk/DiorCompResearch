@@ -17,7 +17,7 @@ from . import db, normalize
 from .config import BrandsConfig, Brand
 from .dates import CST, month_bounds
 from .media import MediaStore
-from .tikhub import TikHubClient
+from .tikhub import TikHubClient, TikHubError
 
 
 def _archive_raw(store: MediaStore, brand_key: str, name: str, payload) -> str:
@@ -126,13 +126,31 @@ def ingest_weibo(engine, client: TikHubClient, cfg: BrandsConfig, month: str,
     n_new, n_reposts, page, since_id = 0, 0, 1, None
     seen: set[str] = set()   # post_ids this run — later pages may overlap
     stale_pages = 0
+    use_app = False          # flips when web_v2 errors (upstream outage)
     while page <= max_pages:
         if should_stop and should_stop():
             break                     # pause between pages; nothing is lost
-        # live-verified param shape: first page takes uid only; pagination is
-        # since_id from the previous response (an explicit page=1 returns 400)
-        data = client.call("weibo_user_posts", conn=engine, brand=brand_key,
-                           month=month, uid=uid, since_id=since_id)
+        if not use_app:
+            # live-verified param shape: first page takes uid only;
+            # pagination is since_id from the previous response (an explicit
+            # page=1 returns 400)
+            try:
+                data = client.call("weibo_user_posts", conn=engine,
+                                   brand=brand_key, month=month, uid=uid,
+                                   since_id=since_id)
+            except TikHubError:
+                # web_v2 timeline outage (first seen 2026-07-21): the app
+                # timeline serves the same posts with the same mblogid ids,
+                # page-numbered — restart this brand from its page 1 (posts
+                # already stored dedupe via `seen` + idempotent upserts)
+                use_app = True
+                page, since_id, stale_pages = 1, None, 0
+                if progress:
+                    progress(brand_key, page, n_new)
+        if use_app:
+            data = client.call("weibo_user_timeline_app", conn=engine,
+                               brand=brand_key, month=month, uid=uid,
+                               page=page)
         raw_path = _archive_raw(store, brand_key, f"weibo_page{page:03d}", data)
         mblogs = normalize.weibo_posts_from_response(data)
         if not mblogs:
@@ -177,6 +195,9 @@ def ingest_weibo(engine, client: TikHubClient, cfg: BrandsConfig, month: str,
                 break
         else:
             stale_pages = 0
+        if use_app:
+            page += 1                 # app timeline pages by number
+            continue
         new_since = normalize.next_cursor(data, "since_id")
         new_since = str(new_since) if new_since is not None else None
         if new_since is None or new_since == since_id:
