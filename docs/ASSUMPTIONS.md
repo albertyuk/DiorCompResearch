@@ -722,6 +722,22 @@ each is easy to revisit.
     a render again (that's exactly what happened: slide_ready fell back to
     the original .heic and the unguarded aspect probe at grid layout threw).
 
+84. **Missing slide photos (owner report: "a lot of the photos are just not
+    rendered")**: diagnosed on the real 2026-07 fallback-ingested corpus
+    (37 chanel posts, 82 image files, 99% download success, ~70% HEIC).
+    Root cause: weibo tiles large photos into many HEIF boxes, tripping
+    libheif's conservative security cap ("Maximum number of child boxes
+    (100) in 'ipco' box exceeded") — pillow-heif silently failed on ~10%
+    of files and the drop-not-die contract removed them from slides
+    without a trace. Fixes: (a) pillow_heif.options.
+    DISABLE_SECURITY_LIMITS = True at registration (they're ordinary
+    campaign photos from the brand CDN, not attack files); 82/82 of the
+    corpus decodes after, and a real DeckBuilder run embeds the full
+    14-photo grid. (b) drops are now LOUD: run_render counts slide_ready
+    rejections, warns in the progress log ("N image(s) unreadable —
+    dropped from slides") and returns dropped_images — a silent hole in a
+    deck can't happen again.
+
 ## Testing
 
 25. The ~15 caption fixtures test the deterministic layers (@-tag extraction,
