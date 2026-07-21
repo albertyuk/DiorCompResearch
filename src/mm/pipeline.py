@@ -533,7 +533,7 @@ def run_render(month: str, *, visuals_mode: str | None = None,
     tasks = [(bi, brand, pi, p)
              for bi, (brand, rows) in enumerate(brand_rows)
              for pi, p in enumerate(rows)]
-    state = {"done": 0}
+    state = {"done": 0, "dropped": 0}
     lock = threading.Lock()
     tl = threading.local()
     factories: list = []
@@ -575,9 +575,11 @@ def run_render(month: str, *, visuals_mode: str | None = None,
         for v in vis:
             v["image"] = slide_ready(v["image"],
                                      OUTPUT_DIR / "deck_img_cache")
+        n_dropped = sum(1 for v in vis if not v["image"])
         vis = [v for v in vis if v["image"]]
         with lock:
             state["done"] += 1
+            state["dropped"] += n_dropped
             done_now = state["done"]
         note(f"render · visuals {done_now}/{total} projects")
         return bi, pi, ProjectSpec(
@@ -650,8 +652,14 @@ def run_render(month: str, *, visuals_mode: str | None = None,
                      .where(db.projects.c.month == month,
                             db.projects.c.status == "confirmed")
                      .values(status="rendered"))
+    # a dropped image must be VISIBLE, never a silent hole in the deck
+    # (owner report: "a lot of the photos are just not rendered")
+    if state["dropped"]:
+        note(f"render · warning: {state['dropped']} image(s) unreadable — "
+             f"dropped from slides")
     note("render · done" if report["ok"] else "render · QA flagged issues")
-    return {"pptx": str(out_pptx), "xlsx": str(out_xlsx), "qa": report}
+    return {"pptx": str(out_pptx), "xlsx": str(out_xlsx), "qa": report,
+            "dropped_images": state["dropped"]}
 
 
 def status(month: str) -> dict:

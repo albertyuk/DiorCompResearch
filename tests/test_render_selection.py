@@ -127,6 +127,30 @@ def test_only_ids_renders_a_subset_and_marks_the_file_partial(
     assert os.path.exists(res["pptx"]) and os.path.exists(res_full["pptx"])
 
 
+def test_render_reports_dropped_unreadable_images(tmp_db, monkeypatch,
+                                                  tmp_path):
+    """An unreadable image costs its own grid cell, and the render SAYS so —
+    result carries dropped_images and the progress log warns."""
+    from mm import pipeline
+    good = tmp_path / "good.jpg"
+    from PIL import Image
+    Image.new("RGB", (50, 50)).save(good)
+    junk = tmp_path / "junk.heic"
+    junk.write_bytes(b"not an image")
+    _post(tmp_db, "weibo:D1", media=[
+        {"kind": "image", "local_path": str(good), "selected": True},
+        {"kind": "image", "local_path": str(junk), "selected": True}])
+    _project(tmp_db, "DROP TEST", "weibo:D1")
+    captured = {}
+    _wire_fake_render(monkeypatch, tmp_path, captured)
+    notes = []
+    res = pipeline.run_render("2026-06", visuals_mode="card",
+                              progress=notes.append)
+    assert res["dropped_images"] == 1
+    assert any("unreadable" in n for n in notes)
+    assert captured["titles"] == ["DROP TEST"]     # the render still finished
+
+
 def test_render_route_passes_the_ticked_selection(client, tmp_db,
                                                   monkeypatch):
     from mm import pipeline

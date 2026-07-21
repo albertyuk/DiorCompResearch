@@ -40,8 +40,13 @@ _EXT_BY_CT = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp",
 # HEIC/HEIF (served by weibo's app CDN) renders in neither browsers nor
 # python-pptx — teach Pillow to open it so we can convert everywhere
 try:
-    from pillow_heif import register_heif_opener
-    register_heif_opener()
+    import pillow_heif
+    pillow_heif.register_heif_opener()
+    # weibo tiles large photos into many boxes, tripping libheif's
+    # conservative box-count cap ("Maximum number of child boxes (100) in
+    # 'ipco' box exceeded") — those are ordinary campaign photos, so lift
+    # the limit rather than silently dropping ~10% of a month's images
+    pillow_heif.options.DISABLE_SECURITY_LIMITS = True
     HEIF_SUPPORTED = True
 except Exception:                                  # pragma: no cover
     HEIF_SUPPORTED = False

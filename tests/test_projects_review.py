@@ -626,6 +626,16 @@ def test_slide_ready_converts_heic_and_aspect_survives_junk(tmp_path):
     assert _img_aspect(str(junk)) == 1.0
 
 
+def test_heif_security_limits_are_lifted():
+    """Weibo tiles large photos into many HEIF boxes, tripping libheif's
+    default cap ('Maximum number of child boxes (100) in ipco exceeded') —
+    ~10% of a live month's images failed to decode until the limit was
+    lifted (verified 82/82 on the real 2026-07 corpus)."""
+    import pillow_heif
+    import mm.media  # noqa: F401  (importing applies the option)
+    assert pillow_heif.options.DISABLE_SECURITY_LIMITS is True
+
+
 def test_media_download_and_preview_convert_heic(tmp_path):
     from PIL import Image
     from mm.media import browser_safe, heic_preview
