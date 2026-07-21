@@ -18,21 +18,30 @@ JPEG_QUALITY = 88
 PREP_THRESHOLD = 900_000   # bytes; smaller files embed as-is
 
 # the only formats python-pptx can embed — anything else (Weibo serves some
-# images as WEBP) must be converted no matter how small the file is
+# images as WEBP, its app CDN as HEIC) must be converted no matter how small
+# the file is
 PPTX_FORMATS = {"BMP", "GIF", "JPEG", "PNG", "TIFF", "WMF"}
 
+from ..media import HEIF_SUPPORTED  # noqa: E402  (registers the HEIF opener)
 
-def slide_ready(path: str, cache_dir: Path) -> str:
+
+def slide_ready(path: str, cache_dir: Path) -> str | None:
     """Path to embed for `path`: the original when it is already small AND a
-    format the deck can embed, else a cached shrunk/converted copy. Any
-    failure falls back to the original — preparing images must never cost a
-    slide."""
+    format the deck can embed, else a cached shrunk/converted copy. Returns
+    None for files Pillow cannot even open — embedding those would kill the
+    whole render (owner report: one .heic aborted the deck), so the caller
+    drops that single visual instead."""
     p = Path(path)
     try:
         size = p.stat().st_size
         from PIL import Image, ImageOps
         with Image.open(p) as probe:       # header read only, no decode
             fmt = probe.format
+    except Exception:
+        return None
+    fallback = str(path) if fmt in PPTX_FORMATS else None
+    try:
+        from PIL import Image, ImageOps
         if size <= PREP_THRESHOLD and fmt in PPTX_FORMATS:
             return str(path)
         key = hashlib.sha1(
@@ -56,4 +65,4 @@ def slide_ready(path: str, cache_dir: Path) -> str:
             os.replace(tmp, out)                   # atomic under parallelism
         return str(out)
     except Exception:
-        return str(path)
+        return fallback

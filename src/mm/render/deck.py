@@ -115,9 +115,14 @@ def _resolve_media(path: str) -> Path | None:
 
 
 def _img_aspect(path: str) -> float:
-    with Image.open(path) as im:
-        w, h = im.size
-    return w / h if h else 1.0
+    # one unreadable file must never abort a render — a square default only
+    # costs that image its ideal crop
+    try:
+        with Image.open(path) as im:
+            w, h = im.size
+        return w / h if h else 1.0
+    except Exception:
+        return 1.0
 
 
 class DeckBuilder:

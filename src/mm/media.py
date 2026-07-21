@@ -34,7 +34,53 @@ def _url_is_safe(url: str) -> bool:
         return False
 
 _EXT_BY_CT = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp",
-              "image/gif": ".gif", "video/mp4": ".mp4"}
+              "image/gif": ".gif", "video/mp4": ".mp4",
+              "image/heic": ".heic", "image/heif": ".heif"}
+
+# HEIC/HEIF (served by weibo's app CDN) renders in neither browsers nor
+# python-pptx — teach Pillow to open it so we can convert everywhere
+try:
+    from pillow_heif import register_heif_opener
+    register_heif_opener()
+    HEIF_SUPPORTED = True
+except Exception:                                  # pragma: no cover
+    HEIF_SUPPORTED = False
+
+HEIC_SUFFIXES = {".heic", ".heif"}
+
+
+def browser_safe(path: Path) -> Path:
+    """Convert a freshly downloaded HEIC/HEIF to JPEG in place (same stem);
+    other formats pass through. On any failure the original is kept."""
+    if path.suffix.lower() not in HEIC_SUFFIXES:
+        return path
+    try:
+        from PIL import Image
+        out = path.with_suffix(".jpg")
+        with Image.open(path) as im:
+            im.convert("RGB").save(out, "JPEG", quality=92)
+        path.unlink(missing_ok=True)
+        return out
+    except Exception:
+        return path
+
+
+def heic_preview(path: Path) -> Path:
+    """For HEIC files already on disk (pre-conversion downloads referenced by
+    stored media paths): a cached sibling JPEG for browser display — the
+    original stays, so stored paths keep resolving."""
+    if path.suffix.lower() not in HEIC_SUFFIXES:
+        return path
+    out = path.with_suffix(".jpg")
+    if out.exists():
+        return out
+    try:
+        from PIL import Image
+        with Image.open(path) as im:
+            im.convert("RGB").save(out, "JPEG", quality=92)
+        return out
+    except Exception:
+        return path
 
 
 class MediaStore:
@@ -92,6 +138,6 @@ class MediaStore:
                 ext = _EXT_BY_CT.get(ct) or mimetypes.guess_extension(ct) or target.suffix
                 final = target.with_suffix(ext)
                 final.write_bytes(r.content)
-                return final
+                return browser_safe(final)
         except Exception:
             return None

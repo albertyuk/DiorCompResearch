@@ -600,9 +600,53 @@ def test_slide_ready_shrinks_and_caches(tmp_path):
         assert out2.endswith(".png")
         with Image.open(out2) as im:
             assert im.mode == "RGBA" and max(im.size) == MAX_EDGE
+    # unreadable files are DROPPED (None), not passed through — embedding
+    # them aborts the whole deck (owner report: one .heic killed a render)
     broken = tmp_path / "broken.jpg"
     broken.write_bytes(b"\xff\xd8\xff" + b"x" * 1_000_001)
-    assert slide_ready(str(broken), cache) == str(broken)
+    assert slide_ready(str(broken), cache) is None
+
+
+def test_slide_ready_converts_heic_and_aspect_survives_junk(tmp_path):
+    """Weibo's app CDN serves HEIC: slide_ready converts it via pillow-heif;
+    deck._img_aspect defaults instead of raising on unreadable files."""
+    from PIL import Image
+    from mm.render.deck import _img_aspect
+    from mm.render.imgprep import PPTX_FORMATS, slide_ready
+    cache = tmp_path / "cache"
+    heic = tmp_path / "img.heic"
+    Image.new("RGB", (320, 240), "navy").save(heic, "HEIF")
+    out = slide_ready(str(heic), cache)
+    assert out is not None and out != str(heic)
+    with Image.open(out) as im:
+        assert im.format in PPTX_FORMATS
+    junk = tmp_path / "junk.heic"
+    junk.write_bytes(b"not an image at all")
+    assert slide_ready(str(junk), cache) is None
+    assert _img_aspect(str(junk)) == 1.0
+
+
+def test_media_download_and_preview_convert_heic(tmp_path):
+    from PIL import Image
+    from mm.media import browser_safe, heic_preview
+    # fresh download path: converted in place, original removed
+    dl = tmp_path / "img_abc.heic"
+    Image.new("RGB", (200, 200), "red").save(dl, "HEIF")
+    out = browser_safe(dl)
+    assert out.suffix == ".jpg" and out.exists() and not dl.exists()
+    with Image.open(out) as im:
+        assert im.format == "JPEG"
+    # legacy file already referenced by stored paths: sibling JPEG cache,
+    # original kept so those paths keep resolving
+    legacy = tmp_path / "img_old.heic"
+    Image.new("RGB", (150, 150), "green").save(legacy, "HEIF")
+    prev = heic_preview(legacy)
+    assert prev.suffix == ".jpg" and prev.exists() and legacy.exists()
+    assert heic_preview(legacy) == prev            # cached second time
+    # non-heic files pass through untouched
+    plain = tmp_path / "a.jpg"
+    Image.new("RGB", (10, 10)).save(plain)
+    assert browser_safe(plain) == plain and heic_preview(plain) == plain
 
 
 def test_slide_ready_converts_webp_regardless_of_size(tmp_path):

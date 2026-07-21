@@ -569,10 +569,13 @@ def run_render(month: str, *, visuals_mode: str | None = None,
                                    should_stop=should_stop)
         # slides embed a shrunk copy of oversized originals (30MB HQ uploads
         # would bloat the PPTX and multiply the QA raster time); the shrink
-        # itself runs here so the pool parallelizes it too
+        # itself runs here so the pool parallelizes it too. slide_ready
+        # returns None for unreadable files — drop that visual, never the
+        # whole render
         for v in vis:
             v["image"] = slide_ready(v["image"],
                                      OUTPUT_DIR / "deck_img_cache")
+        vis = [v for v in vis if v["image"]]
         with lock:
             state["done"] += 1
             done_now = state["done"]

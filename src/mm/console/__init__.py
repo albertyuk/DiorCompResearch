@@ -1902,6 +1902,7 @@ def create_app() -> FastAPI:
 
     @app.get("/media")
     def media(path: str):
+        from ..media import heic_preview
         p = Path(path).resolve()
         allowed = (p.is_relative_to(DATA_DIR.resolve())
                    or p.is_relative_to(OUTPUT_DIR.resolve()))
@@ -1909,7 +1910,9 @@ def create_app() -> FastAPI:
             return JSONResponse({"error": "forbidden"}, status_code=403)
         if not p.is_file():
             return JSONResponse({"error": "not found"}, status_code=404)
-        return FileResponse(str(p))
+        # browsers can't display HEIC — serve a cached JPEG sibling instead
+        # (covers files downloaded before ingest started converting them)
+        return FileResponse(str(heic_preview(p)))
 
     @app.get("/download/{name}")
     def download(name: str):
