@@ -94,7 +94,9 @@ def _spawn(month: str, name: str, fn, *args, **kwargs):
             _log_activity(month, f"{name} error: {str(e)[:200]}")
 
     # hosted: non-daemon so a deploy's SIGINT lets the phase reach its next
-    # checkpoint within fly.toml's kill_timeout; local Ctrl-C stays instant
+    # checkpoint — but only up to cli._install_exit_backstop's grace; a
+    # wedged thread must never hold a machine swap for the whole
+    # kill_timeout (2026-07-21 outage). Local Ctrl-C stays instant.
     from ..config import IS_HOSTED as _hosted
     threading.Thread(target=worker, daemon=not _hosted).start()
     return True

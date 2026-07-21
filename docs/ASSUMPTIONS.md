@@ -778,6 +778,22 @@ each is easy to revisit.
     reused or decoded again) with a loud progress warning naming the count.
     The sweep always finishes.
 
+87. **Deploy outage 2026-07-21 (~10:49–10:54, owner log: "no known healthy
+    instances found for route tcp/443")**: the #86 deploy itself went dark
+    for ~5 minutes. Cause: hosted task threads are deliberately non-daemon
+    (so a deploy's SIGINT lets a phase reach its next checkpoint), but the
+    OLD server's render thread was wedged inside a C-level libheif decode —
+    uninterruptible from Python — so the interpreter's exit hung, and with
+    one machine + one volume the replacement can't start until the old one
+    dies, which fly only forces after kill_timeout (300s). The site then
+    recovered on its own (healthz 200, login serving — verified). Guard so
+    this class can't recur: _install_exit_backstop (hosted only) wraps
+    uvicorn's stop-signal handler to arm a daemon timer that hard-exits
+    (os._exit(0)) 20s into graceful shutdown — checkpoints still get their
+    grace, but no wedged thread (or stuck thread-pool atexit join) can hold
+    a machine swap hostage again. kill_timeout=300 stays as the OS-level
+    backstop behind it.
+
 ## Testing
 
 25. The ~15 caption fixtures test the deterministic layers (@-tag extraction,

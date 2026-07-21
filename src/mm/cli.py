@@ -22,6 +22,27 @@ def _echo(obj) -> None:
     typer.echo(json.dumps(obj, indent=1, ensure_ascii=False, default=str))
 
 
+def _install_exit_backstop(grace: float = 20.0) -> None:
+    """Hosted only: a stop signal (deploy, restart) must never wait out
+    fly.toml's kill_timeout on a wedged worker thread — after `grace`
+    seconds of graceful shutdown, exit hard. Observed 2026-07-21: a render
+    thread stuck in a C-level HEIC decode blocked interpreter exit, so the
+    machine swap served nothing for the full 5-minute kill_timeout."""
+    import os
+    import threading
+    import uvicorn
+
+    orig = uvicorn.Server.handle_exit
+
+    def handle_exit(self, sig, frame):
+        t = threading.Timer(grace, os._exit, args=(0,))
+        t.daemon = True
+        t.start()
+        return orig(self, sig, frame)
+
+    uvicorn.Server.handle_exit = handle_exit
+
+
 @app.command()
 def console(host: str = typer.Option(None, help="default: 127.0.0.1 local, "
                                      "0.0.0.0 hosted"),
@@ -32,6 +53,8 @@ def console(host: str = typer.Option(None, help="default: 127.0.0.1 local, "
     from .config import IS_HOSTED
     from .console import create_app
     ensure_dirs()
+    if IS_HOSTED:
+        _install_exit_backstop()
     host = host or ("0.0.0.0" if IS_HOSTED else "127.0.0.1")
     port = port or (8080 if IS_HOSTED else 8377)
     url = f"http://{host}:{port}"
