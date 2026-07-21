@@ -754,6 +754,30 @@ each is easy to revisit.
     ("interrupted (server restart)") remains the tell for any future
     process death.
 
+86. **HEIC sweep speed (owner report: "converting HEIC media 140/560" after
+    ~an hour — "speed it up or find an alternative")**: decoding weibo's
+    tiled HEICs takes minutes per file on the 1-CPU box, so a 560-file
+    month = hours. This was NOT always an issue — HEIC only entered the
+    system with the 2026-07-21 app-timeline ingest fallback (#82); the
+    web_v2 era served JPEG. Key discovery (live-probed): none of the
+    stored media urls says .heic — the app CDN serves HEIC bytes under
+    h-prefixed sinaimg size buckets (…/hlarge/xxx.jpg, content-type
+    image/heic), and the SAME image is published as plain JPEG under the
+    un-prefixed bucket (…/large/xxx.jpg). An Accept header does NOT switch
+    it; the bucket name does. So the fix skips decoding entirely:
+    (a) jpeg_variant() rewrites h-bucket urls (hlarge→large, hmw…→mw…);
+    (b) MediaStore.download fetches the JPEG bucket FIRST, so future
+    ingests never store HEIC; (c) convert_month_heic now RE-DOWNLOADS the
+    JPEG originals — 8 parallel fetches over one keep-alive client, magic-
+    byte-checked, posts.media + hero paths rewritten as before. Live: 10/10
+    real CDN urls in 5.4s (full-res 1080px JPEGs) — the 560-file sweep is
+    minutes, not hours. Only files with no stored url or a dead url fall
+    back to local decoding, now in a KILLABLE child process (spawn) with an
+    80MP pixel cap and 60s-per-file timeout; a file that hangs/OOMs kills
+    only the child, and unconvertible files are quarantined (*.skip, never
+    reused or decoded again) with a loud progress warning naming the count.
+    The sweep always finishes.
+
 ## Testing
 
 25. The ~15 caption fixtures test the deterministic layers (@-tag extraction,

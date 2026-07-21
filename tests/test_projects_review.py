@@ -702,6 +702,122 @@ def test_convert_month_heic_sweeps_files_and_rewrites_paths(tmp_db,
     assert mmedia.convert_month_heic(tmp_db.get_engine(), "2026-06") == 0
 
 
+def test_convert_month_heic_quarantines_bad_files_and_finishes(
+        tmp_db, monkeypatch, tmp_path):
+    """Owner report: the sweep hung at 130/560 — one pathological file must
+    never stall it. Conversion runs in a killable child; a file that errors
+    (or hangs/OOMs) is renamed *.skip so nothing decodes it again, and the
+    sweep completes with a loud warning."""
+    from PIL import Image
+    import mm.media as mmedia
+    monkeypatch.setattr(mmedia, "RUNS_DIR", tmp_path / "runs")
+    media_dir = tmp_path / "runs" / "2026-06" / "lv" / "media"
+    media_dir.mkdir(parents=True)
+    good = media_dir / "img_good.heic"
+    Image.new("RGB", (80, 80), "blue").save(good, "HEIF")
+    bad = media_dir / "img_bad.heic"
+    bad.write_bytes(b"ftyp-garbage-not-heif" * 10)
+    notes = []
+    n = mmedia.convert_month_heic(tmp_db.get_engine(), "2026-06",
+                                  note=notes.append)
+    assert n == 1                                    # the good one converted
+    assert good.with_suffix(".jpg").exists() and not good.exists()
+    assert (media_dir / "img_bad.heic.skip").exists()  # quarantined
+    assert not bad.exists()
+    assert any("unconvertible" in x for x in notes)  # loud, not silent
+    # re-run: nothing left to do, quarantine is never retried
+    assert mmedia.convert_month_heic(tmp_db.get_engine(), "2026-06") == 0
+
+
+class _FakeResp:
+    def __init__(self, content, ct):
+        self.content = content
+        self.headers = {"content-type": ct}
+
+    def raise_for_status(self):
+        pass
+
+
+class _FakeCDN:
+    """sinaimg stand-in (live-verified behaviour 2026-07-21): h-prefixed
+    size buckets serve HEIC bytes, un-prefixed buckets serve real JPEG."""
+    def __init__(self, *a, **k):
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def get(self, url, headers=None):
+        if "/hlarge/" in url:
+            return _FakeResp(b"\x00\x00\x00\x18ftypheic" + b"h" * 64,
+                             "image/heic")
+        return _FakeResp(b"\xff\xd8\xff" + b"j" * 64, "image/jpeg")
+
+
+def test_jpeg_variant_rewrites_sinaimg_h_buckets():
+    from mm.media import jpeg_variant
+    assert jpeg_variant("https://wx4.sinaimg.cn/hlarge/00244Dddgy1.jpg") == \
+        "https://wx4.sinaimg.cn/large/00244Dddgy1.jpg"
+    assert jpeg_variant("https://wx1.sinaimg.cn/hmw2000/abc.jpg") == \
+        "https://wx1.sinaimg.cn/mw2000/abc.jpg"
+    # already-JPEG buckets, foreign hosts, junk: no rewrite
+    assert jpeg_variant("https://wx4.sinaimg.cn/large/abc.jpg") is None
+    assert jpeg_variant("https://evil.example.com/hlarge/abc.jpg") is None
+    assert jpeg_variant("not a url") is None
+
+
+def test_refetch_and_download_prefer_the_jpeg_bucket(tmp_path, monkeypatch):
+    """The HEIC fast path is a re-download, not a decode: _refetch_jpeg
+    pulls the un-prefixed bucket's JPEG, and download() tries that bucket
+    FIRST so fresh ingests never store HEIC at all."""
+    import mm.media as mmedia
+    monkeypatch.setattr(mmedia.httpx, "Client", _FakeCDN)
+    monkeypatch.setattr(mmedia, "_url_is_safe", lambda u: True)
+    heic = tmp_path / "img_aaa.heic"
+    heic.write_bytes(b"ftypheic")
+    out = mmedia._refetch_jpeg("https://wx4.sinaimg.cn/hlarge/a.jpg", heic)
+    assert out == heic.with_suffix(".jpg")
+    assert out.read_bytes()[:3] == b"\xff\xd8\xff"
+    monkeypatch.setattr(mmedia, "RUNS_DIR", tmp_path / "runs")
+    store = mmedia.MediaStore("2026-06")
+    got = store.download("lv", "https://wx4.sinaimg.cn/hlarge/b.jpg")
+    assert got is not None and got.suffix == ".jpg"
+    assert got.read_bytes()[:3] == b"\xff\xd8\xff"
+
+
+def test_convert_month_heic_refetches_without_decoding(tmp_db, monkeypatch,
+                                                       tmp_path):
+    """Owner report: the decode sweep crawled (~140/560 after an hour). The
+    sweep now re-downloads JPEG originals for files with a stored url — no
+    decoding, so even a garbage HEIC converts fine — and repoints paths."""
+    import mm.media as mmedia
+    monkeypatch.setattr(mmedia, "RUNS_DIR", tmp_path / "runs")
+    monkeypatch.setattr(mmedia.httpx, "Client", _FakeCDN)
+    media_dir = tmp_path / "runs" / "2026-06" / "lv" / "media"
+    media_dir.mkdir(parents=True)
+    heic = media_dir / "img_ccc.heic"
+    heic.write_bytes(b"garbage that would never decode")
+    _post(tmp_db, "weibo:HF1", keep=True, media=[
+        {"kind": "image", "local_path": str(heic),
+         "url": "https://wx4.sinaimg.cn/hlarge/c.jpg"}])
+    notes = []
+    n = mmedia.convert_month_heic(tmp_db.get_engine(), "2026-06",
+                                  note=notes.append)
+    assert n == 1
+    jpg = heic.with_suffix(".jpg")
+    assert jpg.exists() and not heic.exists()
+    assert jpg.read_bytes()[:3] == b"\xff\xd8\xff"
+    assert not (media_dir / "img_ccc.heic.skip").exists()
+    assert any("refetching JPEG originals" in x for x in notes)
+    with tmp_db.get_engine().connect() as conn:
+        media = json.loads(conn.execute(select(tmp_db.posts.c.media).where(
+            tmp_db.posts.c.post_id == "weibo:HF1")).scalar())
+    assert media[0]["local_path"] == str(jpg)
+
+
 def test_slide_ready_converts_webp_regardless_of_size(tmp_path):
     """Owner report: render died on 'unsupported image format … got WEBP'.
     python-pptx can only embed BMP/GIF/JPEG/PNG/TIFF/WMF — small files used

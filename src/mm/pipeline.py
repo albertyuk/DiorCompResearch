@@ -525,12 +525,13 @@ def run_render(month: str, *, visuals_mode: str | None = None,
     partial = total < n_available
     # HEIC must be gone BEFORE the parallel workers start: decoding weibo's
     # tiled HEICs is memory-heavy, and four at once on the 2GB box risks an
-    # OOM kill that takes the whole app down mid-render
+    # OOM kill that takes the whole app down mid-render. The sweep refetches
+    # the CDN's JPEG originals (fast), decoding only unfetchable strays.
     try:
         from .media import convert_month_heic
         n_heic = convert_month_heic(engine, month, note=note)
         if n_heic:
-            note(f"render · converted {n_heic} HEIC images to JPEG")
+            note(f"render · replaced {n_heic} HEIC images with JPEG originals")
     except Exception:
         pass                          # strays still convert in slide_ready
     note(f"render · visuals 0/{total} projects ({visuals_mode} mode"
