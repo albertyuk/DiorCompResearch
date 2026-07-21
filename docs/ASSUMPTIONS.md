@@ -768,10 +768,14 @@ each is easy to revisit.
     (a) jpeg_variant() rewrites h-bucket urls (hlarge→large, hmw…→mw…);
     (b) MediaStore.download fetches the JPEG bucket FIRST, so future
     ingests never store HEIC; (c) convert_month_heic now RE-DOWNLOADS the
-    JPEG originals — 8 parallel fetches over one keep-alive client, magic-
-    byte-checked, posts.media + hero paths rewritten as before. Live: 10/10
-    real CDN urls in 5.4s (full-res 1080px JPEGs) — the 560-file sweep is
-    minutes, not hours. Only files with no stored url or a dead url fall
+    JPEG originals — 32 parallel fetches over one keep-alive client, magic-
+    byte-checked, posts.media + hero paths rewritten as before. 32, not 8:
+    live feedback showed sinaimg throttling per-connection throughput for
+    non-CN clients (~1 file/s aggregate at 8 workers from the fly box), so
+    aggregate concurrency is what makes the sweep fast; progress streams
+    as_completed so the counter ticks per landed file instead of in batchy
+    submission order. Live: 67/67 real CDN urls in 21.8s (full-res 1080px
+    JPEGs) — a full month's sweep is a couple of minutes, not hours. Only files with no stored url or a dead url fall
     back to local decoding, now in a KILLABLE child process (spawn) with an
     80MP pixel cap and 60s-per-file timeout; a file that hangs/OOMs kills
     only the child, and unconvertible files are quarantined (*.skip, never

@@ -10,7 +10,7 @@ import ipaddress
 import mimetypes
 import re
 import socket
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -211,7 +211,10 @@ class _HeicPool:
             self.proc.kill()
 
 
-REFETCH_WORKERS = 8                # I/O-bound CDN fetches, tiny memory cost
+# sinaimg throttles per-connection throughput for non-CN clients (~1s+ per
+# file observed from the fly box), so aggregate concurrency is what makes
+# the sweep fast; each worker holds ~1MB, so 32 costs ~32MB peak
+REFETCH_WORKERS = 32
 
 
 def convert_month_heic(engine, month: str, note=None) -> int:
@@ -254,11 +257,17 @@ def convert_month_heic(engine, month: str, note=None) -> int:
             return f, (_refetch_jpeg(url, f, client=shared) if url else None)
 
         done = 0
-        with httpx.Client(follow_redirects=True,
+        limits = httpx.Limits(max_connections=REFETCH_WORKERS,
+                              max_keepalive_connections=REFETCH_WORKERS)
+        with httpx.Client(follow_redirects=True, limits=limits,
                           timeout=httpx.Timeout(30.0, connect=10.0)) \
                 as shared, \
                 ThreadPoolExecutor(max_workers=REFETCH_WORKERS) as ex:
-            for f, out in ex.map(lambda f: work(shared, f), heics):
+            futs = [ex.submit(work, shared, f) for f in heics]
+            # as_completed: progress ticks the moment ANY file lands — no
+            # head-of-line batching in the activity log
+            for fut in as_completed(futs):
+                f, out = fut.result()
                 done += 1
                 if note:
                     note(f"render · refetching JPEG originals "
