@@ -70,6 +70,72 @@ def browser_safe(path: Path) -> Path:
         return path
 
 
+def convert_month_heic(engine, month: str, note=None) -> int:
+    """One-time, SEQUENTIAL conversion of every HEIC/HEIF under a month's
+    media dirs to JPEG, rewriting the stored paths (posts.media local_path
+    + projects.hero_media). Runs before the render's parallel visual
+    assembly so tiled-HEIC decodes (huge bitmaps) never happen in four
+    workers at once on the 2GB box — that's an OOM kill, which takes the
+    whole app (and its activity log) down with it."""
+    import json as _json
+
+    from sqlalchemy import select
+
+    from . import db
+
+    month_dir = RUNS_DIR / month
+    converted: dict[str, str] = {}
+    files = sorted(month_dir.glob("*/media/*")) if month_dir.is_dir() else []
+    heics = [f for f in files if f.suffix.lower() in HEIC_SUFFIXES]
+    for i, f in enumerate(heics, 1):
+        out = browser_safe(f)                      # in place, one at a time
+        if out != f:
+            converted[str(f)] = str(out)
+        if note and (i % 10 == 0 or i == len(heics)):
+            note(f"render · converting HEIC media {i}/{len(heics)}…")
+    if not converted:
+        return 0
+
+    def fix(path: str | None) -> str | None:
+        if not path:
+            return path
+        if path in converted:
+            return converted[path]
+        # already-deleted original whose .jpg sibling exists (older sweep)
+        p = Path(path)
+        if p.suffix.lower() in HEIC_SUFFIXES and not p.exists() \
+                and p.with_suffix(".jpg").exists():
+            return str(p.with_suffix(".jpg"))
+        return path
+
+    with engine.begin() as conn:
+        for r in conn.execute(select(db.posts.c.post_id, db.posts.c.media)
+                              .where(db.posts.c.month == month)).mappings():
+            media = _json.loads(r["media"] or "[]")
+            changed = False
+            for m in media:
+                new = fix(m.get("local_path"))
+                if new != m.get("local_path"):
+                    m["local_path"] = new
+                    changed = True
+            if changed:
+                conn.execute(db.posts.update()
+                             .where(db.posts.c.post_id == r["post_id"])
+                             .values(media=_json.dumps(media,
+                                                       ensure_ascii=False)))
+        for r in conn.execute(select(db.projects.c.id,
+                                     db.projects.c.hero_media)
+                              .where(db.projects.c.month == month)).mappings():
+            heroes = _json.loads(r["hero_media"] or "[]")
+            fixed = [fix(h) for h in heroes]
+            if fixed != heroes:
+                conn.execute(db.projects.update()
+                             .where(db.projects.c.id == r["id"])
+                             .values(hero_media=_json.dumps(
+                                 fixed, ensure_ascii=False)))
+    return len(converted)
+
+
 def heic_preview(path: Path) -> Path:
     """For HEIC files already on disk (pre-conversion downloads referenced by
     stored media paths): a cached sibling JPEG for browser display — the

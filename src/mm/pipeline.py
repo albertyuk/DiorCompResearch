@@ -523,6 +523,16 @@ def run_render(month: str, *, visuals_mode: str | None = None,
             brand_rows.append((brand, rows))
     total = sum(len(rows) for _, rows in brand_rows)
     partial = total < n_available
+    # HEIC must be gone BEFORE the parallel workers start: decoding weibo's
+    # tiled HEICs is memory-heavy, and four at once on the 2GB box risks an
+    # OOM kill that takes the whole app down mid-render
+    try:
+        from .media import convert_month_heic
+        n_heic = convert_month_heic(engine, month, note=note)
+        if n_heic:
+            note(f"render · converted {n_heic} HEIC images to JPEG")
+    except Exception:
+        pass                          # strays still convert in slide_ready
     note(f"render · visuals 0/{total} projects ({visuals_mode} mode"
          f"{', selection' if partial else ''})")
 

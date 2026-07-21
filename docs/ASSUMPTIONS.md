@@ -738,6 +738,22 @@ each is easy to revisit.
     dropped from slides") and returns dropped_images — a silent hole in a
     deck can't happen again.
 
+85. **Render "just disappears" (owner report: button tries then nothing)**:
+    no error line + everything vanishing = the PROCESS died (crashes leave
+    a "render error: …" activity line; a restart wipes the in-memory log
+    and TASKS). Prime suspect: decoding weibo's tiled HEICs (huge bitmaps,
+    limits lifted per #84) inside FOUR parallel render workers on the 2GB
+    box → OOM kill. Fix: convert_month_heic — run_render's first step
+    converts every HEIC under the month's media dirs SEQUENTIALLY (peak
+    memory = one image) and rewrites posts.media local_paths +
+    projects.hero_media to the JPEGs, so the parallel workers only ever
+    touch JPEG. Progress-noted ("converting HEIC media i/N"), idempotent
+    (second sweep = 0), never blocks the render, and strays still convert
+    in slide_ready. Live-verified on the real corpus: 66 files converted,
+    0 heic left, 0 dangling DB paths. The Runs page's stalled-task banner
+    ("interrupted (server restart)") remains the tell for any future
+    process death.
+
 ## Testing
 
 25. The ~15 caption fixtures test the deterministic layers (@-tag extraction,

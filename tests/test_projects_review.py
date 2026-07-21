@@ -659,6 +659,49 @@ def test_media_download_and_preview_convert_heic(tmp_path):
     assert browser_safe(plain) == plain and heic_preview(plain) == plain
 
 
+def test_convert_month_heic_sweeps_files_and_rewrites_paths(tmp_db,
+                                                            monkeypatch,
+                                                            tmp_path):
+    """Render pre-converts every HEIC sequentially (a parallel decode of
+    weibo's tiled HEICs can OOM-kill the 2GB box) and repoints posts.media
+    + projects.hero_media at the JPEGs."""
+    import json
+    from PIL import Image
+    import mm.media as mmedia
+    monkeypatch.setattr(mmedia, "RUNS_DIR", tmp_path / "runs")
+    media_dir = tmp_path / "runs" / "2026-06" / "lv" / "media"
+    media_dir.mkdir(parents=True)
+    heic = media_dir / "img_aaa.heic"
+    Image.new("RGB", (100, 100), "red").save(heic, "HEIF")
+    plain = media_dir / "img_bbb.jpg"
+    Image.new("RGB", (50, 50)).save(plain)
+    _post(tmp_db, "weibo:H1", keep=True, media=[
+        {"kind": "image", "local_path": str(heic)},
+        {"kind": "image", "local_path": str(plain)}])
+    pid = _project(tmp_db, "HEIC SWEEP", post_ids=("weibo:H1",))
+    with tmp_db.get_engine().begin() as conn:
+        conn.execute(tmp_db.projects.update()
+                     .where(tmp_db.projects.c.id == pid)
+                     .values(hero_media=json.dumps([str(heic)])))
+    notes = []
+    n = mmedia.convert_month_heic(tmp_db.get_engine(), "2026-06",
+                                  note=notes.append)
+    assert n == 1
+    assert not heic.exists() and heic.with_suffix(".jpg").exists()
+    with tmp_db.get_engine().connect() as conn:
+        from sqlalchemy import select
+        media = json.loads(conn.execute(select(tmp_db.posts.c.media).where(
+            tmp_db.posts.c.post_id == "weibo:H1")).scalar())
+        heroes = json.loads(conn.execute(
+            select(tmp_db.projects.c.hero_media).where(
+                tmp_db.projects.c.id == pid)).scalar())
+    assert media[0]["local_path"] == str(heic.with_suffix(".jpg"))
+    assert media[1]["local_path"] == str(plain)      # untouched
+    assert heroes == [str(heic.with_suffix(".jpg"))]
+    # second sweep is a no-op
+    assert mmedia.convert_month_heic(tmp_db.get_engine(), "2026-06") == 0
+
+
 def test_slide_ready_converts_webp_regardless_of_size(tmp_path):
     """Owner report: render died on 'unsupported image format … got WEBP'.
     python-pptx can only embed BMP/GIF/JPEG/PNG/TIFF/WMF — small files used
