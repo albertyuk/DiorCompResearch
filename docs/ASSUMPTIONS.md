@@ -707,6 +707,21 @@ each is easy to revisit.
     the truncated app text (web_v2's text_raw was full) — acceptable in
     outage mode; the filter still sees the lead paragraph.
 
+83. **HEIC (owner report: render error "cannot identify image file …
+    .heic")**: weibo's app CDN (the fallback ingest path) serves some
+    images as HEIC, which neither Pillow-by-default, python-pptx, nor
+    browsers handle. Four layers: (a) pillow-heif dependency registers a
+    HEIF opener (media.py; imgprep imports it) so Pillow can open them.
+    (b) ingest converts HEIC→JPEG at download time (browser_safe — in
+    place, same stem). (c) files already on the volume: the /media route
+    serves a cached JPEG sibling (heic_preview keeps the original so
+    stored media paths keep resolving) and slide_ready converts at render.
+    (d) drop-not-die: slide_ready now returns None for files Pillow cannot
+    open (the caller drops that single visual) and deck._img_aspect
+    defaults to square instead of raising — one bad image can never abort
+    a render again (that's exactly what happened: slide_ready fell back to
+    the original .heic and the unguarded aspect probe at grid layout threw).
+
 ## Testing
 
 25. The ~15 caption fixtures test the deterministic layers (@-tag extraction,
