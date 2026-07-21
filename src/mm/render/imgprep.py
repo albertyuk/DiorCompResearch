@@ -17,17 +17,24 @@ MAX_EDGE = 1600            # long-edge px — generous for a 14-image grid cell
 JPEG_QUALITY = 88
 PREP_THRESHOLD = 900_000   # bytes; smaller files embed as-is
 
+# the only formats python-pptx can embed — anything else (Weibo serves some
+# images as WEBP) must be converted no matter how small the file is
+PPTX_FORMATS = {"BMP", "GIF", "JPEG", "PNG", "TIFF", "WMF"}
+
 
 def slide_ready(path: str, cache_dir: Path) -> str:
-    """Path to embed for `path`: the original when it is already small, else
-    a cached shrunk copy. Any failure falls back to the original — preparing
-    images must never cost a slide."""
+    """Path to embed for `path`: the original when it is already small AND a
+    format the deck can embed, else a cached shrunk/converted copy. Any
+    failure falls back to the original — preparing images must never cost a
+    slide."""
     p = Path(path)
     try:
         size = p.stat().st_size
-        if size <= PREP_THRESHOLD:
-            return str(path)
         from PIL import Image, ImageOps
+        with Image.open(p) as probe:       # header read only, no decode
+            fmt = probe.format
+        if size <= PREP_THRESHOLD and fmt in PPTX_FORMATS:
+            return str(path)
         key = hashlib.sha1(
             f"{p.resolve()}|{size}|{p.stat().st_mtime_ns}|"
             f"{MAX_EDGE}|{JPEG_QUALITY}".encode()).hexdigest()[:20]

@@ -681,6 +681,15 @@ each is easy to revisit.
     wechat accounts bind on the endpoint's first day back. Ambiguous or
     unverified candidates always stay for manual Resolve.
 
+81. **WEBP renders (owner report: "unsupported image format … got 'WEBP'")**:
+    python-pptx embeds only BMP/GIF/JPEG/PNG/TIFF/WMF, and slide_ready's
+    ≤900KB short-circuit let small Weibo .webp files reach the deck raw
+    (large ones were already converted by the downscale path). slide_ready
+    now sniffs the format (PIL header read, no decode) and converts any
+    non-embeddable format through the same content-addressed cache
+    regardless of size — transparency to PNG, the rest to JPEG. Unopenable
+    files keep the old fall-back-to-original behavior.
+
 ## Testing
 
 25. The ~15 caption fixtures test the deterministic layers (@-tag extraction,

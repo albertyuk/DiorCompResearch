@@ -605,6 +605,30 @@ def test_slide_ready_shrinks_and_caches(tmp_path):
     assert slide_ready(str(broken), cache) == str(broken)
 
 
+def test_slide_ready_converts_webp_regardless_of_size(tmp_path):
+    """Owner report: render died on 'unsupported image format … got WEBP'.
+    python-pptx can only embed BMP/GIF/JPEG/PNG/TIFF/WMF — small files used
+    to skip preparation entirely, so a tiny Weibo .webp reached the deck
+    raw. Now format is sniffed and unsupported ones always convert."""
+    from PIL import Image
+    from mm.render.imgprep import PPTX_FORMATS, slide_ready
+    cache = tmp_path / "cache"
+    small_webp = tmp_path / "post.webp"
+    Image.new("RGB", (300, 300), "red").save(small_webp, "WEBP")
+    assert small_webp.stat().st_size < 900_000
+    out = slide_ready(str(small_webp), cache)
+    assert out != str(small_webp)
+    with Image.open(out) as im:
+        assert im.format in PPTX_FORMATS
+    # transparency survives the conversion as PNG
+    trans = tmp_path / "sticker.webp"
+    Image.new("RGBA", (200, 200), (0, 0, 0, 0)).save(trans, "WEBP")
+    out2 = slide_ready(str(trans), cache)
+    assert out2.endswith(".png")
+    with Image.open(out2) as im:
+        assert im.format == "PNG" and im.mode == "RGBA"
+
+
 def test_render_embeds_prepared_images_and_skips_qa_raster_on_hosted(
         tmp_db, monkeypatch, tmp_path):
     from pathlib import Path
