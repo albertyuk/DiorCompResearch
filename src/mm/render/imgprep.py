@@ -11,11 +11,17 @@ from __future__ import annotations
 
 import hashlib
 import os
+import threading
 from pathlib import Path
 
 MAX_EDGE = 1600            # long-edge px — generous for a 14-image grid cell
 JPEG_QUALITY = 88
 PREP_THRESHOLD = 900_000   # bytes; smaller files embed as-is
+
+# full-res decodes are the render's real memory hog (measured: 4 threads
+# preparing a 400-image month drove the process past 1.5GB and OOM-killed
+# the 2GB box) — at most two decode at once, and JPEGs decode pre-scaled
+_DECODE_GATE = threading.Semaphore(2)
 
 # the only formats python-pptx can embed — anything else (Weibo serves some
 # images as WEBP, its app CDN as HEIC) must be converted no matter how small
@@ -47,12 +53,16 @@ def slide_ready(path: str, cache_dir: Path) -> str | None:
         key = hashlib.sha1(
             f"{p.resolve()}|{size}|{p.stat().st_mtime_ns}|"
             f"{MAX_EDGE}|{JPEG_QUALITY}".encode()).hexdigest()[:20]
-        with Image.open(p) as im:
+        with _DECODE_GATE, Image.open(p) as im:
             alpha = (im.mode in ("RGBA", "LA")
                      or (im.mode == "P" and "transparency" in im.info))
             out = cache_dir / f"prep_{key}.{'png' if alpha else 'jpg'}"
             if out.exists():
                 return str(out)
+            if fmt == "JPEG":
+                # decode at a reduced DCT scale — a fraction of the memory
+                # of a full-res decode, and we shrink to MAX_EDGE anyway
+                im.draft("RGB", (MAX_EDGE, MAX_EDGE))
             im = ImageOps.exif_transpose(im)
             im.thumbnail((MAX_EDGE, MAX_EDGE))     # shrink only, keep ratio
             cache_dir.mkdir(parents=True, exist_ok=True)

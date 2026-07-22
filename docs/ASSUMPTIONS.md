@@ -798,6 +798,26 @@ each is easy to revisit.
     a machine swap hostage again. kill_timeout=300 stays as the OS-level
     backstop behind it.
 
+88. **Render OOM at full-month scale (owner: "the pptx does not render and
+    just crashes" at the last step)**: reproduced with a synthetic full
+    month (12 brands, 408 posts, real corpus images) — the visuals phase
+    alone peaked at 1.56GB INSIDE the Python process (4 worker threads
+    decoding full-res JPEGs for slide prep, freed buffers retained by
+    glibc arenas), plus one Chromium PER WORKER launched EAGERLY even
+    though photo-rich posts never need a card (~700MB more in child
+    processes) → well past the 2GB box → kernel OOM-kill, which looks like
+    "the render just disappears". June never tripped this: cards were one
+    small PNG per post; the raw-photos deck at 12-brand scale is what
+    tipped it. Three fixes, cold-verified at the same scale (peak fell
+    1564→568MB, zero browsers launched): (a) the visuals factory is LAZY —
+    _project_visuals takes a callable and a browser starts only when some
+    post truly needs a card/live capture; (b) slide prep decodes are gated
+    to two at a time and JPEGs decode pre-scaled (Image.draft to MAX_EDGE)
+    — a fraction of the memory, same 1600px output; (c) run_render hands
+    freed arena memory back (malloc_trim) after the visuals pool closes so
+    the prep peak never stacks onto the compose/QA peak. Deck output is
+    equivalent: same slides, same picture count, same prep quality.
+
 ## Testing
 
 25. The ~15 caption fixtures test the deterministic layers (@-tag extraction,

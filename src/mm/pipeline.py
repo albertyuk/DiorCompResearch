@@ -448,7 +448,12 @@ def _project_visuals(conn, factory, brand_key: str, project: dict,
                 img = first("video_cover") or first("image")
             else:
                 img = first("image") or first("video_cover")
-            img = img or factory.visual_for_post(brand_key, post)
+            if img is None and factory is not None:
+                # factory may arrive lazily (a zero-arg callable): a browser
+                # launches only when some post truly needs a card — a
+                # photo-rich month renders with NO Chromium at all
+                f = factory() if callable(factory) else factory
+                img = f.visual_for_post(brand_key, post) if f else None
             if img is None:
                 continue
             images = [img]
@@ -573,7 +578,7 @@ def run_render(month: str, *, visuals_mode: str | None = None,
                 select(db.platform_matches)
                 .where(db.platform_matches.c.project_id == p["id"],
                        db.platform_matches.c.present.is_(True))).mappings()]
-            vis = _project_visuals(conn, thread_factory(), brand.key, p,
+            vis = _project_visuals(conn, thread_factory, brand.key, p,
                                    celebs,
                                    note=(lambda msg, h=head:
                                          note(f"{h} · {msg}")),
@@ -614,6 +619,13 @@ def run_render(month: str, *, visuals_mode: str | None = None,
         # browsers close before the memory-hungry QA raster starts
         for f in factories:
             f.__exit__(None, None, None)
+    # image prep's freed decode buffers linger in glibc arenas — hand them
+    # back before compose so the peak phases never stack (2GB box)
+    try:
+        import ctypes
+        ctypes.CDLL("libc.so.6").malloc_trim(0)
+    except Exception:
+        pass
 
     if should_stop and should_stop():
         note("render · stopped — nothing written; Confirm & render restarts")

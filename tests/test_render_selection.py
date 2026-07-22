@@ -151,6 +151,44 @@ def test_render_reports_dropped_unreadable_images(tmp_db, monkeypatch,
     assert captured["titles"] == ["DROP TEST"]     # the render still finished
 
 
+def test_render_needs_no_browser_when_posts_have_images(tmp_db, monkeypatch,
+                                                        tmp_path):
+    """OOM postmortem (owner: 'the pptx does not render and just crashes'):
+    the render used to launch a Chromium PER WORKER even when every post
+    already had a photo — ~700MB of the 2GB box for nothing. The factory is
+    now lazy: a photo-rich month must render with no browser at all."""
+    from pathlib import Path
+    from PIL import Image
+    import mm.render.deck as deck_mod
+    import mm.render.qa as qa_mod
+    import mm.render.visuals as vis_mod
+    import mm.render.xlsx as xlsx_mod
+    from mm import pipeline
+    img = tmp_path / "a.jpg"
+    Image.new("RGB", (40, 40)).save(img)
+    _post(tmp_db, "weibo:L1", media=[{"kind": "image",
+                                      "local_path": str(img)}])
+    _project(tmp_db, "LAZY ONE", "weibo:L1")
+
+    class Boom:
+        def __init__(self, *a, **k):
+            raise AssertionError("VisualFactory constructed — browser "
+                                 "launches must be lazy")
+
+    class SpyBuilder:
+        def build(self, spec, out):
+            Path(out).write_bytes(b"pptx")
+
+    monkeypatch.setattr(vis_mod, "VisualFactory", Boom)
+    monkeypatch.setattr(deck_mod, "DeckBuilder", lambda: SpyBuilder())
+    monkeypatch.setattr(xlsx_mod, "write_projects_xlsx",
+                        lambda spec, out: Path(out).write_bytes(b"x") or out)
+    monkeypatch.setattr(qa_mod, "run_qa", lambda p, d: {"ok": True})
+    monkeypatch.setattr(pipeline, "OUTPUT_DIR", tmp_path)
+    res = pipeline.run_render("2026-06", visuals_mode="card")
+    assert res["qa"]["ok"]
+
+
 def test_render_route_passes_the_ticked_selection(client, tmp_db,
                                                   monkeypatch):
     from mm import pipeline
