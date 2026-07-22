@@ -90,6 +90,41 @@ def next_cursor(data, key: str):
 
 # -- weibo ---------------------------------------------------------------------
 
+def _count(v) -> int | None:
+    """Engagement number: ints pass through; CN display strings parse
+    ('1.2万' → 12000, '3亿', '10万+', '1,234'). None/junk → None (unknown —
+    distinct from a real 0)."""
+    if v is None or isinstance(v, bool):
+        return None
+    if isinstance(v, (int, float)):
+        return int(v) if v >= 0 else None
+    if isinstance(v, str):
+        s = v.strip().replace(",", "").rstrip("+")
+        mult = 1
+        if s.endswith("万"):
+            mult, s = 10_000, s[:-1]
+        elif s.endswith("亿"):
+            mult, s = 100_000_000, s[:-1]
+        elif s.endswith(("w", "W")):
+            mult, s = 10_000, s[:-1]
+        try:
+            n = float(s) * mult
+        except ValueError:
+            return None
+        return int(n) if n >= 0 else None
+    return None
+
+
+def _engagement(pairs: dict) -> dict:
+    """Keep only the metrics the payload actually carries, as ints."""
+    out = {}
+    for key, raw in pairs.items():
+        n = _count(raw)
+        if n is not None:
+            out[key] = n
+    return out
+
+
 def weibo_posts_from_response(data) -> list[dict]:
     posts = find_post_list(data, {"mblogid", "mblog_id", "text_raw", "isLongText"})
     if posts:
@@ -186,6 +221,14 @@ def normalize_weibo(mblog: dict, uid: str) -> dict | None:
         "author_name": user.get("screen_name"),
         "author_avatar": user.get("avatar_hd") or user.get("profile_image_url"),
         "is_top": bool(mblog.get("isTop") or (mblog.get("title") or {}).get("text") == "置顶"),
+        # weibo exposes no view count on regular posts (verified on live
+        # payloads) — likes/comments/reposts/favorites is the full set
+        "engagement": _engagement({
+            "likes": mblog.get("attitudes_count"),
+            "comments": mblog.get("comments_count"),
+            "shares": mblog.get("reposts_count"),
+            "favorites": mblog.get("favorites_count"),
+        }),
     }
 
 
@@ -193,6 +236,19 @@ def normalize_weibo(mblog: dict, uid: str) -> dict | None:
 
 def xhs_notes_from_response(data) -> list[dict]:
     return find_post_list(data, {"note_id", "notes_count", "desc", "display_title"})
+
+
+def _xhs_inter(note: dict, *keys: str):
+    """A count from the note's interact_info block, falling back to the same
+    key at the note's top level (payload shapes vary by endpoint)."""
+    inter = note.get("interact_info") or {}
+    for k in keys:
+        v = inter.get(k)
+        if v is None:
+            v = note.get(k)
+        if v is not None:
+            return v
+    return None
 
 
 def normalize_xhs(note: dict) -> dict | None:
@@ -238,6 +294,13 @@ def normalize_xhs(note: dict) -> dict | None:
         "author_name": user.get("nickname") or user.get("nick_name"),
         "author_avatar": user.get("avatar") or user.get("images"),
         "is_top": False,
+        # xhs interact counts arrive as CN display strings ("1.2万")
+        "engagement": _engagement({
+            "likes": _xhs_inter(note, "liked_count"),
+            "comments": _xhs_inter(note, "comment_count"),
+            "shares": _xhs_inter(note, "share_count", "shared_count"),
+            "favorites": _xhs_inter(note, "collected_count"),
+        }),
     }
 
 
@@ -280,6 +343,13 @@ def normalize_douyin(aweme: dict) -> dict | None:
         "author_name": author.get("nickname"),
         "author_avatar": ((author.get("avatar_thumb") or {}).get("url_list") or [None])[0],
         "is_top": bool(aweme.get("is_top")),
+        "engagement": _engagement({
+            "likes": (aweme.get("statistics") or {}).get("digg_count"),
+            "comments": (aweme.get("statistics") or {}).get("comment_count"),
+            "shares": (aweme.get("statistics") or {}).get("share_count"),
+            "views": (aweme.get("statistics") or {}).get("play_count"),
+            "favorites": (aweme.get("statistics") or {}).get("collect_count"),
+        }),
     }
 
 
@@ -319,6 +389,11 @@ def normalize_wechat_mp(article: dict) -> dict | None:
         "author_name": article.get("account_name"),
         "author_avatar": None,
         "is_top": False,
+        # search payloads rarely expose article stats — keep what exists
+        "engagement": _engagement({
+            "views": article.get("read_num"),
+            "likes": article.get("like_num") or article.get("old_like_num"),
+        }),
     }
 
 
@@ -358,4 +433,11 @@ def normalize_wechat_channels(video: dict) -> dict | None:
         "author_name": video.get("nickname"),
         "author_avatar": None,
         "is_top": False,
+        "engagement": _engagement({
+            "likes": video.get("like_count") or video.get("likeCount"),
+            "comments": video.get("comment_count") or video.get("commentCount"),
+            "shares": video.get("forward_count") or video.get("forwardCount"),
+            "favorites": video.get("fav_count") or video.get("favCount"),
+            "views": video.get("read_count") or video.get("readCount"),
+        }),
     }

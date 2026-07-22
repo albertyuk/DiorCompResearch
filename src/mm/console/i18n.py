@@ -654,6 +654,7 @@ ZH: dict[str, str] = {
      "no perfume/beauty) never change."):
         "更新后的规则会用于之后的 AI 筛选，下个月的判定会更符合你的标准。"
         "核心标准（只看中国市场相关内容、排除香水美妆）始终不变。",
+    "engagement at ingest time": "互动数据（抓取时的快照）",
 }
 
 

@@ -61,6 +61,7 @@
     <td>
       <div class="micro">{{ (p.created_at or '')[:16] }} ·
         <a href="{{ p.url }}" target="_blank">{{ T('post ↗') }}</a>
+        {% if p.eng_line %} · <span title="{{ T('engagement at ingest time') }}">{{ p.eng_line }}</span>{% endif %}
         {% if p.repost_ambiguous %} · <span class="pill warn">{{ T("repost w/ commentary") }}</span>{% endif %}
         {% if p.needs_review %} <span class="pill warn">{{ T("needs review") }}</span>{% endif %}
       </div>

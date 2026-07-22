@@ -19,7 +19,7 @@ def write_projects_xlsx(brands: list[BrandSpec], out_path: Path) -> Path:
     ws = wb.active
     ws.title = "PROJECTS"
     headers = ["BRAND", "DATE", "PROJECT", "ASSETS", "SOCIAL", "EC", "AD",
-               "PHASE", "ONGOING"]
+               "PHASE", "ONGOING", "LIKES", "COMMENTS", "SHARES", "VIEWS"]
     ws.append(headers)
     head_fill = PatternFill("solid", fgColor="000000")
     for c in ws[1]:
@@ -28,15 +28,19 @@ def write_projects_xlsx(brands: list[BrandSpec], out_path: Path) -> Path:
         c.alignment = Alignment(horizontal="center")
     for b in brands:
         for p in b.projects:
+            eng = p.engagement or {}
             ws.append([
                 b.display_name,
                 date_text(parse_iso(p.date_start), parse_iso(p.date_end), p.ongoing),
                 p.description, p.assets, _social_text(p.platforms), "N/A", "N/A",
                 p.phase_suffix or "", "YES" if p.ongoing else "",
+                # summed over the project's member posts; blank = no data
+                eng.get("likes", ""), eng.get("comments", ""),
+                eng.get("shares", ""), eng.get("views", ""),
             ])
             for c in ws[ws.max_row]:
                 c.font = Font(name=XLSX_FONT, size=XLSX_SIZE)
-    widths = [16, 18, 70, 14, 28, 6, 6, 14, 9]
+    widths = [16, 18, 70, 14, 28, 6, 6, 14, 9, 10, 11, 10, 10]
     for i, w in enumerate(widths, 1):
         ws.column_dimensions[chr(64 + i)].width = w
     out_path.parent.mkdir(parents=True, exist_ok=True)

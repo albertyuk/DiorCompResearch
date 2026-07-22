@@ -81,6 +81,8 @@ def _store_posts(engine, month: str, brand_key: str, posts: list[dict],
                 "author_name": post.get("author_name"),
                 "author_avatar_path": post.get("author_avatar_path"),
                 "raw_path": raw_path,
+                "engagement": json.dumps(post.get("engagement") or {},
+                                         ensure_ascii=False),
             }, ["post_id"],
             # a post pulled by two adjacent months' padded windows keeps its
             # first month assignment (cross-check queries go by date, not month)
@@ -290,3 +292,70 @@ def pull_platform(engine, client: TikHubClient, cfg: BrandsConfig, month: str,
         if cursor == prev_cursor:
             break                     # cursor didn't move — page would repeat
     return n
+
+
+# platform → (page → post-node list, node → normalized dict); uid "0" is fine
+# for backfill — engagement and post_id don't depend on it
+_BACKFILL_PARSERS = {
+    "weibo": (normalize.weibo_posts_from_response,
+              lambda n: normalize.normalize_weibo(n, "0")),
+    "xhs": (normalize.xhs_notes_from_response, normalize.normalize_xhs),
+    "douyin": (normalize.douyin_posts_from_response, normalize.normalize_douyin),
+    "wechat_mp": (normalize.wechat_mp_articles_from_response,
+                  normalize.normalize_wechat_mp),
+    "wechat_channels": (normalize.wechat_ch_videos_from_response,
+                        normalize.normalize_wechat_channels),
+}
+
+
+def backfill_engagement(engine, month: str | None = None) -> int:
+    """Fill posts.engagement for already-ingested posts by re-parsing their
+    ARCHIVED raw API pages (posts.raw_path) — zero API calls, zero cost.
+    Idempotent: posts that already carry numbers are skipped, so the console
+    can run this at every startup."""
+    from pathlib import Path
+
+    from sqlalchemy import or_, select
+
+    q = select(db.posts.c.post_id, db.posts.c.platform,
+               db.posts.c.raw_path).where(
+        or_(db.posts.c.engagement.is_(None), db.posts.c.engagement == "",
+            db.posts.c.engagement == "{}"),
+        db.posts.c.raw_path.isnot(None))
+    if month:
+        q = q.where(db.posts.c.month == month)
+    with engine.connect() as conn:
+        pending = [dict(r) for r in conn.execute(q).mappings()]
+    by_raw: dict[str, list[dict]] = {}
+    for r in pending:
+        by_raw.setdefault(r["raw_path"], []).append(r)
+
+    updated = 0
+    for raw_path, wanting in by_raw.items():
+        p = Path(raw_path)
+        if not p.is_file():
+            continue
+        try:
+            data = json.loads(p.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        eng_by_id: dict[str, dict] = {}
+        for plat in {w["platform"] for w in wanting}:
+            list_fn, norm_fn = _BACKFILL_PARSERS.get(plat, (None, None))
+            if list_fn is None:
+                continue
+            for node in list_fn(data) or []:
+                norm = norm_fn(node)
+                if norm and norm.get("engagement"):
+                    eng_by_id[norm["post_id"]] = norm["engagement"]
+        updates = [(w["post_id"], eng_by_id[w["post_id"]])
+                   for w in wanting if w["post_id"] in eng_by_id]
+        if updates:
+            with engine.begin() as conn:
+                for pid, eng in updates:
+                    conn.execute(db.posts.update()
+                                 .where(db.posts.c.post_id == pid)
+                                 .values(engagement=json.dumps(
+                                     eng, ensure_ascii=False)))
+            updated += len(updates)
+    return updated

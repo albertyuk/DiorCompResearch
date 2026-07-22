@@ -818,6 +818,29 @@ each is easy to revisit.
     the prep peak never stacks onto the compose/QA peak. Deck output is
     equivalent: same slides, same picture count, same prep quality.
 
+89. **Engagement figures (owner request)**: posts carry a per-platform
+    snapshot in posts.engagement (JSON: likes/comments/shares/views/
+    favorites — only keys the payload provides). Sources: weibo
+    attitudes/comments/reposts/favorites (NO view count exists on regular
+    weibo posts — verified on live payloads); xhs interact_info (CN display
+    strings like "1.2万" parse via _count); douyin statistics (play_count =
+    views); wechat read_num/like_num when search payloads carry them
+    (usually absent). Numbers are frozen at ingest time — they do NOT
+    auto-refresh (re-pulling every post monthly would double TikHub spend
+    for drift nobody reports on). Months ingested before the column existed
+    backfill for FREE at console startup: every post's raw_path points at
+    its archived API page on disk, so a daemon thread re-parses those
+    files — zero API calls; live-verified 37/37 on the real 2026-07 corpus.
+    Display: a compact line on review 1 rows, review 2 member rows and
+    orphans (赞 1.9万 · 评 123 · 转 45 / likes 19k · cmts 123 · shares 45,
+    zh uses 万/亿, en uses k/M; favorites stays stored but off the line —
+    weibo shows ~always 0). The XLSX gains LIKES/COMMENTS/SHARES/VIEWS
+    summed over each project's member posts; the PPTX mirrors the reference
+    deck and stays untouched. Side fix the backfill thread surfaced:
+    db.get_engine was not thread-safe on first call (it published the
+    engine before create_all/migrations finished) — now lock-guarded,
+    publish-when-ready.
+
 ## Testing
 
 25. The ~15 caption fixtures test the deterministic layers (@-tag extraction,

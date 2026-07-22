@@ -77,6 +77,10 @@ class ProjectSpec:
     platforms: list[str]             # ingestion keys or display names
     description: str                 # PROJECT cell line
     visuals: list[Visual] = field(default_factory=list)
+    # summed member-post engagement {likes, comments, shares, views} — the
+    # XLSX export shows it; the PPTX layout mirrors the reference deck and
+    # stays untouched
+    engagement: dict | None = None
 
     @property
     def display_title(self) -> str:

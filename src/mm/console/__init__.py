@@ -120,6 +120,45 @@ def _stop_flag(month: str, name: str):
     return ev.is_set if ev is not None else (lambda: False)
 
 
+def _fmt_count(n: int, lang: str) -> str:
+    """1.9万 / 3亿 for zh; 1.9k / 1.2M for en. Exact below the unit."""
+    def trim(v: float) -> str:
+        return f"{v:.1f}".rstrip("0").rstrip(".")
+    if lang == "zh":
+        if n >= 100_000_000:
+            return trim(n / 100_000_000) + "亿"
+        if n >= 10_000:
+            return trim(n / 10_000) + "万"
+        return str(n)
+    if n >= 1_000_000:
+        return trim(n / 1_000_000) + "M"
+    if n >= 1_000:
+        return trim(n / 1_000) + "k"
+    return str(n)
+
+
+_ENG_LABELS = {"en": {"likes": "likes", "comments": "cmts", "shares": "shares",
+                      "views": "views"},
+               "zh": {"likes": "赞", "comments": "评", "shares": "转",
+                      "views": "看"}}
+
+
+def _eng_line(raw: str | None, lang: str) -> str | None:
+    """Compact engagement summary for a post row ('赞 1.9万 · 评 123 · 转 45');
+    None when the platform gave no numbers, so templates show nothing.
+    favorites stays stored but off the line — on weibo it is almost always
+    0 and only adds noise."""
+    try:
+        eng = json.loads(raw or "{}")
+    except (TypeError, ValueError):
+        return None
+    labels = _ENG_LABELS["zh" if lang == "zh" else "en"]
+    parts = [f"{labels[k]} {_fmt_count(int(eng[k]), lang)}"
+             for k in ("likes", "comments", "shares", "views")
+             if isinstance(eng.get(k), (int, float))]
+    return " · ".join(parts) if parts else None
+
+
 def _ingest_and_filter(month, brand_keys=None):
     note = _task_note(month, "ingest_filter")
     stop = _stop_flag(month, "ingest_filter")
@@ -393,6 +432,18 @@ def _veto_pairs(conn, cand_post_id: str, ref_ids: list[str], actor: str) -> None
 
 def create_app() -> FastAPI:
     app = FastAPI(title="Maison Monitor Console")
+
+    # one-time (idempotent, zero API cost): months ingested before the
+    # engagement column existed get their numbers re-parsed from the raw
+    # archives on disk — off the request path, never blocks startup
+    def _backfill_engagement():
+        try:
+            from ..ingest import backfill_engagement
+            backfill_engagement(db.get_engine())
+        except Exception:
+            pass
+    threading.Thread(target=_backfill_engagement, daemon=True).start()
+
     auth_cfg = console_auth_config()
     auth = (SessionAuth(auth_cfg["passphrase"], auth_cfg["secret"],
                         secure_cookie=IS_HOSTED)
@@ -539,6 +590,8 @@ def create_app() -> FastAPI:
                                        if m.get("local_path")), None)
                     d["reasons_list"] = json.loads(d.get("reasons") or "[]")
                     d["celebs_list"] = json.loads(d.get("celebs_tagged") or "[]")
+                    d["eng_line"] = _eng_line(d.get("engagement"),
+                                              request.state.lang)
                     decision = d.get("human_decision")
                     d["effective_keep"] = (d.get("keep") if decision is None
                                            else decision == "keep")
@@ -597,6 +650,8 @@ def create_app() -> FastAPI:
                         d["thumb"] = next((m.get("local_path")
                                            for m in d["media_list"]
                                            if m.get("local_path")), None)
+                        d["eng_line"] = _eng_line(d.get("engagement"),
+                                                  request.state.lang)
                         members.append(d)
                     # per-post provenance: which weibo member each matched
                     # post was verified against, and why
@@ -634,6 +689,8 @@ def create_app() -> FastAPI:
                 d["media_list"] = json.loads(d.get("media") or "[]")
                 d["thumb"] = next((m.get("local_path") for m in d["media_list"]
                                    if m.get("local_path")), None)
+                d["eng_line"] = _eng_line(d.get("engagement"),
+                                          request.state.lang)
                 # filtered like review #1: dropped orphans grey out, keeps
                 # (and not-yet-filtered) stay prominent
                 d["effective_keep"] = d["keep"] is None or bool(d["keep"])

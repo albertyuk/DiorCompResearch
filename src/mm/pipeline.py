@@ -578,6 +578,20 @@ def run_render(month: str, *, visuals_mode: str | None = None,
                 select(db.platform_matches)
                 .where(db.platform_matches.c.project_id == p["id"],
                        db.platform_matches.c.present.is_(True))).mappings()]
+            # summed member engagement for the XLSX (snapshot from ingest)
+            eng_total: dict[str, int] = {}
+            for raw in conn.execute(
+                    select(db.posts.c.engagement)
+                    .join(db.project_posts,
+                          db.project_posts.c.post_id == db.posts.c.post_id)
+                    .where(db.project_posts.c.project_id
+                           == p["id"])).scalars():
+                try:
+                    for k, v in json.loads(raw or "{}").items():
+                        if isinstance(v, (int, float)):
+                            eng_total[k] = eng_total.get(k, 0) + int(v)
+                except (TypeError, ValueError):
+                    pass
             vis = _project_visuals(conn, thread_factory, brand.key, p,
                                    celebs,
                                    note=(lambda msg, h=head:
@@ -605,7 +619,8 @@ def run_render(month: str, *, visuals_mode: str | None = None,
             ongoing=bool(p["ongoing"]), assets=p["assets"],
             platforms=plats or ["weibo"],
             description=p["description"] or p["title"],
-            visuals=[Visual(**v) for v in vis])
+            visuals=[Visual(**v) for v in vis],
+            engagement=eng_total or None)
 
     workers = int(os.environ.get("MM_RENDER_WORKERS", RENDER_WORKERS))
     specs: dict = {}

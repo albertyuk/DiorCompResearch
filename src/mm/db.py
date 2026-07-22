@@ -42,6 +42,7 @@ posts = Table(
     Column("author_name", String),
     Column("author_avatar_path", String),
     Column("raw_path", String),                         # archived raw API JSON on disk
+    Column("engagement", Text),                         # JSON {likes, comments, shares, views, favorites} — snapshot at ingest
 )
 
 verdicts = Table(
@@ -217,28 +218,33 @@ api_calls = Table(
 )
 
 _engine: Engine | None = None
+_engine_lock = __import__("threading").Lock()
 
 
 def get_engine() -> Engine:
     global _engine
     if _engine is None:
-        ensure_dirs()
-        # WAL + generous busy timeout: the console (reads + small writes) and
-        # background phase threads share this file; readers must never block
-        # on a writer.
-        _engine = create_engine(f"sqlite:///{DB_PATH}", future=True,
+        with _engine_lock:
+            if _engine is not None:      # another thread built it meanwhile
+                return _engine
+            ensure_dirs()
+            # WAL + generous busy timeout: the console (reads + small writes)
+            # and background phase threads share this file; readers must
+            # never block on a writer.
+            eng = create_engine(f"sqlite:///{DB_PATH}", future=True,
                                 connect_args={"timeout": 60})
-        from sqlalchemy import event
+            from sqlalchemy import event
 
-        @event.listens_for(_engine, "connect")
-        def _set_wal(dbapi_conn, _):
-            cur = dbapi_conn.cursor()
-            cur.execute("PRAGMA journal_mode=WAL")
-            cur.execute("PRAGMA synchronous=NORMAL")
-            cur.close()
+            @event.listens_for(eng, "connect")
+            def _set_wal(dbapi_conn, _):
+                cur = dbapi_conn.cursor()
+                cur.execute("PRAGMA journal_mode=WAL")
+                cur.execute("PRAGMA synchronous=NORMAL")
+                cur.close()
 
-        metadata.create_all(_engine)
-        _migrate(_engine)
+            metadata.create_all(eng)
+            _migrate(eng)
+            _engine = eng     # publish only after tables + migrations exist
     return _engine
 
 
@@ -262,6 +268,9 @@ def _migrate(engine: Engine) -> None:
         if cols and "images_json" not in cols:
             c.exec_driver_sql(
                 "ALTER TABLE celeb_registry ADD COLUMN images_json TEXT DEFAULT '[]'")
+        cols = [r[1] for r in c.exec_driver_sql("PRAGMA table_info(posts)")]
+        if cols and "engagement" not in cols:
+            c.exec_driver_sql("ALTER TABLE posts ADD COLUMN engagement TEXT")
 
 
 def now_iso() -> str:

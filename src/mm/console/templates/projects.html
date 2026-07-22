@@ -179,6 +179,8 @@
         <span class="pill {% if mp.role == 'match' %}warn{% endif %}">{{ mp.platform }}{% if mp.role == 'match' %} · {{ T("matched") }}{% endif %}</span>
         <div class="micro" style="margin-top:3px">{{ (mp.created_at or '')[:10] }} ·
           <a href="{{ mp.url }}" target="_blank">{{ T("post ↗") }}</a></div>
+        {% if mp.eng_line %}<div class="micro" style="margin-top:3px"
+             title="{{ T('engagement at ingest time') }}">{{ mp.eng_line }}</div>{% endif %}
         {% if mp.role == 'match' %}
         <div class="micro" style="margin-top:3px; text-transform:none"
              title="{{ mp.match.reason if mp.match else '' }}">
@@ -275,7 +277,8 @@
           src="/media?path={{ o.thumb | urlencode }}">{% endif %}</td>
     <td>
       <div class="micro">{{ o.platform }} · {{ (o.created_at or '')[:10] }} ·
-        <a href="{{ o.url }}" target="_blank">{{ T("post ↗") }}</a></div>
+        <a href="{{ o.url }}" target="_blank">{{ T("post ↗") }}</a>
+        {% if o.eng_line %} · <span title="{{ T('engagement at ingest time') }}">{{ o.eng_line }}</span>{% endif %}</div>
       <div class="caption-cn">{{ (o.caption or '')[:280] }}</div>
     </td>
     <td>
